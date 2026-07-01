@@ -18,11 +18,28 @@ type FetchState =
   | { status: 'ready'; access: OpenClawRemoteAccess; healthy: boolean | null }
   | { status: 'error'; message: string }
 
+type PairingRequest = {
+  requestId: string
+  role?: string
+  label?: string
+  scopes?: string[]
+  createdAt?: string
+}
+
+type PairingState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; requests: PairingRequest[]; raw: string }
+  | { status: 'done'; message: string }
+  | { status: 'error'; message: string }
+
 export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: string }) {
   const [state, setState] = useState<FetchState>({ status: 'loading' })
   const [tokenRevealed, setTokenRevealed] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [enabling, setEnabling] = useState(false)
+  const [pairing, setPairing] = useState<PairingState>({ status: 'idle' })
+  const [approving, setApproving] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +84,42 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
       setState({ status: 'error', message: error instanceof Error ? error.message : 'Enable failed' })
     } finally {
       setEnabling(false)
+    }
+  }
+
+  const loadPairing = useCallback(async () => {
+    setPairing({ status: 'loading' })
+    try {
+      const res = await fetch(`/api/sandbox/${encodeURIComponent(sandboxName)}/openclaw-remote/pairing`)
+      const data = await res.json()
+      if (!res.ok) {
+        setPairing({ status: 'error', message: data?.error || `Request failed (${res.status})` })
+        return
+      }
+      setPairing({ status: 'ready', requests: Array.isArray(data?.requests) ? data.requests : [], raw: typeof data?.raw === 'string' ? data.raw : '' })
+    } catch (error) {
+      setPairing({ status: 'error', message: error instanceof Error ? error.message : 'Failed to list pairing requests' })
+    }
+  }, [sandboxName])
+
+  const approve = async (requestId?: string) => {
+    setApproving(true)
+    try {
+      const res = await fetch(`/api/sandbox/${encodeURIComponent(sandboxName)}/openclaw-remote/pairing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestId ? { requestId } : {}),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setPairing({ status: 'error', message: data?.error || `Approve failed (${res.status})` })
+        return
+      }
+      setPairing({ status: 'done', message: data?.output || 'Pairing approved.' })
+    } catch (error) {
+      setPairing({ status: 'error', message: error instanceof Error ? error.message : 'Approve failed' })
+    } finally {
+      setApproving(false)
     }
   }
 
@@ -155,11 +208,57 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
           <li>Open the app → <span className="font-mono">Connect</span> tab → <span className="font-mono">Manual / Advanced</span></li>
           <li>Host <span className="font-mono">{access.host}</span>, Port <span className="font-mono">{access.port}</span>, TLS / <span className="font-mono">wss://</span> on</li>
           <li>Paste the Token as the gateway auth token, then connect</li>
-          <li>Approve the pairing request on the gateway host: <span className="font-mono">openclaw devices approve --latest</span></li>
+          <li>Approve the pairing request below (the app connects at the transport layer, but a first-time node stays pending until approved)</li>
         </ol>
         <p className="mt-2">
           The token is the gateway shared secret — the app sends it in the connection (<span className="font-mono">connect</span>) frame; it is not part of the URL.
         </p>
+      </div>
+
+      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">Device pairing</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => void loadPairing()} disabled={pairing.status === 'loading' || approving} className="action-button px-2 py-1">
+              {pairing.status === 'loading' ? 'Checking…' : 'Check pending'}
+            </button>
+            <button onClick={() => void approve()} disabled={approving} className="action-button px-2 py-1">
+              {approving ? 'Approving…' : 'Approve latest'}
+            </button>
+          </div>
+        </div>
+
+        {pairing.status === 'ready' && pairing.requests.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {pairing.requests.map((req) => (
+              <li key={req.requestId} className="flex items-center gap-2">
+                <span className="truncate font-mono text-[var(--foreground)]">
+                  {req.label || req.requestId}{req.role ? ` · ${req.role}` : ''}{req.scopes && req.scopes.length ? ` · ${req.scopes.join(',')}` : ''}
+                </span>
+                <button onClick={() => void approve(req.requestId)} disabled={approving} className="action-button ml-auto shrink-0 px-2 py-1">
+                  Approve
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {pairing.status === 'ready' && pairing.requests.length === 0 && (
+          <p className="mt-2 text-[var(--foreground-dim)]">
+            No pending pairing requests{pairing.raw ? '' : ' — connect the app first, then Check pending'}.
+            {pairing.raw && !pairing.raw.startsWith('[') ? (
+              <span className="mt-1 block whitespace-pre-wrap font-mono text-[var(--foreground-dim)]">{pairing.raw}</span>
+            ) : null}
+          </p>
+        )}
+
+        {pairing.status === 'done' && (
+          <p className="mt-2 whitespace-pre-wrap font-mono text-[var(--status-running)]">{pairing.message}</p>
+        )}
+
+        {pairing.status === 'error' && (
+          <p className="mt-2 text-[var(--status-pending)]">{pairing.message}</p>
+        )}
       </div>
 
       {healthy === false && (

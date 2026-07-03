@@ -11,13 +11,14 @@ NC='\033[0m'
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.71}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
 # NemoClaw v0.0.69 was the first release whose base image bundled Hermes v0.17.0 (was
-# v0.14.0 through v0.0.68); v0.0.71 keeps it (Hermes v2026.6.19). v0.17 fixes the
+# v0.14.0 through v0.0.68); v0.0.73 keeps it (Hermes v2026.6.19). v0.17 fixes the
 # proxied-dashboard WebSocket auth (ws_tickets) and makes
 # scripts/hermes-remote/upgrade-hermes.sh a no-op (it only runs for hermes <0.16).
-# OpenShell moves to v0.0.71 (NemoClaw v0.0.71 declares min/max_openshell_version 0.0.71);
+# OpenShell stays v0.0.71 (NemoClaw v0.0.73 declares min/max_openshell_version 0.0.71);
 # 0.0.71 provisions gateway mTLS natively (self-signed certs, Ed25519 JWT,
 # allow_unauthenticated_users=false) — no host-side DISABLE_TLS/ensure-mtls patching needed.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.71}}"
+# v0.0.73 is a NemoClaw-only bump (same OpenShell/Hermes/OpenClaw + sandbox-base digest).
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.73}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.5.27}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

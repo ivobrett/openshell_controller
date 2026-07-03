@@ -253,7 +253,7 @@ export default function Dashboard() {
               <div className="space-y-6">
                 <div className="panel p-8">
                   <h1 className="text-lg font-semibold text-[var(--nvidia-green)] uppercase tracking-wider mb-4">
-                    INFERENCE ENDPOINTS
+                    INFERENCE
                   </h1>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="metric p-4">

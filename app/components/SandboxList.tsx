@@ -62,7 +62,6 @@ type PermissionFeed = {
 type DismissedPermissionAlerts = Record<string, string[]>
 
 const DISMISSED_PERMISSION_ALERTS_STORAGE_KEY = 'openshell-control-dismissed-permission-alerts'
-const DISMISS_PERMISSION_VALUE = '__dismiss_permission_alerts__'
 const OPENCLAW_SANDBOX_LOGO = '/sandbox-logos/openclaw.svg'
 const HERMES_SANDBOX_LOGO = '/sandbox-logos/hermes.png'
 
@@ -105,6 +104,122 @@ function CopyLinkButton({ label, copied, onClick }: { label: string; copied: boo
         </svg>
       )}
     </button>
+  )
+}
+
+function PermissionMenu({
+  pending,
+  granting,
+  open,
+  onOpenChange,
+  onApprove,
+  onReject,
+  onDismiss,
+}: {
+  pending: NetworkRuleRequest[]
+  granting: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onApprove: (chunkId: string) => void
+  onReject: (chunkId: string) => void
+  onDismiss: () => void
+}) {
+  const hasPending = pending.length > 0
+  const setOpen = onOpenChange
+
+  useEffect(() => {
+    if (!hasPending && open) onOpenChange(false)
+  }, [hasPending, open, onOpenChange])
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={granting || !hasPending}
+        onClick={(event) => {
+          event.stopPropagation()
+          setOpen(!open)
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex w-full items-center justify-between gap-2 rounded-[3px] border bg-[var(--background-tertiary)] px-3 py-2 font-mono text-xs uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nvidia-green)] ${
+          hasPending
+            ? 'border-[var(--nvidia-green)] text-[var(--nvidia-green)] hover:border-[var(--nvidia-green-dark)] hover:text-[var(--nvidia-green-dark)]'
+            : 'border-[var(--border-subtle)] text-[var(--foreground-dim)]'
+        }`}
+      >
+        <span className="truncate">
+          {granting ? 'Granting...' : hasPending ? `Grant Permission (${pending.length})` : 'No Permission Requests'}
+        </span>
+        {hasPending && (
+          <svg
+            className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="square"
+            strokeLinejoin="miter"
+            aria-hidden="true"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        )}
+      </button>
+      {open && hasPending && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div
+            role="menu"
+            className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded border border-[var(--border-subtle)] bg-[var(--background-panel)] shadow-[var(--shadow-soft)]"
+          >
+            {pending.map((request) => {
+              const label = request.endpoints[0] || request.rule || request.chunkId
+              return (
+                <div
+                  key={request.chunkId}
+                  className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--foreground)]" title={label}>
+                    {label}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false)
+                      onApprove(request.chunkId)
+                    }}
+                    className="rounded-sm border border-[var(--nvidia-green)] bg-[var(--nvidia-green)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-black hover:border-[var(--nvidia-green-dark)] hover:bg-[var(--nvidia-green-dark)]"
+                  >
+                    Allow
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false)
+                      onReject(request.chunkId)
+                    }}
+                    className="rounded-sm border border-[var(--border-medium)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] hover:border-[var(--foreground-dim)] hover:text-[var(--foreground)]"
+                  >
+                    Deny
+                  </button>
+                </div>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onDismiss()
+              }}
+              className="w-full px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] hover:text-[var(--foreground)]"
+            >
+              Do nothing — hide alerts
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -240,6 +355,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
   const [permissionFeeds, setPermissionFeeds] = useState<Record<string, PermissionFeed>>({})
   const [dismissedPermissionAlerts, setDismissedPermissionAlerts] = useState<DismissedPermissionAlerts>(() => loadDismissedPermissionAlerts())
   const [grantingSandboxId, setGrantingSandboxId] = useState<string | null>(null)
+  const [openPermissionMenuId, setOpenPermissionMenuId] = useState<string | null>(null)
   const [mcpServers, setMcpServers] = useState<McpServerAccess[]>([])
   const [mcpMessage, setMcpMessage] = useState('')
   const [mcpUpdatingServerId, setMcpUpdatingServerId] = useState<string | null>(null)
@@ -551,7 +667,9 @@ const [restartInProgress, setRestartInProgress] = useState(false)
             {sandboxes.map((sandbox) => (
               <div
                 key={sandbox.id}
-                className={`group overflow-hidden rounded border text-left transition-all duration-150 ${
+                className={`group relative rounded border text-left transition-all duration-150 ${
+                  openPermissionMenuId === sandbox.id ? 'z-30' : ''
+                } ${
                   isDestroyMode
                     ? 'border-[var(--status-stopped)] bg-[var(--status-stopped-bg)] hover:shadow-[0_18px_60px_rgba(220,38,38,0.16)]'
                     : selectedSandboxId === sandbox.id
@@ -582,7 +700,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                           <span className="h-2.5 w-2.5 rounded-full bg-[var(--status-running)]" title={`Policy status: ${feed?.latest?.status || 'ok'}`} />
                         )
                       })()}
-                      <span className={`truncate font-mono text-sm font-semibold ${
+                      <span title={sandbox.name} className={`truncate font-mono text-sm font-semibold ${
                         isDestroyMode ? 'text-[var(--status-stopped)]' : 'text-[var(--foreground)]'
                       }`}>
                         {sandbox.name}
@@ -626,58 +744,38 @@ const [restartInProgress, setRestartInProgress] = useState(false)
 
                   <div className="space-y-1.5">
                     {([
-                      ['Agent', displaySandboxAgent(sandbox.agent), '120px'],
-                      ['Attach Target', sandbox.ip, '180px'],
-                      ['Namespace', sandbox.namespace, '120px'],
-                      ['Host Alias', sandbox.sshHostAlias || 'N/A', '140px'],
-                      ['Sandbox ID', sandbox.id, '140px'],
-                    ] as Array<[string, string, string]>).map(([label, value, width]) => (
+                      ['Agent', displaySandboxAgent(sandbox.agent)],
+                      ['Attach Target', sandbox.ip],
+                      ['Namespace', sandbox.namespace],
+                      ['Host Alias', sandbox.sshHostAlias || 'N/A'],
+                      ['Sandbox ID', sandbox.id],
+                    ] as Array<[string, string]>).map(([label, value]) => (
                       <div key={label} className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3">
                         <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{label}</span>
-                        <span className="text-xs font-mono truncate text-[var(--foreground)]" style={{ maxWidth: width }} title={value}>{value}</span>
+                        <span className="text-xs font-mono truncate text-[var(--foreground)]" title={value}>{value}</span>
                       </div>
                     ))}
                   </div>
                 </button>
-                <div className="border-t border-[var(--border-subtle)] p-3">
-                  {(() => {
-                    const feed = permissionFeeds[sandbox.id]
-                    const visiblePending = visiblePendingRequests(feed, sandbox, dismissedPermissionAlerts)
-                    return (
-                      <select
-                        value=""
-                        disabled={grantingSandboxId === sandbox.id}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={(event) => {
-                          const value = event.target.value
-                          event.currentTarget.value = ''
-                          if (value === DISMISS_PERMISSION_VALUE) {
-                            dismissPermissionAlerts(sandbox)
-                            return
-                          }
-                          resolvePermissionRequest(sandbox, 'approve', value)
-                        }}
-                        className="field-control w-full px-3 py-2 font-mono text-xs uppercase tracking-wider"
-                      >
-                        <option value="">
-                          {grantingSandboxId === sandbox.id
-                            ? 'Granting...'
-                            : visiblePending.length > 0
-                              ? 'Grant Permission'
-                              : 'No Permission Requests'}
-                        </option>
-                        {visiblePending.length > 0 ? (
-                          <option value={DISMISS_PERMISSION_VALUE}>Do Nothing</option>
-                        ) : null}
-                        {visiblePending.map((request) => (
-                          <option key={request.chunkId} value={request.chunkId}>
-                            {(request.endpoints[0] || request.rule || request.chunkId).slice(0, 46)}
-                          </option>
-                        ))}
-                      </select>
-                    )
-                  })()}
-                </div>
+                {!isDestroyMode && (
+                  <div className="border-t border-[var(--border-subtle)] p-3">
+                    {(() => {
+                      const feed = permissionFeeds[sandbox.id]
+                      const visiblePending = visiblePendingRequests(feed, sandbox, dismissedPermissionAlerts)
+                      return (
+                        <PermissionMenu
+                          pending={visiblePending}
+                          granting={grantingSandboxId === sandbox.id}
+                          open={openPermissionMenuId === sandbox.id}
+                          onOpenChange={(open) => setOpenPermissionMenuId(open ? sandbox.id : null)}
+                          onApprove={(chunkId) => resolvePermissionRequest(sandbox, 'approve', chunkId)}
+                          onReject={(chunkId) => resolvePermissionRequest(sandbox, 'reject', chunkId)}
+                          onDismiss={() => dismissPermissionAlerts(sandbox)}
+                        />
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
             ))}
           </div>

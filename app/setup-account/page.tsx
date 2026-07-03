@@ -1,6 +1,7 @@
 "use client"
 
 import { FormEvent, useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import AuthShell from "../components/AuthShell"
 
 type AccessEntry = { sandboxName: string; email: string }
@@ -36,7 +37,11 @@ export default function SecurityPage() {
           )}
         </>
       )}
-      <a href="/login" className="block text-center text-xs text-[var(--foreground-dim)] hover:text-[var(--nvidia-green)]">Back to Sign In</a>
+      {me?.operator ? (
+        <Link href="/" className="block text-center text-xs text-[var(--foreground-dim)] hover:text-[var(--nvidia-green)]">Back to Dashboard</Link>
+      ) : (
+        <a href="/login" className="block text-center text-xs text-[var(--foreground-dim)] hover:text-[var(--nvidia-green)]">Back to Sign In</a>
+      )}
     </AuthShell>
   )
 }
@@ -316,7 +321,7 @@ function SandboxAccessSection() {
             disabled={busy || !dirty}
             className="w-full rounded-sm border border-[var(--nvidia-green)] bg-[var(--nvidia-green)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-black disabled:opacity-50"
           >
-            {busy ? "Saving…" : dirty ? "Save Sandbox Access" : "No Changes"}
+            {busy ? "Saving…" : "Save Sandbox Access"}
           </button>
         </>
       )}

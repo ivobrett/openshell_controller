@@ -23,7 +23,7 @@ export async function POST(
       sandboxId,
       sandboxName,
       ...result,
-      note: "OpenClaw config was patched with the routed inference provider and the OpenShell gateway was pointed at the primary route.",
+      note: result.note ?? "OpenClaw config was patched with the routed inference provider and the OpenShell gateway was pointed at the primary route.",
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to apply inference config"

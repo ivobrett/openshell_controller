@@ -1,9 +1,25 @@
 import { execFile, spawn } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
+import path from "node:path"
 import { promisify } from "node:util"
-import { OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
+import { NEMOCLAW_BIN, NODE_BIN, OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
 import { getSandboxInferenceConfig, type SandboxInferenceRoute } from "./sandboxInferenceStore"
 
 const execFileAsync = promisify(execFile)
+
+// Same registry the create route reads/writes. Its per-sandbox `agent` field is
+// "hermes" for Hermes sandboxes and null/absent for OpenClaw ones.
+const NEMOCLAW_REGISTRY_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "sandboxes.json")
+
+function resolveSandboxAgent(sandboxName: string): "hermes" | "openclaw" {
+  try {
+    if (!existsSync(NEMOCLAW_REGISTRY_FILE)) return "openclaw"
+    const data = JSON.parse(readFileSync(NEMOCLAW_REGISTRY_FILE, "utf8"))
+    return data?.sandboxes?.[sandboxName]?.agent === "hermes" ? "hermes" : "openclaw"
+  } catch {
+    return "openclaw"
+  }
+}
 
 function modelContextWindow(modelId: string) {
   const normalized = modelId.toLowerCase()
@@ -207,11 +223,89 @@ async function restartOpenClawGatewayIfRunning(sandboxName: string) {
   return await runSandboxExec(sandboxName, ["sh", "-lc", script])
 }
 
+// The nemoclaw CLI is invoked directly unless it resolves to a JS entrypoint,
+// in which case it must be launched through node (mirrors the create route).
+async function runNemoClaw(args: string[], timeoutMs = 180000) {
+  const isJsEntrypoint = /\.(?:c?m?js|ts)$/i.test(NEMOCLAW_BIN)
+  const file = isJsEntrypoint ? NODE_BIN : NEMOCLAW_BIN
+  const fullArgs = isJsEntrypoint ? [NEMOCLAW_BIN, ...args] : args
+  return await new Promise<{ stdout: string; stderr: string; code: number | null; timedOut: boolean }>((resolve, reject) => {
+    const child = spawn(file, fullArgs, {
+      env: hostCommandEnv({ OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw" }),
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    let stdout = ""
+    let stderr = ""
+    let timedOut = false
+    // Escalate to SIGKILL after SIGTERM: a nemoclaw process wedged inside a
+    // shields transition can be job-control-stopped (SIGSTOP), which ignores
+    // SIGTERM — SIGKILL guarantees the HTTP request returns instead of hanging.
+    const killTimer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGTERM")
+      setTimeout(() => { try { child.kill("SIGKILL") } catch { /* already gone */ } }, 5000)
+    }, timeoutMs)
+    child.stdout.on("data", (chunk) => { stdout += String(chunk) })
+    child.stderr.on("data", (chunk) => { stderr += String(chunk) })
+    child.on("error", (error) => { clearTimeout(killTimer); reject(error) })
+    child.on("close", (code) => { clearTimeout(killTimer); resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code, timedOut }) })
+  })
+}
+
+// Hermes sandboxes have no /sandbox/.openclaw/openclaw.json — their model route
+// lives in /sandbox/.hermes/config.yaml, written by NemoClaw's config guard under
+// the shields transition lock. The OpenClaw JSON-patch path above can't touch it,
+// so we delegate to `nemoclaw inference set`, which is agent-aware and also points
+// the gateway route. Only the primary route applies (Hermes runs a single model).
+const HERMES_SHIELDS_BLOCK = /shields are up|shields down first|config writes are unavailable/i
+
+async function applyHermesInferenceProfile(
+  sandboxName: string,
+  primary: SandboxInferenceRoute,
+  routesApplied: number,
+) {
+  const result = await runNemoClaw([
+    "inference", "set",
+    "--sandbox", sandboxName,
+    "--provider", primary.provider,
+    "--model", primary.model,
+    "--no-verify",
+  ])
+  const combined = `${result.stdout}\n${result.stderr}`
+  if (result.timedOut) {
+    throw new Error(
+      "nemoclaw inference set timed out for the Hermes sandbox (the shields transition may be stuck). Verify shields are down and the sandbox is healthy, then retry.",
+    )
+  }
+  // A shields-up run can print a warning and still exit 0 while leaving the
+  // in-sandbox config unwritten — surface that as a hard failure so the UI
+  // never reports a false success.
+  if (HERMES_SHIELDS_BLOCK.test(combined)) {
+    throw new Error(
+      "Hermes inference apply is blocked while shields are up. Drop shields for this sandbox (SHIELDS panel) and retry.",
+    )
+  }
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || "nemoclaw inference set failed for the Hermes sandbox")
+  }
+  return {
+    primaryRoute: primary,
+    routesApplied,
+    gatewayRoute: { stdout: result.stdout, stderr: result.stderr },
+    agent: "hermes" as const,
+    note: "Hermes in-sandbox config and the OpenShell gateway route were updated to the primary route.",
+  }
+}
+
 export async function applySandboxInferenceProfile(sandboxId: string, sandboxName: string) {
   const config = await getSandboxInferenceConfig(sandboxId)
   const enabledRoutes = config.routes.filter((route) => route.enabled)
   if (enabledRoutes.length === 0) throw new Error("No enabled inference routes are configured for this sandbox")
   const primary = enabledRoutes.find((route) => route.id === config.primaryRouteId) || enabledRoutes[0]
+
+  if (resolveSandboxAgent(sandboxName) === "hermes") {
+    return await applyHermesInferenceProfile(sandboxName, primary, enabledRoutes.length)
+  }
 
   const currentOpenClawConfig = await readCurrentOpenClawConfig(sandboxName)
   const nextOpenClawConfig = buildOpenClawConfig(currentOpenClawConfig, enabledRoutes, primary)
@@ -223,5 +317,7 @@ export async function applySandboxInferenceProfile(sandboxId: string, sandboxNam
     primaryRoute: primary,
     routesApplied: enabledRoutes.length,
     gatewayRoute: routeResult,
+    agent: "openclaw" as const,
+    note: "OpenClaw config was patched with the routed inference provider and the OpenShell gateway was pointed at the primary route.",
   }
 }

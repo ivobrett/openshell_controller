@@ -1,10 +1,31 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 const ACTIVITY_LOG_PATH = process.env.OPENSHELL_ACTIVITY_LOG_PATH
   || path.join(process.cwd(), ".runtime", "activity-log.jsonl")
 const MAX_ACTIVITY_ENTRIES = Number.parseInt(process.env.OPENSHELL_ACTIVITY_LOG_MAX_ENTRIES || "200", 10)
 const MAX_ACTIVITY_BYTES = Number.parseInt(process.env.OPENSHELL_ACTIVITY_LOG_MAX_BYTES || String(1024 * 1024), 10)
+
+// Durable audit archive: entries trimmed out of the "hot" activity log are
+// APPENDED here rather than discarded, so the full sandbox lifecycle / shields
+// history survives rotation. Lives alongside the hot log under .runtime/ (which
+// the manidae backup-job stages), and is size-bounded on disk by host logrotate
+// (installed by the AgentGateway deploy). Set path to "" (or "off") to opt out.
+const ARCHIVE_LOG_PATH_RAW = process.env.OPENSHELL_ACTIVITY_ARCHIVE_PATH
+  ?? path.join(path.dirname(ACTIVITY_LOG_PATH), "activity-log.archive.jsonl")
+const ARCHIVE_LOG_PATH = /^(off|false|0)$/i.test(ARCHIVE_LOG_PATH_RAW) ? "" : ARCHIVE_LOG_PATH_RAW
+
+// Append rotated-out lines to the durable archive. Best-effort: an archive
+// failure must never block recording new activity or reading the hot log.
+async function archiveOverflow(overflow: string[]) {
+  if (!ARCHIVE_LOG_PATH || overflow.length === 0) return
+  try {
+    await appendFile(ARCHIVE_LOG_PATH, `${overflow.join("\n")}\n`)
+  } catch {
+    // archive unavailable (read-only fs, etc.) — retention degrades to the hot
+    // log only, but the primary path keeps working.
+  }
+}
 
 export type ActivityEntry = {
   id: string
@@ -33,7 +54,10 @@ async function readLogText() {
     const currentStat = await stat(ACTIVITY_LOG_PATH)
     if (currentStat.size > MAX_ACTIVITY_BYTES) {
       const text = await readFile(ACTIVITY_LOG_PATH, "utf8")
-      const tail = text.split(/\r?\n/).filter(Boolean).slice(-MAX_ACTIVITY_ENTRIES).join("\n")
+      const all = text.split(/\r?\n/).filter(Boolean)
+      // Archive the overflow before trimming so the byte-cap can't lose audit history.
+      await archiveOverflow(all.slice(0, Math.max(0, all.length - MAX_ACTIVITY_ENTRIES)))
+      const tail = all.slice(-MAX_ACTIVITY_ENTRIES).join("\n")
       await writeFile(ACTIVITY_LOG_PATH, `${tail}\n`)
       return tail
     }
@@ -55,6 +79,8 @@ export async function recordActivity(entry: Omit<ActivityEntry, "id" | "timestam
   const text = await readLogText()
   const lines = text.split(/\r?\n/).filter(Boolean)
   lines.push(JSON.stringify(payload))
+  // Archive any entries that rotate out of the hot log rather than dropping them.
+  await archiveOverflow(lines.slice(0, Math.max(0, lines.length - MAX_ACTIVITY_ENTRIES)))
   await writeFile(ACTIVITY_LOG_PATH, `${lines.slice(-MAX_ACTIVITY_ENTRIES).join("\n")}\n`)
   return payload
 }

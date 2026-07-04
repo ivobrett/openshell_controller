@@ -249,7 +249,7 @@ function openShellGpuArgs(mode: CreateGpuMode) {
   return mode === "required" ? ["--gpu"] : []
 }
 
-function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent, sandboxName?: string): NemoClawCreateCommand {
+function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent, sandboxName?: string, freshSession = false): NemoClawCreateCommand {
   if (NEMOCLAW_BIN && commandExists(NEMOCLAW_BIN)) {
     // Forward the operator-supplied sandbox name to `nemoclaw onboard --name`.
     // Without this, nemoclaw silently picks its default (`my-assistant`),
@@ -259,6 +259,10 @@ function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent
     const args = [
       "onboard",
       "--non-interactive",
+      // Explicit inference selection must not be vetoed by a stale onboarding
+      // session: without --fresh, nemoclaw aborts with "Resumable state recorded
+      // provider X" when the previous onboard used a different provider.
+      ...(freshSession ? ["--fresh"] : []),
       "--recreate-sandbox",
       "--yes-i-accept-third-party-software",
       ...nameArgs,
@@ -1033,7 +1037,7 @@ export async function POST(request: Request) {
     if (isNemoClawOnboardBlueprint(blueprint)) {
       const agent = nemoClawAgentForBlueprint(blueprint)
       const isOpenClawAgent = agent === "openclaw"
-      const createCommand = buildNemoClawCreateCommand(gpuMode, agent, sandboxName)
+      const createCommand = buildNemoClawCreateCommand(gpuMode, agent, sandboxName, createInference.mode !== "auto")
       const env: NodeJS.ProcessEnv = hostCommandEnv({
         NEMOCLAW_SANDBOX_NAME: sandboxName,
         NEMOCLAW_AGENT: agent,

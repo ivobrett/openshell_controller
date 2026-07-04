@@ -215,3 +215,146 @@ export async function recoverSandboxWithNemoClaw(sandboxName: string) {
     error: result.error,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shields (NemoClaw kernel-level config lockdown) — verified on NemoClaw
+// v0.0.73. Per-sandbox subcommand: `nemoclaw <sandbox> shields up|down|status`.
+//   up     -> agent config chown root:root 444 (sandbox user cannot modify),
+//             restrictive policy stays active.
+//   down   -> snapshots the current sandbox policy, applies a PERMISSIVE
+//             policy, unlocks config. Default auto-relock after 5m via a
+//             detached host timer; a repeated `down` does NOT extend it
+//             (fail-locked by design).
+//   status -> text only (no --json on v0.0.73), parsed below.
+// Host-side state lives in $HOME/.nemoclaw/state/ (shields-<sb>.json,
+// shields-timer-<sb>.json with pid+restoreAt, shields-audit.jsonl).
+// ---------------------------------------------------------------------------
+
+export type ShieldsPosture = "up" | "down" | "not_configured" | "unknown"
+
+export type ShieldsStatus = {
+  available: boolean
+  posture: ShieldsPosture
+  since: string | null
+  autoLockIn: string | null
+  restoreAt: string | null
+  reason: string | null
+  policy: string | null
+  raw: string
+  error: string | null
+}
+
+export type ShieldsAuditEvent = {
+  action: string
+  sandbox: string
+  timestamp: string
+  reason?: string | null
+  timeout_seconds?: number
+  restored_by?: string
+  duration_seconds?: number
+}
+
+function nemoclawStateDir() {
+  const home = process.env.HOME || "/root"
+  return `${home}/.nemoclaw/state`
+}
+
+function parseShieldsStatusText(raw: string): Omit<ShieldsStatus, "available" | "restoreAt" | "error"> {
+  const text = raw.replace(/\[[0-9;]*m/g, "")
+  const field = (label: string) => {
+    const match = text.match(new RegExp(`${label}:\\s*(.+)`, "i"))
+    const value = match?.[1]?.trim() ?? null
+    return value && value.toLowerCase() !== "not specified" ? value : null
+  }
+  let posture: ShieldsPosture = "unknown"
+  if (/Shields:\s*UP/i.test(text)) posture = "up"
+  else if (/Shields:\s*DOWN/i.test(text)) posture = "down"
+  else if (/Shields:\s*NOT CONFIGURED/i.test(text)) posture = "not_configured"
+  return {
+    posture,
+    since: field("Since"),
+    autoLockIn: field("Auto-lockdown in"),
+    reason: field("Reason"),
+    policy: field("Policy"),
+    raw: text.trim(),
+  }
+}
+
+export async function getShieldsStatus(sandboxName: string): Promise<ShieldsStatus> {
+  const result = await runNemoClaw([sandboxName, "shields", "status"], 90000)
+  if (!result.ok) {
+    return {
+      available: false,
+      posture: "unknown",
+      since: null,
+      autoLockIn: null,
+      restoreAt: null,
+      reason: null,
+      policy: null,
+      raw: result.stdout || result.stderr,
+      error: result.error || result.stderr || "shields status failed",
+    }
+  }
+  const parsed = parseShieldsStatusText(result.stdout || result.stderr)
+
+  // Best-effort: the detached auto-relock timer records an absolute restoreAt.
+  let restoreAt: string | null = null
+  if (parsed.posture === "down") {
+    try {
+      const { readFile } = await import("node:fs/promises")
+      const timer = JSON.parse(
+        await readFile(`${nemoclawStateDir()}/shields-timer-${sandboxName}.json`, "utf8"),
+      )
+      if (typeof timer?.restoreAt === "string") restoreAt = timer.restoreAt
+    } catch {
+      // Timer file absent (e.g. timer process died) — posture text is still
+      // authoritative; the UI will show the countdown from autoLockIn only.
+    }
+  }
+  return { available: true, ...parsed, restoreAt, error: null }
+}
+
+export async function getShieldsAudit(sandboxName: string, limit = 20): Promise<ShieldsAuditEvent[]> {
+  try {
+    const { readFile } = await import("node:fs/promises")
+    const raw = await readFile(`${nemoclawStateDir()}/shields-audit.jsonl`, "utf8")
+    const events: ShieldsAuditEvent[] = []
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        const event = JSON.parse(trimmed)
+        if (event?.sandbox === sandboxName) events.push(event)
+      } catch {
+        // skip malformed lines
+      }
+    }
+    return events.slice(-limit).reverse()
+  } catch {
+    return []
+  }
+}
+
+const SHIELDS_TIMEOUT_PATTERN = /^\d+(?:s|m|h)?$/
+
+export async function runShieldsAction(
+  sandboxName: string,
+  action: "up" | "down",
+  options: { timeout?: string; reason?: string } = {},
+) {
+  const args = [sandboxName, "shields", action]
+  if (action === "down") {
+    if (options.timeout) {
+      if (!SHIELDS_TIMEOUT_PATTERN.test(options.timeout)) {
+        return { ok: false, stdout: "", stderr: "", exitCode: null, error: "invalid timeout (expected e.g. 30s, 5m, 1h)", command: args }
+      }
+      args.push("--timeout", options.timeout)
+    }
+    if (options.reason) {
+      args.push("--reason", options.reason.slice(0, 200))
+    }
+  }
+  // `shields down` snapshots the policy + submits a permissive one, which can
+  // take a while on a busy gateway; `up` re-locks files + restores policy.
+  return runNemoClaw(args, 180000)
+}

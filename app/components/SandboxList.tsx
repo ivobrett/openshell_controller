@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import ConfigurationPanel from './ConfigurationPanel'
 import HermesRemotePanel from './HermesRemotePanel'
 import OpenClawRemotePanel from './OpenClawRemotePanel'
+import ShieldsPanel from './ShieldsPanel'
 import SandboxArchivePanel from './SandboxArchivePanel'
 import SandboxFilesPanel from './SandboxFilesPanel'
 import SandboxInferencePanel from './SandboxInferencePanel'
@@ -31,7 +32,7 @@ interface SandboxListProps {
   dashboardSessionId: string
 }
 
-type DrawerKey = 'operations' | 'files' | 'inference' | 'policy' | 'archive' | 'mcp' | 'hermesRemote' | 'openclawRemote'
+type DrawerKey = 'operations' | 'files' | 'inference' | 'policy' | 'archive' | 'mcp' | 'hermesRemote' | 'openclawRemote' | 'shields'
 type McpServerAccess = {
   id: string
   name: string
@@ -369,6 +370,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
     mcp: false,
     hermesRemote: false,
     openclawRemote: false,
+    shields: false,
   })
   const [telemetry, setTelemetry] = useState<TelemetryData>({
     cpu: 0, memory: 0, disk: 0, timestamp: new Date().toISOString()
@@ -931,6 +933,17 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                   onToggle={() => toggleDrawer('openclawRemote')}
                 >
                   <OpenClawRemotePanel sandboxName={selectedSandbox.name} />
+                </DrawerSection>
+              )}
+
+              {(selectedSandboxIsOpenClaw || selectedSandboxIsHermes) && (
+                <DrawerSection
+                  title="Shields"
+                  summary="Kernel-level lockdown of the agent config (NemoClaw shields up/down)."
+                  open={openDrawers.shields}
+                  onToggle={() => toggleDrawer('shields')}
+                >
+                  <ShieldsPanel sandboxName={selectedSandbox.name} />
                 </DrawerSection>
               )}
 

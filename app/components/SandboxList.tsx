@@ -936,7 +936,14 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                 </DrawerSection>
               )}
 
-              {(selectedSandboxIsOpenClaw || selectedSandboxIsHermes) && (
+              {/* OpenClaw only: Hermes `shields up` is broken in NemoClaw
+                  v0.0.73 — the config-lock step reverts the config parent dir
+                  to 755 root:root while its own verify demands 1775 root:sandbox
+                  ("Config not locked: parent dir mode=755 (expected 1775)"),
+                  and it can't be pre-fixed (the lock reverts manual perms) or
+                  rebuilt away (fresh sandboxes fail identically). Re-enable for
+                  Hermes once NemoClaw fixes it. */}
+              {selectedSandboxIsOpenClaw && (
                 <DrawerSection
                   title="Shields"
                   summary="Kernel-level lockdown of the agent config (NemoClaw shields up/down)."

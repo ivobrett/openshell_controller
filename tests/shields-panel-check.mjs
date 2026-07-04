@@ -45,9 +45,11 @@ assert.match(panelSource, /Audit trail/i, 'panel must render the shields audit t
 assert.match(panelSource, /api\/auth\/me/, 'panel must resolve the operator identity for admin-only controls')
 assert.match(panelSource, /Only the operator \(admin\) can raise or lower shields/, 'panel must show a read-only note to non-admin users')
 
-// Mounting: shields applies to NemoClaw-managed sandboxes (openclaw + hermes),
-// not custom sandboxes.
-assert.match(sandboxListSource, /selectedSandboxIsOpenClaw \|\| selectedSandboxIsHermes\) && \(\s*<DrawerSection\s*title="Shields"/, 'SandboxList must mount ShieldsPanel for openclaw and hermes sandboxes')
+// Mounting: OpenClaw only. Hermes `shields up` is broken in NemoClaw v0.0.73
+// (config-lock parent-dir perm mismatch), so the panel is not offered for
+// Hermes until upstream fixes it.
+assert.match(sandboxListSource, /selectedSandboxIsOpenClaw && \(\s*<DrawerSection\s*title="Shields"/, 'SandboxList must mount ShieldsPanel for openclaw sandboxes only')
+assert.doesNotMatch(sandboxListSource, /selectedSandboxIsHermes\) && \(\s*<DrawerSection\s*title="Shields"/, 'ShieldsPanel must NOT be mounted for hermes (shields up broken on v0.0.73)')
 assert.match(sandboxListSource, /shields: false,/, 'shields drawer must default closed')
 
 console.log('shields-panel-check: PASS shields lib/route/panel assertions')

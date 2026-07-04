@@ -29,6 +29,10 @@ assert.match(routeSource, /export async function GET/, 'shields route must expos
 assert.match(routeSource, /export async function POST/, 'shields route must expose POST actions')
 assert.match(routeSource, /action !== "up" && action !== "down"/, 'shields route must only accept up/down actions')
 assert.match(routeSource, /validateSandboxName/, 'shields route must validate the sandbox name')
+// Changing posture is OPERATOR-ONLY: shields down applies a permissive sandbox
+// policy, so multi-user OAuth identities must not be able to lower shields.
+assert.match(routeSource, /import \{ isOperator \} from "@\/app\/lib\/auth\/context"/, 'shields route must use the shared operator check')
+assert.match(routeSource, /if \(!\(await isOperator\(request\)\)\) \{\s*\n\s*return NextResponse\.json\(\s*\n?\s*\{ ok: false, error: "Operator session required/, 'shields POST must reject non-operator sessions before acting')
 
 // Panel: posture badge, bounded down-window selector, audit trail, and the
 // permissive-policy warning (shields down widens sandbox egress).
@@ -38,6 +42,8 @@ assert.match(panelSource, /PERMISSIVE sandbox policy/, 'panel must warn that shi
 assert.match(panelSource, /cannot be extended/, 'panel must state the fail-locked window semantics')
 assert.match(panelSource, /auto-relock/, 'panel must surface the auto-relock countdown')
 assert.match(panelSource, /Audit trail/i, 'panel must render the shields audit trail')
+assert.match(panelSource, /api\/auth\/me/, 'panel must resolve the operator identity for admin-only controls')
+assert.match(panelSource, /Only the operator \(admin\) can raise or lower shields/, 'panel must show a read-only note to non-admin users')
 
 // Mounting: shields applies to NemoClaw-managed sandboxes (openclaw + hermes),
 // not custom sandboxes.

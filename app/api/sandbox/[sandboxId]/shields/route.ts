@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { isOperator } from "@/app/lib/auth/context"
 import {
   getShieldsAudit,
   getShieldsStatus,
@@ -15,6 +16,11 @@ import {
 //     timer; a repeated `down` does not extend the active window.
 // While shields are UP, config-editing features (openclaw.json patches) fail
 // with Permission denied — the UI uses posture to disable those affordances.
+//
+// Authorization: changing posture (POST) is OPERATOR-ONLY — shields down
+// applies a permissive sandbox policy (wider egress), so multi-user OAuth
+// identities must not be able to lower shields. Reading posture (GET) is
+// allowed for any authenticated user so the UI can reflect lockdown state.
 
 function validateSandboxName(value: string) {
   if (!value || value.length > 63) throw new Error("sandbox name is required")
@@ -23,7 +29,7 @@ function validateSandboxName(value: string) {
 }
 
 export async function GET(
-  _request: Request,
+  _request: NextRequest,
   { params }: { params: Promise<{ sandboxId: string }> },
 ) {
   try {
@@ -47,9 +53,15 @@ export async function GET(
 }
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ sandboxId: string }> },
 ) {
+  if (!(await isOperator(request))) {
+    return NextResponse.json(
+      { ok: false, error: "Operator session required to change shields posture." },
+      { status: 401 },
+    )
+  }
   try {
     const { sandboxId } = await params
     const sandboxName = validateSandboxName(sandboxId)

@@ -68,6 +68,24 @@ export default function ShieldsPanel({ sandboxName }: { sandboxName: string }) {
   const [downTimeout, setDownTimeout] = useState('5m')
   const [downReason, setDownReason] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
+  // Changing shields posture is operator-only (shields down applies a
+  // permissive sandbox policy). OAuth users get a read-only view.
+  const [isAdmin, setIsAdmin] = useState<boolean>(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/auth/me')
+        const data = await res.json()
+        // operator session, or auth not configured (single-operator dev mode)
+        if (!cancelled) setIsAdmin(Boolean(data?.operator) || data?.configured === false)
+      } catch {
+        if (!cancelled) setIsAdmin(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -168,7 +186,11 @@ export default function ShieldsPanel({ sandboxName }: { sandboxName: string }) {
 
       {actionError && <p className="text-sm text-red-400">{actionError}</p>}
 
-      {locked ? (
+      {!isAdmin ? (
+        <p className="text-xs text-[var(--foreground-dim)] italic">
+          Only the operator (admin) can raise or lower shields.
+        </p>
+      ) : locked ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <select

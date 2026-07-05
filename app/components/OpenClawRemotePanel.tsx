@@ -40,6 +40,27 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
   const [enabling, setEnabling] = useState(false)
   const [pairing, setPairing] = useState<PairingState>({ status: 'idle' })
   const [approving, setApproving] = useState(false)
+  const [qr, setQr] = useState<
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'ready'; setupCode: string; asciiQr: string }
+    | { status: 'error'; message: string }
+  >({ status: 'idle' })
+
+  const generateQr = useCallback(async () => {
+    setQr({ status: 'loading' })
+    try {
+      const res = await fetch(`/api/sandbox/${encodeURIComponent(sandboxName)}/openclaw-remote/qr`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data?.setupCode) {
+        setQr({ status: 'error', message: data?.error || `QR failed (${res.status})` })
+        return
+      }
+      setQr({ status: 'ready', setupCode: data.setupCode, asciiQr: typeof data.asciiQr === 'string' ? data.asciiQr : '' })
+    } catch (error) {
+      setQr({ status: 'error', message: error instanceof Error ? error.message : 'QR generation failed' })
+    }
+  }, [sandboxName])
 
   const load = useCallback(async () => {
     try {
@@ -203,21 +224,48 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
       </div>
 
       <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs text-[var(--foreground-dim)]">
-        <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">OpenClaw mobile app setup</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">OpenClaw mobile app — pair by QR</p>
+          <button onClick={() => void generateQr()} disabled={qr.status === 'loading'} className="action-button px-2 py-1">
+            {qr.status === 'loading' ? 'Generating…' : qr.status === 'ready' ? 'Regenerate QR' : 'Generate QR'}
+          </button>
+        </div>
         <ol className="mt-2 list-decimal space-y-1 pl-4">
-          <li>Open the app → <span className="font-mono">Connect</span> tab → <span className="font-mono">Manual / Advanced</span></li>
-          <li>Host <span className="font-mono">{access.host}</span>, Port <span className="font-mono">{access.port}</span>, TLS / <span className="font-mono">wss://</span> on</li>
-          <li>Paste the Token as the gateway auth token, then connect</li>
-          <li>Approve the pairing request below (the app connects at the transport layer, but a first-time node stays pending until approved)</li>
+          <li>Tap <span className="font-mono">Generate QR</span> → open the app → <span className="font-mono">Scan QR / add via setup code</span></li>
+          <li>Scan the code below (the bootstrap token auto-approves device pairing — no manual step)</li>
+          <li>The app then requests node capabilities → approve it under <span className="font-mono">Node approval</span> below</li>
         </ol>
-        <p className="mt-2">
-          The token is the gateway shared secret — the app sends it in the connection (<span className="font-mono">connect</span>) frame; it is not part of the URL.
-        </p>
+
+        {qr.status === 'ready' && (
+          <div className="mt-3 space-y-2">
+            {qr.asciiQr ? (
+              <pre className="overflow-x-auto rounded-sm bg-black p-2 font-mono leading-none text-white" style={{ fontSize: '6px', lineHeight: '6px' }}>{qr.asciiQr}</pre>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <span className="w-24 shrink-0 uppercase tracking-wider">Setup code</span>
+              <span className="truncate font-mono text-[var(--foreground)]">{qr.setupCode.slice(0, 16)}…</span>
+              <button onClick={() => copy('setup', qr.setupCode)} className="action-button px-2 py-1 shrink-0">
+                {copied === 'setup' ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-[var(--foreground-dim)]">Short-lived — regenerate if it expires before you scan.</p>
+          </div>
+        )}
+        {qr.status === 'error' && <p className="mt-2 text-[var(--status-pending)]">{qr.message}</p>}
+
+        <details className="mt-3">
+          <summary className="cursor-pointer text-[var(--foreground-dim)]">Manual setup (no QR)</summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-4">
+            <li>App → <span className="font-mono">Connect</span> → <span className="font-mono">Manual / Advanced</span></li>
+            <li>Host <span className="font-mono">{access.host}</span>, Port <span className="font-mono">{access.port}</span>, <span className="font-mono">wss://</span> on; paste the Token above</li>
+            <li>Then approve under <span className="font-mono">Node approval</span> below</li>
+          </ol>
+        </details>
       </div>
 
       <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">Device pairing</p>
+          <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">Node approval</p>
           <div className="flex items-center gap-2">
             <button onClick={() => void loadPairing()} disabled={pairing.status === 'loading' || approving} className="action-button px-2 py-1">
               {pairing.status === 'loading' ? 'Checking…' : 'Check pending'}
@@ -245,7 +293,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
 
         {pairing.status === 'ready' && pairing.requests.length === 0 && (
           <p className="mt-2 text-[var(--foreground-dim)]">
-            No pending pairing requests{pairing.raw ? '' : ' — connect the app first, then Check pending'}.
+            No pending node requests{pairing.raw ? '' : ' — scan the QR / open the app first, then Check pending'}.
             {pairing.raw && !pairing.raw.startsWith('[') ? (
               <span className="mt-1 block whitespace-pre-wrap font-mono text-[var(--foreground-dim)]">{pairing.raw}</span>
             ) : null}

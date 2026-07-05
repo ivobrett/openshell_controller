@@ -1,27 +1,38 @@
 import { spawn } from "node:child_process"
 import { OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
 
-// Controller-driven OpenClaw device-pairing approval.
+// Controller-driven OpenClaw device+node pairing for the mobile apps.
 //
-// The OpenClaw mobile apps authenticate the WS *transport* with the gateway
-// shared-secret token, but a first-time node (role: node) still files a pending
-// *pairing* request that a human must approve with `openclaw devices approve`
-// on the gateway host. On a Docker-driver deployment the gateway host is the
-// sandbox container, so there is no shell for the operator to run that in —
-// the "chicken-and-egg" that blocked Android pairing.
+// PROVEN FLOW (2026-07-05, AgentGateway sandbox, OpenClaw 2026.6.10):
+//   1. Operator scans a QR (openclaw qr --public-url wss://… --token <gwtok>) whose
+//      short-lived bootstrapToken AUTO-approves DEVICE pairing (no manual step).
+//   2. The app then files a NODE-capability request that must be approved by an
+//      operator-scoped client (`openclaw nodes approve <id>`).
 //
-// This module runs the approval CLI *inside* the sandbox via the same
-// privileged `openshell sandbox exec` channel the controller already uses for
-// MCP config writes (see sandboxPrivilegedFiles.ts / sandboxOpenClawMcpConfig.ts),
-// so the operator can list + approve from the controller UI without the GUI
-// pairing flow.
+// The roadblocks we hit — and how this module avoids each:
+//   A. `sh -lc` login shell inside the sandbox installs a wrapper (nemoclaw-start)
+//      that UNSETS OPENCLAW_GATEWAY_* → the CLI silently reverts to a loopback URL
+//      the gateway doesn't listen on (1006). FIX: run the CLI as DIRECT argv with an
+//      explicit `env …` prefix (never `sh -lc`).
+//   B. The gateway binds its eth0 IP (10.200.0.2), NOT loopback, so the "local
+//      loopback" operator-trust path is unavailable; a plain CLI connection is
+//      treated as an unpaired device ("device pairing required"). FIX: the CLI runs
+//      with OPENCLAW_GATEWAY_TOKEN (= gateway.auth.token) for transport auth AND its
+//      device identity (/sandbox/.openclaw/identity/device.json → a DETERMINISTIC
+//      per-sandbox deviceId) is pre-seeded into devices/paired.json with full
+//      operator scopes. The gateway reads paired.json per-connect, so this grants the
+//      CLI operator scope with no manual approval and no self-approval catch-22.
+//   C. `nodes approve` needs operator.write; a CLI that only has operator.read files
+//      a scope-upgrade request that then WEDGES it. Pre-seeding full scopes up front
+//      avoids the upgrade entirely.
+//
+// All sandbox access is via `openshell sandbox exec` (the same privileged channel
+// used for MCP config writes).
 
-function shellQuote(value: string) {
-  return `'${value.replace(/'/g, `'\\''`)}'`
-}
+const OPENCLAW_STATE_DIR = "/sandbox/.openclaw"
+const GATEWAY_PORT = 18789
+const OPERATOR_SCOPES = ["operator.pairing", "operator.read", "operator.write", "operator.approvals"]
 
-// requestId comes from `openclaw devices list`; it is passed as a distinct argv
-// entry (no shell), but we still constrain it defensively before use.
 const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/
 
 export type OpenClawPairingRequest = {
@@ -32,8 +43,10 @@ export type OpenClawPairingRequest = {
   createdAt?: string
 }
 
-function runSandboxExec(sandboxName: string, command: string[]) {
-  return new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+type ExecResult = { stdout: string; stderr: string; code: number | null }
+
+function runSandboxExec(sandboxName: string, command: string[]): Promise<ExecResult> {
+  return new Promise((resolve, reject) => {
     const child = spawn(OPENSHELL_BIN, ["sandbox", "exec", "-n", sandboxName, "--", ...command], {
       env: hostCommandEnv({ OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw" }),
       stdio: ["ignore", "pipe", "pipe"],
@@ -47,82 +60,154 @@ function runSandboxExec(sandboxName: string, command: string[]) {
   })
 }
 
-// Best-effort parse of `openclaw devices list --json`. The CLI schema varies
-// across OpenClaw versions, so we tolerate a few shapes and fall back to the
-// raw text (surfaced to the operator) when we can't parse a request id.
-function parsePairingRequests(raw: string): OpenClawPairingRequest[] {
-  if (!raw) return []
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return []
+// Strip the noisy plugin banner + node warnings openclaw prints on every run.
+function cleanOpenClawOutput(raw: string): string {
+  return raw
+    .split(/\r?\n/)
+    .filter((line) => !/UNDICI|trace-warnings|\[plugins\]|NemoClaw registered|Endpoint:|Provider:|Model:|Slash:|[└┌│◇]/.test(line))
+    .join("\n")
+    .trim()
+}
+
+// One round-trip: read the gateway token, the deterministic device identity, and
+// the sandbox eth0 IP (the gateway bind address). These are the env the openclaw
+// CLI needs to reach the gateway with operator authority. `sh -c` (non-login) is
+// fine here — none of these read commands need OPENCLAW_GATEWAY_* so the wrapper
+// is irrelevant; the openclaw CLI itself is always run via runOpenClaw (env+argv).
+async function getGatewayContext(sandboxName: string): Promise<{ ip: string; token: string; deviceId: string }> {
+  const script =
+    "import json,socket;" +
+    "cfg=json.load(open('/sandbox/.openclaw/openclaw.json'));" +
+    "did=json.load(open('/sandbox/.openclaw/identity/device.json'))['deviceId'];" +
+    "s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);\n" +
+    "try:\n s.connect(('10.255.255.255',1));ip=s.getsockname()[0]\nexcept Exception:\n ip='127.0.0.1'\nfinally:\n s.close()\n" +
+    "print(json.dumps({'ip':ip,'token':cfg['gateway']['auth']['token'],'deviceId':did}))"
+  const res = await runSandboxExec(sandboxName, ["python3", "-c", script])
+  const clean = cleanOpenClawOutput(res.stdout)
+  const match = clean.match(/\{.*\}/s)
+  if (!match) throw new Error(`could not read gateway context: ${res.stderr || clean || "empty"}`)
+  const parsed = JSON.parse(match[0]) as { ip: string; token: string; deviceId: string }
+  if (!parsed.token || !parsed.deviceId) throw new Error("gateway token or device identity missing")
+  return parsed
+}
+
+// Pre-seed the controller's operator CLI device (the gateway's own deterministic
+// identity) into devices/paired.json with full operator scopes. Idempotent; the
+// gateway honours the change per-connect (no restart). This is what lets `nodes
+// approve` run without any manual/web-UI approval of the CLI device itself.
+async function ensureOperatorDevice(sandboxName: string): Promise<void> {
+  const script = [
+    "import json,os",
+    "base='/sandbox/.openclaw'",
+    "did=json.load(open(base+'/identity/device.json'))['deviceId']",
+    "pp=base+'/devices/paired.json'",
+    "d=json.load(open(pp)) if os.path.exists(pp) else {}",
+    "d=d if isinstance(d,dict) else {}",
+    `scopes=${JSON.stringify(OPERATOR_SCOPES)}`,
+    "e=d.get(did) or {'deviceId':did,'clientId':'cli','clientMode':'cli','platform':'linux'}",
+    "e['deviceId']=did",
+    "e['roles']=sorted(set((e.get('roles') or [])+['operator']))",
+    "e['scopes']=scopes; e['approvedScopes']=scopes",
+    "t=e.get('tokens') or {}",
+    "op=t.get('operator')",
+    "if isinstance(op,dict): op['scopes']=scopes; t['operator']=op; e['tokens']=t",
+    "d[did]=e",
+    "os.makedirs(os.path.dirname(pp),exist_ok=True)",
+    "tmp=pp+'.tmp'; json.dump(d,open(tmp,'w'),indent=2); os.replace(tmp,pp)",
+    "print('seeded '+did)",
+  ].join("\n")
+  const res = await runSandboxExec(sandboxName, ["python3", "-c", script])
+  if (res.code !== 0 && !/seeded/.test(res.stdout)) {
+    throw new Error(`failed to seed operator device: ${res.stderr || res.stdout || "unknown"}`)
   }
-  const rows = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray((parsed as { requests?: unknown[] })?.requests)
-      ? (parsed as { requests: unknown[] }).requests
-      : Array.isArray((parsed as { devices?: unknown[] })?.devices)
-        ? (parsed as { devices: unknown[] }).devices
-        : []
+}
+
+// Run the openclaw CLI inside the sandbox with the gateway env, as DIRECT argv via
+// `env …` (roadblock A). Returns cleaned stdout.
+async function runOpenClaw(sandboxName: string, ctx: { ip: string; token: string }, args: string[]): Promise<ExecResult> {
+  const envPrefix = [
+    "env",
+    "HOME=/sandbox",
+    "OPENCLAW_HOME=/sandbox",
+    `OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR}`,
+    `OPENCLAW_CONFIG_PATH=${OPENCLAW_STATE_DIR}/openclaw.json`,
+    `OPENCLAW_GATEWAY_URL=ws://${ctx.ip}:${GATEWAY_PORT}`,
+    `OPENCLAW_GATEWAY_TOKEN=${ctx.token}`,
+    "XDG_STATE_HOME=/tmp/.local/state",
+    "XDG_CONFIG_HOME=/tmp/.config",
+    "XDG_CACHE_HOME=/tmp/.cache",
+    "XDG_DATA_HOME=/tmp/.local/share",
+    "openclaw",
+    ...args,
+  ]
+  const res = await runSandboxExec(sandboxName, envPrefix)
+  return { ...res, stdout: cleanOpenClawOutput(res.stdout) }
+}
+
+function parseNodeRequests(raw: string): OpenClawPairingRequest[] {
+  const match = raw.match(/\[[\s\S]*\]/)
+  if (!match) return []
+  let rows: unknown
+  try { rows = JSON.parse(match[0]) } catch { return [] }
+  if (!Array.isArray(rows)) return []
   const out: OpenClawPairingRequest[] = []
   for (const row of rows) {
     if (!row || typeof row !== "object") continue
     const r = row as Record<string, unknown>
-    const requestId =
-      (typeof r.requestId === "string" && r.requestId) ||
-      (typeof r.id === "string" && r.id) ||
-      (typeof r.request_id === "string" && r.request_id) ||
-      ""
+    const requestId = typeof r.requestId === "string" ? r.requestId : ""
     if (!requestId) continue
-    // Only surface things still awaiting approval when the CLI tells us.
-    const status = typeof r.status === "string" ? r.status.toLowerCase() : ""
-    if (status && status !== "pending" && status !== "requested" && status !== "awaiting") continue
     out.push({
       requestId,
       role: typeof r.role === "string" ? r.role : undefined,
-      label: typeof r.label === "string" ? r.label : typeof r.name === "string" ? r.name : undefined,
+      label: typeof r.label === "string" ? r.label : typeof r.displayName === "string" ? r.displayName : undefined,
       scopes: Array.isArray(r.scopes) ? r.scopes.filter((s): s is string => typeof s === "string") : undefined,
-      createdAt: typeof r.createdAt === "string" ? r.createdAt : typeof r.created_at === "string" ? r.created_at : undefined,
+      createdAt: typeof r.createdAt === "string" ? r.createdAt : undefined,
     })
   }
   return out
 }
 
-export async function listOpenClawPairingRequests(sandboxName: string): Promise<{
-  requests: OpenClawPairingRequest[]
-  raw: string
-}> {
-  // Prefer JSON; fall back to plain text (older CLIs) so the operator can still
-  // read request ids off the panel and approve by id.
-  let result = await runSandboxExec(sandboxName, ["sh", "-lc", "openclaw devices list --json"])
-  if (result.code !== 0 || !result.stdout) {
-    const plain = await runSandboxExec(sandboxName, ["sh", "-lc", "openclaw devices list"])
-    if (plain.code !== 0 && !plain.stdout) {
-      throw new Error(plain.stderr || result.stderr || "failed to list OpenClaw pairing requests")
-    }
-    return { requests: parsePairingRequests(plain.stdout), raw: plain.stdout }
-  }
-  return { requests: parsePairingRequests(result.stdout), raw: result.stdout }
+// Generate a mobile-pairing QR setup code. Returns the base64 setupCode (opaque,
+// short-lived bootstrapToken inside — safe to render) AND the raw ascii QR block
+// the CLI draws, so the panel can show either.
+export async function generateOpenClawQr(sandboxName: string, publicUrl: string): Promise<{ setupCode: string; asciiQr: string }> {
+  const ctx = await getGatewayContext(sandboxName)
+  const json = await runOpenClaw(sandboxName, ctx, ["qr", "--public-url", publicUrl, "--token", ctx.token, "--json"])
+  const m = json.stdout.match(/\{[\s\S]*\}/)
+  if (!m) throw new Error(json.stderr || json.stdout || "openclaw qr produced no setup code")
+  const setupCode = String((JSON.parse(m[0]) as { setupCode?: string }).setupCode || "")
+  if (!setupCode) throw new Error("openclaw qr returned no setupCode")
+  const ascii = await runOpenClaw(sandboxName, ctx, ["qr", "--public-url", publicUrl, "--token", ctx.token])
+  return { setupCode, asciiQr: ascii.stdout }
 }
 
-export async function approveOpenClawPairing(
-  sandboxName: string,
-  requestId?: string,
-): Promise<{ output: string }> {
-  let cmd: string
-  if (requestId) {
-    if (!REQUEST_ID_RE.test(requestId)) {
-      throw new Error("invalid pairing requestId")
-    }
-    cmd = `openclaw devices approve ${shellQuote(requestId)}`
+// List pending NODE-capability requests (what the app files after device pairing).
+export async function listOpenClawPairingRequests(sandboxName: string): Promise<{ requests: OpenClawPairingRequest[]; raw: string }> {
+  const ctx = await getGatewayContext(sandboxName)
+  await ensureOperatorDevice(sandboxName)
+  const res = await runOpenClaw(sandboxName, ctx, ["nodes", "pending", "--json"])
+  return { requests: parseNodeRequests(res.stdout), raw: res.stdout }
+}
+
+// Approve a pending NODE request (or the latest). Ensures the operator device is
+// seeded first so the approve never hits the pairing/scope-upgrade wall.
+export async function approveOpenClawPairing(sandboxName: string, requestId?: string): Promise<{ output: string }> {
+  const ctx = await getGatewayContext(sandboxName)
+  await ensureOperatorDevice(sandboxName)
+
+  let targetId = requestId
+  if (targetId) {
+    if (!REQUEST_ID_RE.test(targetId)) throw new Error("invalid pairing requestId")
   } else {
-    // No id → approve the most recent pending request.
-    cmd = "openclaw devices approve --latest"
+    const res = await runOpenClaw(sandboxName, ctx, ["nodes", "pending", "--json"])
+    const pending = parseNodeRequests(res.stdout)
+    if (pending.length === 0) throw new Error("no pending node requests — open the app so it re-files, then retry")
+    targetId = pending[pending.length - 1].requestId
   }
-  const result = await runSandboxExec(sandboxName, ["sh", "-lc", cmd])
-  if (result.code !== 0) {
-    throw new Error(result.stderr || result.stdout || "failed to approve OpenClaw pairing request")
+
+  const res = await runOpenClaw(sandboxName, ctx, ["nodes", "approve", targetId])
+  if (res.code !== 0 || /failed|error|unknown requestId|pairing required/i.test(res.stdout)) {
+    throw new Error(res.stdout || res.stderr || "failed to approve node request")
   }
-  return { output: result.stdout || result.stderr || "approved" }
+  return { output: res.stdout || "approved" }
 }

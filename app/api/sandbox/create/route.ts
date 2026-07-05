@@ -517,9 +517,25 @@ function patchNemoClawRegistryAgent(sandboxName: string, agent: string) {
       ? current.sandboxes
       : {}
     const entry = sandboxes[sandboxName]
-    if (!entry || entry.agent === agent) return { ok: true as const, patched: false }
-    sandboxes[sandboxName] = { ...entry, agent }
-    const next = { ...current, sandboxes }
+    // Upsert, not patch-only. Older NemoClaw (<=v0.0.73) wrote the base
+    // ~/.nemoclaw/sandboxes.json entry itself and we only stamped the agent
+    // onto it. NemoClaw v0.0.74+ (commit 1162e89, OpenClaw 2026.6.10) tracks
+    // sandboxes solely in the gateway SQLite DB and writes NO sandboxes.json,
+    // so there is nothing to patch — a "patch-only" guard left every fresh
+    // sandbox unlabelled and the UI classified it as "Custom" (hiding the
+    // OpenClaw-specific panels). Author the entry ourselves when absent.
+    if (entry && typeof entry === "object" && entry.agent === agent) {
+      return { ok: true as const, patched: false }
+    }
+    const baseEntry = entry && typeof entry === "object"
+      ? entry
+      : { name: sandboxName, createdAt: new Date().toISOString() }
+    sandboxes[sandboxName] = { ...baseEntry, name: sandboxName, agent }
+    const next = {
+      ...current,
+      sandboxes,
+      defaultSandbox: current.defaultSandbox || sandboxName,
+    }
     mkdirSync(path.dirname(NEMOCLAW_REGISTRY_FILE), { recursive: true })
     const tempPath = `${NEMOCLAW_REGISTRY_FILE}.tmp.${process.pid}.${Date.now()}`
     writeFileSync(tempPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })

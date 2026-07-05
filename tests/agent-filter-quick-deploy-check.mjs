@@ -30,6 +30,10 @@ const imageMap = new Map([
   ['hr-1', 'openshell/sandbox-from:5678'],
   ['cust-1', 'ghcr.io/nvidia/openshell-community/sandboxes/base:latest'],
   ['old-oc', 'openshell/sandbox-from:9999'], // unknown agent + NemoClaw image → ambiguous
+  // NemoClaw v0.0.74+ (commit 1162e89, OpenClaw 2026.6.10) tags local builds
+  // `nemoclaw-sandbox-local:<name>-<ts>` — must also be recognised as a
+  // NemoClaw image, else registry-less sandboxes fall through to Custom.
+  ['new-oc', 'nemoclaw-sandbox-local:new-oc-1783268007883'],
 ])
 
 // 1. classifySandbox sanity
@@ -37,6 +41,7 @@ assert.equal(classifySandbox(registry, 'oc-1', imageMap), 'openclaw')
 assert.equal(classifySandbox(registry, 'hr-1', imageMap), 'hermes')
 assert.equal(classifySandbox(registry, 'cust-1', imageMap), 'custom')
 assert.equal(classifySandbox(registry, 'old-oc', imageMap), 'unknown', 'NemoClaw image without an agent label must stay unknown — not Custom')
+assert.equal(classifySandbox(registry, 'new-oc', imageMap), 'unknown', 'NemoClaw v0.0.74+ nemoclaw-sandbox-local image without a label is a NemoClaw image → ambiguous (unknown), NOT Custom')
 assert.equal(classifySandbox(registry, 'never-seen', imageMap), 'unknown', 'a sandbox missing from both registry AND image map is unknown')
 assert.equal(classifySandbox(registry, 'cust-1'), 'unknown', 'without the image map, an unlabelled sandbox cannot be promoted to Custom')
 

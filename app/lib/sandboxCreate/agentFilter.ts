@@ -37,7 +37,10 @@ export function registryAgentForName(registry: RegistryShape, name: string): "op
   return "unknown"
 }
 
-const NEMOCLAW_IMAGE_PATTERN = /openshell\/sandbox-from/i
+// Legacy `.../openshell/sandbox-from-<...>` OR NemoClaw v0.0.74+ (commit 1162e89)
+// local build tags `nemoclaw-sandbox-local:<name>-<ts>`. Keep in sync with
+// isNemoClawImage in app/lib/sandboxContainerImage.ts.
+const NEMOCLAW_IMAGE_PATTERN = /openshell\/sandbox-from|nemoclaw-sandbox/i
 
 /**
  * Classify a sandbox into one of openclaw / hermes / custom / unknown using

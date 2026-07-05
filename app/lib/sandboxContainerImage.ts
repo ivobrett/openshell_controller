@@ -37,6 +37,12 @@ export async function readSandboxContainerImageMap(): Promise<SandboxImageMap> {
 // Bare `openshell sandbox create` uses a different image
 // (ghcr.io/nvidia/openshell-community/sandboxes/base) and is treated as
 // Custom.
+//
+// Two naming schemes exist: legacy NemoClaw tagged built images
+// `.../openshell/sandbox-from-<...>`, and NemoClaw v0.0.74+ (commit 1162e89,
+// OpenClaw 2026.6.10) which tags local builds `nemoclaw-sandbox-local:<name>-<ts>`
+// (base `nemoclaw-sandbox-base-local`). Match either so registry-less sandboxes
+// still classify as NemoClaw (OpenClaw) instead of falling through to Custom.
 export function isNemoClawImage(image: string | undefined | null) {
-  return Boolean(image) && /openshell\/sandbox-from/i.test(String(image))
+  return Boolean(image) && /openshell\/sandbox-from|nemoclaw-sandbox/i.test(String(image))
 }

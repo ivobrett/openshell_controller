@@ -177,15 +177,14 @@ function parseNodeRequests(raw: string): OpenClawPairingRequest[] {
 // Generate a mobile-pairing QR setup code. Returns the base64 setupCode (opaque,
 // short-lived bootstrapToken inside — safe to render) AND the raw ascii QR block
 // the CLI draws, so the panel can show either.
-export async function generateOpenClawQr(sandboxName: string, publicUrl: string): Promise<{ setupCode: string; asciiQr: string }> {
+export async function generateOpenClawQr(sandboxName: string, publicUrl: string): Promise<{ setupCode: string }> {
   const ctx = await getGatewayContext(sandboxName)
   const json = await runOpenClaw(sandboxName, ctx, ["qr", "--public-url", publicUrl, "--token", ctx.token, "--json"])
   const m = json.stdout.match(/\{[\s\S]*\}/)
   if (!m) throw new Error(json.stderr || json.stdout || "openclaw qr produced no setup code")
   const setupCode = String((JSON.parse(m[0]) as { setupCode?: string }).setupCode || "")
   if (!setupCode) throw new Error("openclaw qr returned no setupCode")
-  const ascii = await runOpenClaw(sandboxName, ctx, ["qr", "--public-url", publicUrl, "--token", ctx.token])
-  return { setupCode, asciiQr: ascii.stdout }
+  return { setupCode }
 }
 
 // List pending NODE-capability requests (what the app files after device pairing).

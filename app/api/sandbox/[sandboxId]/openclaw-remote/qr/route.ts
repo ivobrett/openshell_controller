@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import QRCode from "qrcode"
 import { isUserAuthorizedForSandbox } from "@/app/lib/controlAuth"
 import { generateOpenClawQr } from "@/app/lib/openclawPairing"
 import { readOpenClawRemoteAccess } from "@/app/lib/openclawRemote"
@@ -39,8 +40,11 @@ export async function POST(
   }
 
   try {
-    const { setupCode, asciiQr } = await generateOpenClawQr(sandboxName, access.url)
-    return NextResponse.json({ ok: true, setupCode, asciiQr, url: access.url })
+    const { setupCode } = await generateOpenClawQr(sandboxName, access.url)
+    // Render the setup code as a real PNG the browser can display + scan. The
+    // CLI's own ascii QR uses ANSI colour codes that don't render in a browser.
+    const qrDataUrl = await QRCode.toDataURL(setupCode, { margin: 2, width: 320, errorCorrectionLevel: "M" })
+    return NextResponse.json({ ok: true, setupCode, qrDataUrl, url: access.url })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Failed to generate pairing QR" },

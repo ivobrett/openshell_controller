@@ -43,7 +43,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
   const [qr, setQr] = useState<
     | { status: 'idle' }
     | { status: 'loading' }
-    | { status: 'ready'; setupCode: string; asciiQr: string }
+    | { status: 'ready'; setupCode: string; qrDataUrl: string }
     | { status: 'error'; message: string }
   >({ status: 'idle' })
 
@@ -56,7 +56,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
         setQr({ status: 'error', message: data?.error || `QR failed (${res.status})` })
         return
       }
-      setQr({ status: 'ready', setupCode: data.setupCode, asciiQr: typeof data.asciiQr === 'string' ? data.asciiQr : '' })
+      setQr({ status: 'ready', setupCode: data.setupCode, qrDataUrl: typeof data.qrDataUrl === 'string' ? data.qrDataUrl : '' })
     } catch (error) {
       setQr({ status: 'error', message: error instanceof Error ? error.message : 'QR generation failed' })
     }
@@ -238,8 +238,9 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
 
         {qr.status === 'ready' && (
           <div className="mt-3 space-y-2">
-            {qr.asciiQr ? (
-              <pre className="overflow-x-auto rounded-sm bg-black p-2 font-mono leading-none text-white" style={{ fontSize: '6px', lineHeight: '6px' }}>{qr.asciiQr}</pre>
+            {qr.qrDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qr.qrDataUrl} alt="OpenClaw pairing QR" className="rounded-sm bg-white p-2" width={220} height={220} />
             ) : null}
             <div className="flex items-center gap-2">
               <span className="w-24 shrink-0 uppercase tracking-wider">Setup code</span>

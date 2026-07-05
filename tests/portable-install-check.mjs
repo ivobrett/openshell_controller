@@ -54,10 +54,10 @@ assert.match(installSource, /python3 -m venv "\$PROJECT_VENV"/, 'installer must 
 assert.match(installSource, /\$venv_python" -m pip install --upgrade uv/, 'installer must install uvx into the virtual environment')
 assert.match(installSource, /set_env "OPENSHELL_CONTROL_VENV"/, 'installer must persist the virtual environment path for runtime MCP launches')
 
-assert.match(versionedInstallSource, /OPENSHELL_VERSION="\$\{OPENSHELL_VERSION:-v0\.0\.71\}"/, 'versioned installer must default to the OpenShell release supported by current NemoClaw (v0.0.71 = native gateway mTLS)')
-assert.match(versionedInstallSource, /NEMOCLAW_INSTALL_REF="\$\{NEMOCLAW_INSTALL_REF:-\$\{NEMOCLAW_INSTALL_TAG:-v0\.0\.73\}\}"/, 'versioned installer must pin to NemoClaw v0.0.73 by default (keeps the Hermes v0.17.0 base; OpenShell stays v0.0.71)')
+assert.match(versionedInstallSource, /OPENSHELL_VERSION="\$\{OPENSHELL_VERSION:-v0\.0\.72\}"/, 'versioned installer must default to the OpenShell release supported by pinned NemoClaw (0.0.72)')
+assert.match(versionedInstallSource, /NEMOCLAW_INSTALL_REF="\$\{NEMOCLAW_INSTALL_REF:-\$\{NEMOCLAW_INSTALL_TAG:-1162e89b4c1689b6a185bb5d90490494f2409cbc\}\}"/, 'versioned installer must pin NemoClaw to commit 1162e89b (v0.0.74 + OpenClaw 2026.6.10; no tag carries 2026.6.10 yet)')
 assert.match(versionedInstallSource, /NEMOCLAW_SOURCE_URL="\$\{NEMOCLAW_SOURCE_URL:-https:\/\/github\.com\/NVIDIA\/NemoClaw\.git\}"/, 'versioned installer must use the NemoClaw source repository URL')
-assert.match(versionedInstallSource, /OPENCLAW_VERSION="\$\{OPENCLAW_VERSION:-2026\.5\.27\}"/, 'versioned installer must default to NemoClaw main\'s current OpenClaw build target')
+assert.match(versionedInstallSource, /OPENCLAW_VERSION="\$\{OPENCLAW_VERSION:-2026\.6\.10\}"/, 'versioned installer must default to NemoClaw main\'s current OpenClaw build target')
 assert.match(versionedInstallSource, /https:\/\/raw\.githubusercontent\.com\/NVIDIA\/OpenShell\/main\/install\.sh/, 'versioned installer must use the OpenShell installer URL')
 assert.match(versionedInstallSource, /git -C "\$source_dir" fetch[\s\S]*"\$NEMOCLAW_INSTALL_REF"/, 'versioned installer must fetch NemoClaw from the selected git ref')
 assert.match(versionedInstallSource, /Requested NemoClaw install ref/, 'versioned installer must fail clearly when the selected NemoClaw ref is unavailable')
@@ -101,7 +101,7 @@ assert.match(mcpBrokerUrlSource, /discoverSandboxProxyOrigin/, 'MCP broker URL g
 assert.match(mcpBrokerUrlSource, /HTTP_PROXY/, 'MCP broker URL generation must use the sandbox proxy environment when available')
 assert.match(mcpBrokerClientSource, /PATH: HOST_PATH/, 'MCP stdio broker launches must inherit the shared host PATH')
 
-assert.match(createRouteSource, /buildNemoClawCreateCommand\(gpuMode, agent, sandboxName\)/, 'NemoClaw blueprint create must resolve a current CLI command with the selected GPU mode, agent, and sandbox name')
+assert.match(createRouteSource, /buildNemoClawCreateCommand\(gpuMode, agent, sandboxName, createInference\.mode !== "auto"\)/, 'NemoClaw blueprint create must resolve a current CLI command with the selected GPU mode, agent, sandbox name, and fresh-session flag (explicit inference modes need onboard --fresh)')
 assert.match(createRouteSource, /"onboard",[\s\S]*"--non-interactive"/, 'NemoClaw blueprint create must use the supported onboard CLI flow')
 assert.match(createRouteSource, /NEMOCLAW_SANDBOX_NAME: sandboxName/, 'NemoClaw blueprint create must pass the requested sandbox name to onboard')
 assert.match(createRouteSource, /NEMOCLAW_AGENT: agent/, 'NemoClaw blueprint create must pass the requested agent to onboard')

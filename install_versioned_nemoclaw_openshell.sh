@@ -8,19 +8,22 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.71}"
+OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.72}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw v0.0.69 was the first release whose base image bundled Hermes v0.17.0 (was
-# v0.14.0 through v0.0.68); v0.0.73 keeps it (Hermes v2026.6.19). v0.17 fixes the
-# proxied-dashboard WebSocket auth (ws_tickets) and makes
-# scripts/hermes-remote/upgrade-hermes.sh a no-op (it only runs for hermes <0.16).
-# OpenShell stays v0.0.71 (NemoClaw v0.0.73 declares min/max_openshell_version 0.0.71);
-# 0.0.71 provisions gateway mTLS natively (self-signed certs, Ed25519 JWT,
-# allow_unauthenticated_users=false) — no host-side DISABLE_TLS/ensure-mtls patching needed.
-# v0.0.73 is a NemoClaw-only bump (same OpenShell/Hermes/OpenClaw + sandbox-base digest).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.73}}"
+# NemoClaw ref is pinned to COMMIT 1162e89b (= the v0.0.74 tag + exactly one
+# production commit: "chore(openclaw): upgrade to 2026.6.10 and harden runtime
+# integration", PR #5595). No NemoClaw TAG carries OpenClaw 2026.6.10 yet, and
+# 2026.6.10 is required for current OpenClaw mobile apps (>=2026.6.x) to pair —
+# older sandbox gateways reject their bootstrap tokens (bootstrap_token_invalid).
+# The commit pins npm SRI integrity hashes for the 2026.6.10 packages, so the
+# version strings and hashes must travel together — never sed the version alone.
+# NemoClaw@1162e89 declares min/max_openshell_version 0.0.72 (native mTLS since
+# 0.0.71); Hermes base unchanged (v0.17.0 / v2026.6.19).
+# WHEN TO CHANGE: move to the next NemoClaw TAG that includes the OpenClaw
+# 2026.6.10 upgrade (first tag after v0.0.74), then drop this SHA pin.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-1162e89b4c1689b6a185bb5d90490494f2409cbc}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.5.27}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE="${NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE:-1}"
 NEMOCLAW_NON_INTERACTIVE="${NEMOCLAW_NON_INTERACTIVE:-1}"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { isUserAuthorizedForSandbox } from "@/app/lib/controlAuth"
 import { exposeOpenClawRemote, readOpenClawRemoteAccess, unexposeOpenClawRemote } from "@/app/lib/openclawRemote"
+import { ensureAutoApproveNodes } from "@/app/lib/openclawPairing"
 import { resolveSandboxRef } from "@/app/lib/openshellHost"
 
 // The access record contains the gateway token (the mobile app's credential),
@@ -82,7 +83,16 @@ export async function POST(
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 502 })
   }
-  return NextResponse.json({ ok: true, configured: true, access: result.access })
+  // Make node pairing auto-approve for this sandbox so a first-time app pairing
+  // needs zero operator clicks (best-effort; safe — the gateway token gates
+  // access). Restarts the gateway once if it changed the config.
+  let autoApprove: { changed: boolean } = { changed: false }
+  try {
+    autoApprove = await ensureAutoApproveNodes(sandboxName)
+  } catch {
+    // Non-fatal: operator can still approve manually under "Node approval".
+  }
+  return NextResponse.json({ ok: true, configured: true, access: result.access, autoApprove })
 }
 
 // DELETE = tear down the exposure (forward + UFW + Traefik rule + access record).

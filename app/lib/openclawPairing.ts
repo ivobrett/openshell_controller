@@ -174,6 +174,61 @@ function parseNodeRequests(raw: string): OpenClawPairingRequest[] {
   return out
 }
 
+// Make node pairing fully automatic for this sandbox: set
+// gateway.nodes.pairing.autoApproveCidrs=["0.0.0.0/0"] so a first-time node-role
+// device pairing auto-approves (the app connects → auto-approved, no operator
+// Approve click, no operator-device DB bootstrap). Safe here because the gateway
+// token already gates all access (single-tenant, token-gated ingress).
+//
+// gateway.nodes is NOT hot-reloadable, so if we changed the config we restart the
+// gateway with the same relaunch nemoclaw-start uses (best-effort; a failed
+// restart doesn't fail the expose — the operator can still Approve manually).
+export async function ensureAutoApproveNodes(sandboxName: string): Promise<{ changed: boolean }> {
+  let ctx: { ip: string; token: string; deviceId: string }
+  try {
+    ctx = await getGatewayContext(sandboxName)
+  } catch {
+    return { changed: false }
+  }
+  const patch = [
+    "import json,os",
+    "p='/sandbox/.openclaw/openclaw.json'",
+    "d=json.load(open(p))",
+    "pr=d.setdefault('gateway',{}).setdefault('nodes',{}).setdefault('pairing',{})",
+    "changed=(pr.get('autoApproveCidrs') or [])!=['0.0.0.0/0']",
+    "pr['autoApproveCidrs']=['0.0.0.0/0']",
+    "port=(d.get('gateway') or {}).get('port',18789)",
+    "tmp=p+'.tmp'; json.dump(d,open(tmp,'w'),indent=2); os.replace(tmp,p)",
+    "print(json.dumps({'changed':changed,'port':port}))",
+  ].join("\n")
+  const res = await runSandboxExec(sandboxName, pyExec(patch))
+  const m = cleanOpenClawOutput(res.stdout).match(/\{[\s\S]*\}/)
+  const parsed = m ? (JSON.parse(m[0]) as { changed: boolean; port: number }) : { changed: false, port: GATEWAY_PORT }
+  if (!parsed.changed) return { changed: false }
+
+  const port = parsed.port || GATEWAY_PORT
+  const restart = [
+    "env",
+    "HOME=/sandbox",
+    "OPENCLAW_HOME=/sandbox",
+    `OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR}`,
+    `OPENCLAW_CONFIG_PATH=${OPENCLAW_STATE_DIR}/openclaw.json`,
+    `OPENCLAW_GATEWAY_URL=ws://${ctx.ip}:${port}`,
+    `OPENCLAW_GATEWAY_PORT=${port}`,
+    `OPENCLAW_GATEWAY_TOKEN=${ctx.token}`,
+    "OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1",
+    "XDG_STATE_HOME=/tmp/.local/state",
+    "XDG_CONFIG_HOME=/tmp/.config",
+    "XDG_CACHE_HOME=/tmp/.cache",
+    "XDG_DATA_HOME=/tmp/.local/share",
+    "sh",
+    "-c",
+    `pkill -f 'openclaw.*gateway run' 2>/dev/null; sleep 3; setsid nohup openclaw gateway run --port ${port} >>/tmp/gateway.log 2>&1 </dev/null & sleep 6`,
+  ]
+  await runSandboxExec(sandboxName, restart)
+  return { changed: true }
+}
+
 // Generate a mobile-pairing QR setup code. Returns the base64 setupCode (opaque,
 // short-lived bootstrapToken inside — safe to render) AND the raw ascii QR block
 // the CLI draws, so the panel can show either.

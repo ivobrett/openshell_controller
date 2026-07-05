@@ -60,6 +60,13 @@ function runSandboxExec(sandboxName: string, command: string[]): Promise<ExecRes
   })
 }
 
+// `openshell sandbox exec` rejects argv entries containing newlines, so multi-line
+// python must be base64-encoded into a single flat arg.
+function pyExec(script: string): string[] {
+  const b64 = Buffer.from(script, "utf8").toString("base64")
+  return ["python3", "-c", `import base64;exec(base64.b64decode('${b64}').decode())`]
+}
+
 // Strip the noisy plugin banner + node warnings openclaw prints on every run.
 function cleanOpenClawOutput(raw: string): string {
   return raw
@@ -82,7 +89,7 @@ async function getGatewayContext(sandboxName: string): Promise<{ ip: string; tok
     "s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);\n" +
     "try:\n s.connect(('10.255.255.255',1));ip=s.getsockname()[0]\nexcept Exception:\n ip='127.0.0.1'\nfinally:\n s.close()\n" +
     "print(json.dumps({'ip':ip,'token':cfg['gateway']['auth']['token'],'deviceId':did}))"
-  const res = await runSandboxExec(sandboxName, ["python3", "-c", script])
+  const res = await runSandboxExec(sandboxName, pyExec(script))
   const clean = cleanOpenClawOutput(res.stdout)
   const match = clean.match(/\{[\s\S]*\}/)
   if (!match) throw new Error(`could not read gateway context: ${res.stderr || clean || "empty"}`)
@@ -116,7 +123,7 @@ async function ensureOperatorDevice(sandboxName: string): Promise<void> {
     "tmp=pp+'.tmp'; json.dump(d,open(tmp,'w'),indent=2); os.replace(tmp,pp)",
     "print('seeded '+did)",
   ].join("\n")
-  const res = await runSandboxExec(sandboxName, ["python3", "-c", script])
+  const res = await runSandboxExec(sandboxName, pyExec(script))
   if (res.code !== 0 && !/seeded/.test(res.stdout)) {
     throw new Error(`failed to seed operator device: ${res.stderr || res.stdout || "unknown"}`)
   }

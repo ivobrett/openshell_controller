@@ -84,7 +84,7 @@ async function getGatewayContext(sandboxName: string): Promise<{ ip: string; tok
     "print(json.dumps({'ip':ip,'token':cfg['gateway']['auth']['token'],'deviceId':did}))"
   const res = await runSandboxExec(sandboxName, ["python3", "-c", script])
   const clean = cleanOpenClawOutput(res.stdout)
-  const match = clean.match(/\{.*\}/s)
+  const match = clean.match(/\{[\s\S]*\}/)
   if (!match) throw new Error(`could not read gateway context: ${res.stderr || clean || "empty"}`)
   const parsed = JSON.parse(match[0]) as { ip: string; token: string; deviceId: string }
   if (!parsed.token || !parsed.deviceId) throw new Error("gateway token or device identity missing")

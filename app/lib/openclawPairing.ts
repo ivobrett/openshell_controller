@@ -81,19 +81,19 @@ function cleanOpenClawOutput(raw: string): string {
 // CLI needs to reach the gateway with operator authority. `sh -c` (non-login) is
 // fine here — none of these read commands need OPENCLAW_GATEWAY_* so the wrapper
 // is irrelevant; the openclaw CLI itself is always run via runOpenClaw (env+argv).
-async function getGatewayContext(sandboxName: string): Promise<{ ip: string; token: string; deviceId: string }> {
+async function getGatewayContext(sandboxName: string): Promise<{ ip: string; token: string; deviceId: string; port: number }> {
   const script =
     "import json,socket;" +
     "cfg=json.load(open('/sandbox/.openclaw/openclaw.json'));" +
     "did=json.load(open('/sandbox/.openclaw/identity/device.json'))['deviceId'];" +
     "s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);\n" +
     "try:\n s.connect(('10.255.255.255',1));ip=s.getsockname()[0]\nexcept Exception:\n ip='127.0.0.1'\nfinally:\n s.close()\n" +
-    "print(json.dumps({'ip':ip,'token':cfg['gateway']['auth']['token'],'deviceId':did}))"
+    "print(json.dumps({'ip':ip,'token':cfg['gateway']['auth']['token'],'deviceId':did,'port':cfg['gateway'].get('port',18789)}))"
   const res = await runSandboxExec(sandboxName, pyExec(script))
   const clean = cleanOpenClawOutput(res.stdout)
   const match = clean.match(/\{[\s\S]*\}/)
   if (!match) throw new Error(`could not read gateway context: ${res.stderr || clean || "empty"}`)
-  const parsed = JSON.parse(match[0]) as { ip: string; token: string; deviceId: string }
+  const parsed = JSON.parse(match[0]) as { ip: string; token: string; deviceId: string; port: number }
   if (!parsed.token || !parsed.deviceId) throw new Error("gateway token or device identity missing")
   return parsed
 }
@@ -131,14 +131,14 @@ async function ensureOperatorDevice(sandboxName: string): Promise<void> {
 
 // Run the openclaw CLI inside the sandbox with the gateway env, as DIRECT argv via
 // `env …` (roadblock A). Returns cleaned stdout.
-async function runOpenClaw(sandboxName: string, ctx: { ip: string; token: string }, args: string[]): Promise<ExecResult> {
+async function runOpenClaw(sandboxName: string, ctx: { ip: string; token: string; port: number }, args: string[]): Promise<ExecResult> {
   const envPrefix = [
     "env",
     "HOME=/sandbox",
     "OPENCLAW_HOME=/sandbox",
     `OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR}`,
     `OPENCLAW_CONFIG_PATH=${OPENCLAW_STATE_DIR}/openclaw.json`,
-    `OPENCLAW_GATEWAY_URL=ws://${ctx.ip}:${GATEWAY_PORT}`,
+    `OPENCLAW_GATEWAY_URL=ws://${ctx.ip}:${ctx.port}`,
     `OPENCLAW_GATEWAY_TOKEN=${ctx.token}`,
     "XDG_STATE_HOME=/tmp/.local/state",
     "XDG_CONFIG_HOME=/tmp/.config",

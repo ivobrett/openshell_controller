@@ -7,6 +7,7 @@ import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from 
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
 import { recordActivity } from "@/app/lib/activityLog"
 import { repairOpenClawExecApprovalsFile } from "@/app/lib/sandboxPrivilegedFiles"
+import { ensureAutoApproveNodes } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
 import {
   bucketCandidatesByAgent,
@@ -1198,6 +1199,23 @@ export async function POST(request: Request) {
         error: error instanceof Error ? error.message : "Failed to ensure OpenClaw gateway auth token.",
         note: "Failed to ensure OpenClaw gateway auth token; dashboard proxy will fail until this is fixed.",
       })) : null
+      // Enable node auto-approval at create time so the mobile app pairs with zero
+      // manual steps. NemoClaw/AgentGateway sandboxes bind the gateway to the container
+      // IP (e.g. 10.200.0.2), NOT loopback — so the loopback-trusted operator-approve
+      // path is unavailable and node-capability requests never land in the operator
+      // pending list. Without `gateway.nodes.pairing.autoApproveCidrs` set, the app pairs
+      // the device but hangs at "node approval pending". Previously this was only applied
+      // by the openclaw-remote Enable flow, so a fresh sandbox (or one paired before Enable)
+      // got stuck. ensureAutoApproveNodes patches autoApproveCidrs=["0.0.0.0/0"] (safe:
+      // the gateway token still gates all access) and restarts the gateway so the setting
+      // is live — gateway.nodes is not hot-reloadable. Run last so the gateway's final
+      // (re)start carries the setting. Best-effort: never fail creation over it.
+      const autoApproveNodes = created && isOpenClawAgent
+        ? await ensureAutoApproveNodes(sandboxName).catch((error) => ({
+            changed: false,
+            error: error instanceof Error ? error.message : "Failed to ensure OpenClaw node auto-approval.",
+          }))
+        : null
       // Pre-build the Hermes dashboard web UI dependencies on sandbox creation.
       const hermesDashboardBuild = created && agent === "hermes"
         ? await prebuildHermesDashboardWebUi(sandboxName).catch((error) => ({
@@ -1254,6 +1272,7 @@ export async function POST(request: Request) {
         execApprovalsRepair,
         deviceApproval,
         gatewayToken,
+        autoApproveNodes,
         hermesDashboardBuild,
         hermesRemote,
         stdout: result.stdout,

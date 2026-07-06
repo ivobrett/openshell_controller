@@ -1098,17 +1098,55 @@ export async function POST(request: Request) {
       // builds reuse the cached layers and finish in ~30 seconds — the cap
       // only matters for the very first sandbox on a fresh box.
       const FIRST_BUILD_TIMEOUT_MS = 20 * 60 * 1000
-      const result = agent === "hermes"
-        ? await runCreateCommandBounded(createCommand.file, createCommandArgs, env, FIRST_BUILD_TIMEOUT_MS)
-        : await runCreateCommandUntilReady(
-            createCommand.file,
-            createCommandArgs,
-            env,
-            sandboxName,
-            FIRST_BUILD_TIMEOUT_MS,
-            5000,
-            NEMOCLAW_CWD,
-          )
+      const runOnboardOnce = () =>
+        agent === "hermes"
+          ? runCreateCommandBounded(createCommand.file, createCommandArgs, env, FIRST_BUILD_TIMEOUT_MS)
+          : runCreateCommandUntilReady(
+              createCommand.file,
+              createCommandArgs,
+              env,
+              sandboxName,
+              FIRST_BUILD_TIMEOUT_MS,
+              5000,
+              NEMOCLAW_CWD,
+            )
+      let result = await runOnboardOnce()
+
+      // First-build base-image glibc-probe race (seen on arm64 / slow storage). NemoClaw builds
+      // the agent's sandbox base image on demand (no published image exists for some agent/arch
+      // combos, e.g. Hermes on arm64), then validates it by running
+      // `docker run --entrypoint /usr/bin/ldd <image> --version` under a hard 20s timeout.
+      // Immediately after building a multi-GB image the Docker daemon is still committing layers,
+      // so that probe container cannot start in time — NemoClaw reports "glibc unknown" and aborts
+      // with SandboxBaseImageResolutionError *before the sandbox is ever created*. The image is
+      // valid (correct glibc) and now built, so a single retry reuses the warm image, the probe is
+      // fast, and onboarding proceeds. Retry exactly once, and only for this specific signature —
+      // never for genuine build failures or timeouts (those still surface as errors below).
+      const isBaseImageProbeRace = (r: {
+        completed: boolean
+        exitCode: number | null
+        timedOut: boolean
+        stderr: string
+      }) =>
+        r.completed &&
+        r.exitCode !== 0 &&
+        !r.timedOut &&
+        /glibc unknown|SandboxBaseImageResolutionError|no image built from the current inputs could be validated/i.test(
+          r.stderr || "",
+        )
+      if (isBaseImageProbeRace(result)) {
+        console.log(
+          `[sandbox/create] base-image-probe-race sandbox=${sandboxName} agent=${agent} — base image built but glibc probe timed out post-build; retrying onboard once against the now-warm image`,
+        )
+        await recordCreateActivity({
+          type: "sandbox.create.retry",
+          status: "info",
+          sandboxName,
+          message: `NemoClaw's base-image glibc probe timed out right after building the ${agent} image for ${sandboxName}; retrying onboarding once against the warm image.`,
+          metadata: { blueprint, agent, gpuMode, inferenceMode: createInference.mode },
+        })
+        result = await runOnboardOnce()
+      }
 
       // If the command exited non-zero before the sandbox was detected as Ready, do one
       // final readiness poll before giving up — the sandbox may have just beaten the interval.

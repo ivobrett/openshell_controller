@@ -26,11 +26,13 @@ import {
 } from "@/app/components/ui/dropdown-menu"
 import { StatusLed } from "@/app/components/StatusLed"
 import { SandboxTypeLogo } from "./SandboxTypeLogo"
+import { CapabilityChips } from "./CapabilityChips"
 import { DeleteSandboxDialog } from "./DeleteSandboxDialog"
 import { buildOperatorTerminalRoute } from "@/app/lib/dashboardSession"
 import { launchOpenClawDashboard } from "@/app/lib/launchDashboard"
 import { visiblePendingRequests } from "@/app/lib/permissionAlerts"
 import { useAuth } from "@/app/components/providers/AuthProvider"
+import { useMcpServers } from "@/app/hooks/queries"
 import type { SandboxInventoryItem } from "@/app/hooks/inventoryModel"
 import type { PermissionFeed } from "@/app/hooks/models"
 import { cn } from "@/app/lib/utils"
@@ -58,6 +60,8 @@ export function SandboxTable({
 }: SandboxTableProps) {
   const router = useRouter()
   const { me, can } = useAuth()
+  const mcpQuery = useMcpServers()
+  const mcpServers = mcpQuery.data ?? []
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [deleteTarget, setDeleteTarget] = useState<SandboxInventoryItem | null>(null)
@@ -175,6 +179,7 @@ export function SandboxTable({
                 <TableHead className="pl-4">Name</TableHead>
                 <TableHead className="w-[120px]">Status</TableHead>
                 <TableHead className="w-[100px]">Agent</TableHead>
+                <TableHead className="w-[140px] hidden lg:table-cell">Capabilities</TableHead>
                 <TableHead className="w-[110px]">Alerts</TableHead>
                 <TableHead className="w-[96px] text-right pr-4">Actions</TableHead>
               </TableRow>
@@ -205,6 +210,9 @@ export function SandboxTable({
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {displaySandboxAgent(sandbox.agent)}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <CapabilityChips sandbox={sandbox} mcpServers={mcpServers} />
                     </TableCell>
                     <TableCell>
                       {pending.length > 0 ? (
@@ -338,8 +346,9 @@ export function SandboxTable({
                     </Badge>
                   )}
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                   <span>{displaySandboxAgent(sandbox.agent)}</span>
+                  <CapabilityChips sandbox={sandbox} mcpServers={mcpServers} />
                 </div>
                 <div
                   className="absolute right-2 top-2"

@@ -4,6 +4,11 @@ import Link from 'next/link'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import 'xterm/css/xterm.css'
+import { BookOpen } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from '@/app/lib/apiFetch'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/app/components/ui/sheet'
+import { SkillsQuickList } from '@/app/components/skills/SkillsQuickList'
 import { ensureDashboardSessionId, HYDRATION_SAFE_DASHBOARD_SESSION_ID } from '../lib/dashboardSession'
 
 interface ReadinessPodSummary {
@@ -78,6 +83,14 @@ function OperatorTerminalInner() {
   const [terminalReady, setTerminalReady] = useState(false)
   const [showRecovery, setShowRecovery] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [skillsOpen, setSkillsOpen] = useState(false)
+
+  const skillsQuery = useQuery({
+    queryKey: ['skills'],
+    queryFn: () => apiFetch<{ ok: boolean; skills: { id: string; name: string; description: string; tags: string[]; agents: string }[] }>('/api/skills'),
+    staleTime: 60_000,
+    select: (d) => d.skills ?? [],
+  })
 
   useEffect(() => {
     if (!isFullscreen) return
@@ -342,7 +355,28 @@ function OperatorTerminalInner() {
             <h1 className="text-xl font-semibold uppercase tracking-wider mt-2">Operator Terminal</h1>
             <p className="mt-2 max-w-2xl text-xs text-[var(--foreground-dim)]">{terminalDescription}</p>
           </div>
-          <Link href="/" className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">Back to Dashboard</Link>
+          <div className="flex items-center gap-2">
+            <Sheet open={skillsOpen} onOpenChange={setSkillsOpen}>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 px-4 py-2 rounded-sm border border-[var(--border-subtle)] text-[var(--foreground-dim)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] hover:text-[var(--nvidia-green)] transition-colors"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Skills
+                </button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full sm:w-[420px]">
+                <SheetHeader>
+                  <SheetTitle className="text-sm uppercase tracking-wider">Skills</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4">
+                  <SkillsQuickList skills={skillsQuery.data ?? []} />
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Link href="/" className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">Back to Dashboard</Link>
+          </div>
         </div>
 
         <section className={`panel px-4 py-3 border ${readiness.tone}`}>

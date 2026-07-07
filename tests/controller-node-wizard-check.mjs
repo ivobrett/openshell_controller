@@ -4,9 +4,10 @@ import path from 'node:path'
 
 const root = process.cwd()
 
-const [wizardSource, sidebarSource, planRouteSource, deployRouteSource, registryRouteSource, planLibSource, registryLibSource] = await Promise.all([
+const [wizardSource, appSidebarSource, nodeSwitcherSource, planRouteSource, deployRouteSource, registryRouteSource, planLibSource, registryLibSource] = await Promise.all([
   readFile(path.join(root, 'app/components/WizardPanel.tsx'), 'utf8'),
-  readFile(path.join(root, 'app/components/Sidebar.tsx'), 'utf8'),
+  readFile(path.join(root, 'app/components/shell/AppSidebar.tsx'), 'utf8'),
+  readFile(path.join(root, 'app/components/shell/NodeSwitcher.tsx'), 'utf8'),
   readFile(path.join(root, 'app/api/controller-node/plan/route.ts'), 'utf8'),
   readFile(path.join(root, 'app/api/controller-node/deploy/route.ts'), 'utf8'),
   readFile(path.join(root, 'app/api/controller-node/registry/route.ts'), 'utf8'),
@@ -44,6 +45,7 @@ assert.match(deployRouteSource, /remotePassword/, 'deploy API must accept one-ti
 assert.match(deployRouteSource, /sudo -S/, 'deploy API must support explicit sudo elevation')
 assert.match(deployRouteSource, /expectedHostKeySha256/, 'deploy API must support host-key fingerprint verification')
 assert.match(deployRouteSource, /acceptUnknownHostKey/, 'deploy API must require explicit trust-on-first-deploy')
+const sidebarSource = appSidebarSource + '\n' + nodeSwitcherSource
 assert.match(sidebarSource, /OpenShell Control/, 'sidebar must keep the OpenShell Control header')
 assert.match(sidebarSource, /\/api\/controller-node\/registry/, 'sidebar must load managed controller nodes')
 assert.match(sidebarSource, /Friendly Name/, 'sidebar must allow friendly names for controller nodes')

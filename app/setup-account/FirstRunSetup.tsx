@@ -6,8 +6,7 @@ import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { Alert, AlertDescription } from "@/app/components/ui/alert"
 
-export default function ForgotPasswordPage() {
-  const [recoveryToken, setRecoveryToken] = useState("")
+export default function FirstRunSetup() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [message, setMessage] = useState("")
@@ -25,42 +24,27 @@ export default function ForgotPasswordPage() {
 
     setBusy(true)
     try {
-      const response = await fetch("/api/auth/recover", {
+      const response = await fetch("/api/auth/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recoveryToken, password }),
+        body: JSON.stringify({ password }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Could not reset password.")
+      if (!response.ok) throw new Error(data.error || "Could not set password.")
       setIsError(false)
-      setMessage("Password reset. Redirecting...")
-      window.setTimeout(() => {
-        window.location.href = "/"
-      }, 600)
+      setMessage("Password set. Redirecting to sign in…")
+      window.setTimeout(() => { window.location.href = "/login" }, 800)
     } catch (error) {
       setIsError(true)
-      setMessage(error instanceof Error ? error.message : "Could not reset password.")
+      setMessage(error instanceof Error ? error.message : "Could not set password.")
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <AuthShell title="Forgot Password?" description="Use the local recovery token from .env.local to reset the operator password.">
+    <AuthShell title="Set Operator Password" description="Create a password for the operator account to get started.">
       <form onSubmit={submit} className="space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
-            Recovery Token
-          </label>
-          <Input
-            type="password"
-            value={recoveryToken}
-            onChange={(event) => setRecoveryToken(event.target.value)}
-            autoFocus
-            autoComplete="off"
-          />
-        </div>
-
         <div className="space-y-1.5">
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
             New Password
@@ -68,10 +52,11 @@ export default function ForgotPasswordPage() {
           <Input
             type="password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
+            autoFocus
+            autoComplete="new-password"
           />
         </div>
-
         <div className="space-y-1.5">
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
             Confirm Password
@@ -79,28 +64,18 @@ export default function ForgotPasswordPage() {
           <Input
             type="password"
             value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
           />
         </div>
-
         {message && (
           <Alert variant={isError ? "destructive" : "default"}>
             <AlertDescription className="text-xs">{message}</AlertDescription>
           </Alert>
         )}
-
         <Button type="submit" disabled={busy} className="w-full">
-          {busy ? "Resetting…" : "Reset Password"}
+          {busy ? "Setting password…" : "Set Password"}
         </Button>
-
-        <div className="text-center">
-          <a
-            href="/login"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Back to Sign In
-          </a>
-        </div>
       </form>
     </AuthShell>
   )

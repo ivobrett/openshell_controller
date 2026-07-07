@@ -1,14 +1,27 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import AuthShell from "../components/AuthShell"
+import { Button } from "@/app/components/ui/button"
+import { Input } from "@/app/components/ui/input"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
+import { Skeleton } from "@/app/components/ui/skeleton"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/app/components/ui/collapsible"
+import { ChevronRight } from "lucide-react"
 
 export default function LoginPage() {
   const [nextPath, setNextPath] = useState("/")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
+  // null = loading, string = URL, "" = not configured
   const [oauthLoginUrl, setOauthLoginUrl] = useState<string | null>(null)
+  const [operatorOpen, setOperatorOpen] = useState(false)
+  const passwordRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setNextPath(new URLSearchParams(window.location.search).get("next") || "/")
@@ -16,12 +29,23 @@ export default function LoginPage() {
     fetch("/api/auth/login")
       .then((res) => res.json())
       .then((data) => {
-        if (data.oauthLoginUrl) {
-          setOauthLoginUrl(data.oauthLoginUrl)
-        }
+        const url: string = data.oauthLoginUrl || ""
+        setOauthLoginUrl(url)
+        // If no IdP configured, expand operator form by default
+        if (!url) setOperatorOpen(true)
       })
-      .catch(() => null)
+      .catch(() => {
+        setOauthLoginUrl("")
+        setOperatorOpen(true)
+      })
   }, [])
+
+  useEffect(() => {
+    if (operatorOpen) {
+      // Autofocus password when operator section is expanded
+      setTimeout(() => passwordRef.current?.focus(), 50)
+    }
+  }, [operatorOpen])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -49,57 +73,97 @@ export default function LoginPage() {
     }
   }
 
-  return (
-    <AuthShell title="OpenShell Control" description="Operator access is required for sandbox control.">
-      <form onSubmit={submit} className="space-y-6">
-        <label className="block space-y-2">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoFocus
-            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
-          />
-        </label>
+  const idpConfigured = oauthLoginUrl !== null && oauthLoginUrl !== ""
+  const loading = oauthLoginUrl === null
 
-        {message && (
-          <div className="rounded-sm border border-[var(--status-stopped)] bg-red-950/20 p-3 text-xs text-[var(--status-stopped)]">
-            {message}
+  return (
+    <AuthShell title="OpenShell Control" description="Sandbox fleet control for OpenShell">
+      <div className="space-y-4">
+        {/* IdP sign-in — primary */}
+        {loading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : idpConfigured ? (
+          <Button asChild size="lg" className="w-full">
+            <a
+              href={`${oauthLoginUrl}${oauthLoginUrl.includes("?") ? "&" : "?"}state=${encodeURIComponent(nextPath)}`}
+            >
+              Sign in with company account
+            </a>
+          </Button>
+        ) : null}
+
+        {/* Divider — only when IdP is configured */}
+        {idpConfigured && (
+          <div className="relative flex items-center">
+            <div className="flex-grow border-t border-border" />
+            <span className="mx-3 text-[10px] uppercase tracking-wider text-muted-foreground font-mono">or</span>
+            <div className="flex-grow border-t border-border" />
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-sm border border-[var(--nvidia-green)] bg-[var(--nvidia-green)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-black disabled:opacity-50"
-        >
-          {busy ? "Signing In..." : "Sign In"}
-        </button>
-
-        {oauthLoginUrl && (
-          <>
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-[var(--border-subtle)]"></div>
-              <span className="flex-shrink mx-4 text-[10px] text-[var(--foreground-dim)] uppercase tracking-wider font-mono">Or</span>
-              <div className="flex-grow border-t border-[var(--border-subtle)]"></div>
-            </div>
-
-            <a
-              href={`${oauthLoginUrl}${oauthLoginUrl.includes("?") ? "&" : "?"}state=${encodeURIComponent(nextPath)}`}
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)] hover:border-[var(--nvidia-green)] hover:text-[var(--nvidia-green)] transition-all text-center block"
-            >
-              Sign In via Company Portal
-            </a>
-          </>
+        {/* Operator sign-in — collapsible when IdP configured, always open otherwise */}
+        {idpConfigured ? (
+          <Collapsible open={operatorOpen} onOpenChange={setOperatorOpen}>
+            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
+              <ChevronRight
+                className={`h-3.5 w-3.5 transition-transform ${operatorOpen ? "rotate-90" : ""}`}
+              />
+              Operator sign-in
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <form onSubmit={submit} className="mt-3 space-y-3">
+                <Input
+                  ref={passwordRef}
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+                {message && (
+                  <Alert variant="destructive">
+                    <AlertDescription className="text-xs">{message}</AlertDescription>
+                  </Alert>
+                )}
+                <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
+                  {busy ? "Signing in…" : "Sign in as operator"}
+                </Button>
+              </form>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          !loading && (
+            <form onSubmit={submit} className="space-y-3">
+              <Input
+                ref={passwordRef}
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                autoFocus
+              />
+              {message && (
+                <Alert variant="destructive">
+                  <AlertDescription className="text-xs">{message}</AlertDescription>
+                </Alert>
+              )}
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? "Signing in…" : "Sign in as operator"}
+              </Button>
+            </form>
+          )
         )}
 
-        <div className="flex items-center justify-between text-xs">
-          <a href="/setup-account" className="text-[var(--foreground-dim)] hover:text-[var(--nvidia-green)]">Security</a>
-          <a href="/forgot-password" className="text-[var(--foreground-dim)] hover:text-[var(--nvidia-green)]">Forgot Password?</a>
+        <div className="text-center">
+          <a
+            href="/forgot-password"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Forgot password?
+          </a>
         </div>
-      </form>
+      </div>
     </AuthShell>
   )
 }
-

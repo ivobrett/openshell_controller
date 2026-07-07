@@ -174,8 +174,8 @@ export default function Dashboard() {
     <div
       className={`min-h-screen transition-colors duration-300 ${
         theme === 'dark'
-          ? 'bg-[var(--background)] text-[var(--foreground)]'
-          : 'bg-[var(--background)] text-[var(--foreground)]'
+          ? 'bg-[var(--background-hex)] text-[var(--foreground-hex)]'
+          : 'bg-[var(--background-hex)] text-[var(--foreground-hex)]'
       }`}
     >
       <Sidebar
@@ -266,7 +266,7 @@ export default function Dashboard() {
                     </div>
                     <div className="metric p-4">
                       <p className="text-[10px] text-[var(--foreground-dim)] uppercase tracking-wider">OpenClaw</p>
-                      <p className="text-sm font-mono text-[var(--foreground)] mt-2">{nemoclaw?.available ? 'available' : 'not detected'}</p>
+                      <p className="text-sm font-mono text-[var(--foreground-hex)] mt-2">{nemoclaw?.available ? 'available' : 'not detected'}</p>
                     </div>
                   </div>
                 </div>
@@ -310,7 +310,7 @@ export default function Dashboard() {
                         setIsDestroyMode(false)
                         clearSelection()
                       }}
-                      className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]"
+                      className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]"
                     >
                       Cancel
                     </button>
@@ -355,7 +355,7 @@ export default function Dashboard() {
                       <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">
                         {sandboxes.filter((sandbox) => sandbox.status === 'running').length} online / {sandboxes.length} total
                       </p>
-                      <h1 className="mt-1 text-xl font-semibold uppercase tracking-wider text-[var(--foreground)]">
+                      <h1 className="mt-1 text-xl font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">
                         OPENSHELL CONTROL
                       </h1>
                       <p className="mt-1 text-xs text-[var(--foreground-dim)]">
@@ -383,15 +383,15 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 gap-px bg-[var(--border-subtle)] sm:grid-cols-3">
                     <div className="bg-[var(--surface-raised)] p-4">
                       <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Selected</p>
-                      <p className="mt-1 truncate font-mono text-sm text-[var(--foreground)]">{selectedSandbox?.name ?? 'none'}</p>
+                      <p className="mt-1 truncate font-mono text-sm text-[var(--foreground-hex)]">{selectedSandbox?.name ?? 'none'}</p>
                     </div>
                     <div className="bg-[var(--surface-raised)] p-4">
                       <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Ready</p>
-                      <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{sandboxes.filter((sandbox) => sandbox.ready).length} sandboxes</p>
+                      <p className="mt-1 font-mono text-sm text-[var(--foreground-hex)]">{sandboxes.filter((sandbox) => sandbox.ready).length} sandboxes</p>
                     </div>
                     <div className="bg-[var(--surface-raised)] p-4">
                       <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Gateway</p>
-                      <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{nemoclaw?.available ? 'available' : 'not detected'}</p>
+                      <p className="mt-1 font-mono text-sm text-[var(--foreground-hex)]">{nemoclaw?.available ? 'available' : 'not detected'}</p>
                     </div>
                   </div>
                 </div>
@@ -422,7 +422,7 @@ export default function Dashboard() {
                     <svg className="w-12 h-12 mx-auto mb-4 text-[var(--foreground-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
-                    <h3 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">No Sandboxes Detected</h3>
+                    <h3 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">No Sandboxes Detected</h3>
                     <p className="text-xs text-[var(--foreground-dim)] mt-2">
                       No live OpenShell sandboxes reported yet
                     </p>
@@ -456,7 +456,7 @@ export default function Dashboard() {
                 WARNING: DESTRUCTIVE ACTION
               </h2>
             </div>
-            <p className="text-sm text-[var(--foreground)] mb-6">
+            <p className="text-sm text-[var(--foreground-hex)] mb-6">
               Destroying {deletingSandbox?.name ?? 'this sandbox'} will permanently delete it and it will not be recoverable. Are you sure?
             </p>
             {lifecycleMessage && (
@@ -474,7 +474,7 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={cancelDelete}
-                className="flex-1 px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] transition-colors"
+                className="flex-1 px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] transition-colors"
               >
                 CANCEL
               </button>

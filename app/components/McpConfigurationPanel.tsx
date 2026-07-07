@@ -769,7 +769,7 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
         <div className="panel-header flex items-start justify-between gap-6 p-6 max-md:flex-col">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">Model Context Protocol</p>
-            <h1 className="mt-1 text-xl font-semibold uppercase tracking-wider text-[var(--foreground)]">MCP CONFIGURATION</h1>
+            <h1 className="mt-1 text-xl font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">MCP CONFIGURATION</h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--foreground-dim)]">
               Install MCP server definitions for local tools, files, and remote context providers.
             </p>
@@ -781,15 +781,15 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
         <div className="grid grid-cols-1 gap-px bg-[var(--border-subtle)] sm:grid-cols-3">
           <div className="bg-[var(--surface-raised)] p-4">
             <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Installed</p>
-            <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{servers.length} servers</p>
+            <p className="mt-1 font-mono text-sm text-[var(--foreground-hex)]">{servers.length} servers</p>
           </div>
           <div className="bg-[var(--surface-raised)] p-4">
             <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Enabled</p>
-            <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{enabledCount} active</p>
+            <p className="mt-1 font-mono text-sm text-[var(--foreground-hex)]">{enabledCount} active</p>
           </div>
           <div className="bg-[var(--surface-raised)] p-4">
             <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Catalog</p>
-            <p className="mt-1 font-mono text-sm text-[var(--foreground)]">{catalog.length} presets</p>
+            <p className="mt-1 font-mono text-sm text-[var(--foreground-hex)]">{catalog.length} presets</p>
           </div>
         </div>
       </div>
@@ -813,10 +813,10 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                 aria-expanded={securityOpen}
               >
                 <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">MCP Security</h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">MCP Security</h2>
                   <p className="mt-1 text-xs text-[var(--foreground-dim)]">Control which installed MCP servers are available to sandboxes.</p>
                 </div>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] text-sm text-[var(--foreground)]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] text-sm text-[var(--foreground-hex)]">
                   {securityOpen ? "-" : "+"}
                 </span>
               </button>
@@ -838,14 +838,14 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                         >
                           <span className="min-w-0">
                             <span className="flex items-center gap-2">
-                              <span className="truncate text-sm font-mono font-semibold text-[var(--foreground)]">{server.name}</span>
+                              <span className="truncate text-sm font-mono font-semibold text-[var(--foreground-hex)]">{server.name}</span>
                               <span className={`status-chip px-2 py-1 ${server.enabled ? "bg-[var(--status-running-bg)] text-[var(--status-running)]" : "bg-[var(--status-pending-bg)] text-[var(--status-pending)]"}`}>
                                 {server.enabled ? "enabled" : "disabled"}
                               </span>
                             </span>
                             <span className="mt-2 block break-all font-mono text-[11px] text-[var(--foreground-dim)]">{server.command} {server.args.join(" ")}</span>
                           </span>
-                          <span className="text-sm text-[var(--foreground)]">{expanded ? "-" : "+"}</span>
+                          <span className="text-sm text-[var(--foreground-hex)]">{expanded ? "-" : "+"}</span>
                         </button>
 
                         {expanded && (
@@ -866,13 +866,13 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                               <div className={server.accessMode === "allow_only" ? "space-y-2" : "opacity-50"}>
                                 <FieldLabel>Allowed Sandboxes</FieldLabel>
                                 {sandboxes.length === 0 ? (
-                                  <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-xs text-[var(--foreground-dim)]">No sandboxes detected.</div>
+                                  <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-xs text-[var(--foreground-dim)]">No sandboxes detected.</div>
                                 ) : (
                                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                                     {sandboxes.map((sandbox) => (
-                                      <label key={sandbox.id} className="flex items-center justify-between gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-xs">
+                                      <label key={sandbox.id} className="flex items-center justify-between gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-xs">
                                         <span className="min-w-0">
-                                          <span className="block truncate font-mono text-[var(--foreground)]">{sandbox.name}</span>
+                                          <span className="block truncate font-mono text-[var(--foreground-hex)]">{sandbox.name}</span>
                                           <span className="mt-1 block truncate text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{sandbox.status}</span>
                                         </span>
                                         <input type="checkbox" checked={sandboxAllowed(server, sandbox)} disabled={saving || server.accessMode !== "allow_only"} onChange={(event) => toggleServerSandbox(server, sandbox, event.target.checked)} className="h-4 w-4 accent-[var(--nvidia-green)]" />
@@ -899,10 +899,10 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                 aria-expanded={repoOpen}
               >
                 <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">MCP Repo Search and Preconfigured Servers</h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">MCP Repo Search and Preconfigured Servers</h2>
                   <p className="mt-1 text-xs text-[var(--foreground-dim)]">Choose a registry, search installable MCP servers, or install a preset.</p>
                 </div>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] text-sm text-[var(--foreground)]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] text-sm text-[var(--foreground-hex)]">
                   {repoOpen ? "-" : "+"}
                 </span>
               </button>
@@ -928,9 +928,9 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                               key={registry.id}
                               type="button"
                               onClick={() => { setSelectedRegistryId(registry.id); setRegistryResults([]) }}
-                              className={`rounded-sm border p-3 text-left ${selected ? "border-[var(--nvidia-green)] bg-[var(--status-running-bg)]" : "border-[var(--border-subtle)] bg-[var(--background)]"}`}
+                              className={`rounded-sm border p-3 text-left ${selected ? "border-[var(--nvidia-green)] bg-[var(--status-running-bg)]" : "border-[var(--border-subtle)] bg-[var(--background-hex)]"}`}
                             >
-                              <span className="block truncate text-xs font-mono font-semibold text-[var(--foreground)]">{registry.name}</span>
+                              <span className="block truncate text-xs font-mono font-semibold text-[var(--foreground-hex)]">{registry.name}</span>
                               <span className="mt-1 block truncate text-[11px] text-[var(--foreground-dim)]">{registry.baseUrl}</span>
                             </button>
                           )
@@ -995,13 +995,13 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                             <div key={`${entry.id}-${entry.command}-${entry.args.join("|")}-${index}`} className="metric flex min-h-44 flex-col p-4">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <h3 className="truncate text-sm font-semibold text-[var(--foreground)]">{entry.name}</h3>
+                                  <h3 className="truncate text-sm font-semibold text-[var(--foreground-hex)]">{entry.name}</h3>
                                   <p className="mt-2 text-xs leading-5 text-[var(--foreground-dim)]">{entry.summary}</p>
                                 </div>
                                 <span className="status-chip bg-[var(--status-pending-bg)] px-2 py-1 text-[var(--status-pending)]">{entry.transport}</span>
                               </div>
-                              <div className="mt-3 min-w-0 rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-2 font-mono text-[11px] text-[var(--foreground-dim)]">
-                                <span className="text-[var(--foreground)]">{entry.command}</span> {entry.args.join(" ")}
+                              <div className="mt-3 min-w-0 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-2 font-mono text-[11px] text-[var(--foreground-dim)]">
+                                <span className="text-[var(--foreground-hex)]">{entry.command}</span> {entry.args.join(" ")}
                               </div>
                               <div className="mt-auto flex items-center justify-between gap-3 pt-4">
                                 <p className="truncate text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{entry.tags.join(" / ")}</p>
@@ -1018,10 +1018,10 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
 
                   <button type="button" onClick={() => setCatalogOpen((open) => !open)} className="flex w-full items-center justify-between gap-4 border-t border-[var(--border-subtle)] pt-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nvidia-green)]" aria-expanded={catalogOpen}>
                     <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Preconfigured Servers</h3>
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Preconfigured Servers</h3>
                       <p className="mt-1 text-xs text-[var(--foreground-dim)]">Presets install as MCP command definitions; clients start them when needed.</p>
                     </div>
-                    <span className="text-sm text-[var(--foreground)]">{catalogOpen ? "-" : "+"}</span>
+                    <span className="text-sm text-[var(--foreground-hex)]">{catalogOpen ? "-" : "+"}</span>
                   </button>
                   {catalogOpen && (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1031,14 +1031,14 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                           <div key={entry.id} className="metric flex min-h-44 flex-col p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div>
-                                <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">{entry.name}</h3>
+                                <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">{entry.name}</h3>
                                 <p className="mt-2 text-xs leading-5 text-[var(--foreground-dim)]">{entry.summary}</p>
                                 {entry.websiteUrl && <a href={entry.websiteUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[11px] font-mono uppercase tracking-wider text-[var(--nvidia-green)] hover:underline">Setup Guide</a>}
                               </div>
                               <span className="status-chip bg-[var(--status-pending-bg)] px-2 py-1 text-[var(--status-pending)]">{entry.transport}</span>
                             </div>
-                            <div className="mt-3 min-w-0 rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-2 font-mono text-[11px] text-[var(--foreground-dim)]">
-                              <span className="text-[var(--foreground)]">{entry.command}</span> {entry.args.join(" ")}
+                            <div className="mt-3 min-w-0 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-2 font-mono text-[11px] text-[var(--foreground-dim)]">
+                              <span className="text-[var(--foreground-hex)]">{entry.command}</span> {entry.args.join(" ")}
                             </div>
                             <div className="mt-auto flex items-center justify-between gap-3 pt-4">
                               <p className="truncate text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{entry.tags.join(" / ")}</p>
@@ -1063,10 +1063,10 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                 aria-expanded={customOpen}
               >
                 <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Server Install Wizard</h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Server Install Wizard</h2>
                   <p className="mt-1 text-xs text-[var(--foreground-dim)]">Install a command, HTTP endpoint, or uploaded MCP bundle with assisted preflight repair.</p>
                 </div>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] text-sm text-[var(--foreground)]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] text-sm text-[var(--foreground-hex)]">
                   {customOpen ? "-" : "+"}
                 </span>
               </button>
@@ -1078,7 +1078,7 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                         key={step}
                         type="button"
                         onClick={() => setWizardStep(step)}
-                        className={`rounded-sm border px-3 py-2 text-xs font-mono uppercase tracking-wider ${wizardStep === step ? "border-[var(--nvidia-green)] bg-[var(--status-running-bg)] text-[var(--foreground)]" : "border-[var(--border-subtle)] bg-[var(--background)] text-[var(--foreground-dim)]"}`}
+                        className={`rounded-sm border px-3 py-2 text-xs font-mono uppercase tracking-wider ${wizardStep === step ? "border-[var(--nvidia-green)] bg-[var(--status-running-bg)] text-[var(--foreground-hex)]" : "border-[var(--border-subtle)] bg-[var(--background-hex)] text-[var(--foreground-dim)]"}`}
                       >
                         {WIZARD_STEP_LABELS[step]}
                       </button>
@@ -1125,7 +1125,7 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2"><FieldLabel>LLM Repair</FieldLabel><FieldHint>When preflight fails, ask the configured primary inference model for a bounded repair and run preflight again.</FieldHint></div>
-                          <label className="flex min-h-10 items-center justify-between gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)]">
+                          <label className="flex min-h-10 items-center justify-between gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs text-[var(--foreground-hex)]">
                             <span>Attempt repairs on failures</span>
                             <input type="checkbox" checked={uploadRepair} onChange={(event) => setUploadRepair(event.target.checked)} className="h-4 w-4 accent-[var(--nvidia-green)]" />
                           </label>
@@ -1149,8 +1149,8 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                         </div>
                       )}
                       {wizardDependencyInstall && (
-                        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
-                          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Dependency Bootstrap</h3>
+                        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Dependency Bootstrap</h3>
                           <p className="mt-2 text-xs text-[var(--foreground-dim)]">{wizardDependencyInstall.kind || "generic"} bootstrap{wizardDependencyInstall.logs?.length ? `, ${wizardDependencyInstall.logs.length} log item${wizardDependencyInstall.logs.length === 1 ? "" : "s"}` : ""}.</p>
                         </div>
                       )}
@@ -1165,8 +1165,8 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
 
                   {wizardStep === "review" && (
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Staged Upload</h3>
+                      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Staged Upload</h3>
                         <pre className="mt-3 overflow-auto text-[11px] leading-5 text-[var(--foreground-dim)]">{JSON.stringify({
                           selectedBundle: uploadArchive?.name || (uploadFiles.length > 0 ? `${uploadFiles.length} files` : stagedUpload?.selectedBundle || "staged"),
                           stagedUpload,
@@ -1180,8 +1180,8 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                           repair: wizardRepair,
                         }, null, 2)}</pre>
                       </div>
-                      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Broker Launch Definition</h3>
+                      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Broker Launch Definition</h3>
                         <pre className="mt-3 overflow-auto text-[11px] leading-5 text-[var(--foreground-dim)]">{JSON.stringify(wizardCandidate || {
                           status: "Run preflight checks to generate the launch definition.",
                         }, null, 2)}</pre>
@@ -1191,8 +1191,8 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
 
                   {wizardStep === "install" && (
                     <div className="space-y-4">
-                      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Ready To Install</h3>
+                      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Ready To Install</h3>
                         <p className="mt-2 text-xs leading-5 text-[var(--foreground-dim)]">
                           {wizardCandidate
                             ? `${wizardCandidate.name} will be installed ${wizardPreflight?.ok ? "enabled" : "disabled until preflight passes"}.`
@@ -1222,7 +1222,7 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
 
           <aside className="space-y-6">
             <div className="panel p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Installed Servers</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Installed Servers</h2>
               <div className="mt-4 space-y-3">
                 {servers.length === 0 ? (
                   <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-xs text-[var(--foreground-dim)]">
@@ -1232,7 +1232,7 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
                   <div key={server.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="truncate text-sm font-mono font-semibold text-[var(--foreground)]">{server.name}</h3>
+                        <h3 className="truncate text-sm font-mono font-semibold text-[var(--foreground-hex)]">{server.name}</h3>
                         <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">{server.source} / {server.transport}</p>
                       </div>
                       <span className={`status-chip px-2 py-1 ${server.enabled ? "bg-[var(--status-running-bg)] text-[var(--status-running)]" : "bg-[var(--status-pending-bg)] text-[var(--status-pending)]"}`}>
@@ -1290,9 +1290,9 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
             </div>
 
             <div className="panel p-6">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Client JSON</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Client JSON</h2>
               <p className="mt-1 text-xs text-[var(--foreground-dim)]">Enabled servers exported in common MCP client format.</p>
-              <pre className="mt-4 max-h-96 overflow-auto rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 text-[11px] leading-5 text-[var(--foreground-dim)]">
+              <pre className="mt-4 max-h-96 overflow-auto rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 text-[11px] leading-5 text-[var(--foreground-dim)]">
                 {configText}
               </pre>
             </div>

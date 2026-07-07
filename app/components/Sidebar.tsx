@@ -129,7 +129,7 @@ export default function Sidebar({
       ? danger
         ? 'bg-[var(--status-stopped)] text-white shadow-[0_10px_28px_rgba(220,38,38,0.18)]'
         : 'bg-[var(--nvidia-green)] text-black shadow-[0_10px_28px_rgba(118,185,0,0.18)]'
-      : 'text-[var(--foreground-dim)] hover:bg-[var(--background-tertiary)] hover:text-[var(--foreground)]'
+      : 'text-[var(--foreground-dim)] hover:bg-[var(--background-tertiary)] hover:text-[var(--foreground-hex)]'
   }`
 
   return (
@@ -148,7 +148,7 @@ export default function Sidebar({
             </svg>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[var(--foreground)] tracking-tight">OpenShell Control</p>
+            <p className="text-sm font-semibold text-[var(--foreground-hex)] tracking-tight">OpenShell Control</p>
             <p className="text-[10px] text-[var(--foreground-dim)] font-mono mt-1">
               {selectedNode ? `${selectedNode.name} / ${selectedNode.host}` : `${sandboxesRunning} running / ${sandboxesTotal} total`}
             </p>
@@ -178,7 +178,7 @@ export default function Sidebar({
               <select
                 value={selectedNode?.id || ""}
                 onChange={(event) => setSelectedNodeId(event.target.value)}
-                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-2 text-xs font-mono text-[var(--foreground)] focus:border-[var(--nvidia-green)] focus:outline-none"
+                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:border-[var(--nvidia-green)] focus:outline-none"
               >
                 {controllerNodes.map((node) => (
                   <option key={node.id} value={node.id}>
@@ -189,13 +189,13 @@ export default function Sidebar({
             </label>
             {selectedNode && (
               <div className="space-y-2 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
-                <p className="truncate text-[11px] font-mono text-[var(--foreground)]">{selectedNode.url}</p>
+                <p className="truncate text-[11px] font-mono text-[var(--foreground-hex)]">{selectedNode.url}</p>
                 <label className="block space-y-2">
                   <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Friendly Name</span>
                   <input
                     value={friendlyNameDraft}
                     onChange={(event) => setFriendlyNameDraft(event.target.value)}
-                    className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-2 py-2 text-xs font-mono text-[var(--foreground)] focus:border-[var(--nvidia-green)] focus:outline-none"
+                    className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-2 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:border-[var(--nvidia-green)] focus:outline-none"
                   />
                 </label>
                 <div className="flex items-center justify-between gap-2">
@@ -253,7 +253,7 @@ export default function Sidebar({
           onClick={onTerminalClick}
           disabled={terminalDisabled}
           title={terminalDisabled ? 'Select a sandbox to open the operator terminal' : 'Open operator terminal'}
-          className="mt-1 flex w-full items-center gap-3 rounded px-3 py-2.5 text-[var(--foreground-dim)] transition-all hover:bg-[var(--background-tertiary)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nvidia-green)] disabled:cursor-not-allowed disabled:opacity-40 max-lg:mt-0 max-lg:min-w-24 max-lg:flex-col max-lg:justify-center max-lg:gap-1 max-lg:px-2 max-lg:py-2"
+          className="mt-1 flex w-full items-center gap-3 rounded px-3 py-2.5 text-[var(--foreground-dim)] transition-all hover:bg-[var(--background-tertiary)] hover:text-[var(--foreground-hex)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nvidia-green)] disabled:cursor-not-allowed disabled:opacity-40 max-lg:mt-0 max-lg:min-w-24 max-lg:flex-col max-lg:justify-center max-lg:gap-1 max-lg:px-2 max-lg:py-2"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={2} d="M4 17l6-6-6-6m8 14h8" />
@@ -319,7 +319,7 @@ export default function Sidebar({
 
         <a
           href="/setup-account"
-          className="mt-1 flex w-full items-center gap-3 rounded px-3 py-2.5 text-[var(--foreground-dim)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nvidia-green)] max-lg:mt-0 max-lg:min-w-24 max-lg:flex-col max-lg:justify-center max-lg:gap-1 max-lg:px-2 max-lg:py-2"
+          className="mt-1 flex w-full items-center gap-3 rounded px-3 py-2.5 text-[var(--foreground-dim)] transition-colors hover:bg-[var(--background-tertiary)] hover:text-[var(--foreground-hex)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nvidia-green)] max-lg:mt-0 max-lg:min-w-24 max-lg:flex-col max-lg:justify-center max-lg:gap-1 max-lg:px-2 max-lg:py-2"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={2} d="M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0" />
@@ -331,7 +331,7 @@ export default function Sidebar({
       <div className="p-2 border-t border-[var(--border-subtle)] max-lg:hidden">
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-colors hover:bg-[var(--background-tertiary)] text-[var(--foreground-dim)] hover:text-[var(--foreground)]"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-colors hover:bg-[var(--background-tertiary)] text-[var(--foreground-dim)] hover:text-[var(--foreground-hex)]"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={2} d="M15 12H3m0 0l4-4m-4 4l4 4m5-10h6v12h-6" />

@@ -81,7 +81,7 @@ function PasswordSection({ firstRun }: { firstRun: boolean }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <h2 className="text-xs uppercase tracking-wider text-[var(--foreground)]">{firstRun ? "Set Password" : "Change Password"}</h2>
+      <h2 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">{firstRun ? "Set Password" : "Change Password"}</h2>
       {!firstRun && (
         <label className="block space-y-2">
           <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Current Password</span>
@@ -89,7 +89,7 @@ function PasswordSection({ firstRun }: { firstRun: boolean }) {
             type="password"
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
-            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
           />
         </label>
       )}
@@ -100,7 +100,7 @@ function PasswordSection({ firstRun }: { firstRun: boolean }) {
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+          className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
         />
       </label>
 
@@ -110,7 +110,7 @@ function PasswordSection({ firstRun }: { firstRun: boolean }) {
           type="password"
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
-          className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+          className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
         />
       </label>
 
@@ -230,7 +230,7 @@ function SandboxAccessSection() {
   if (!authorized) {
     return (
       <section className="space-y-3">
-        <h2 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Sandbox Access</h2>
+        <h2 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Sandbox Access</h2>
         <p className="text-xs text-[var(--foreground-dim)]">
           Sign in as an operator to manage per-sandbox access for company users.
         </p>
@@ -240,7 +240,7 @@ function SandboxAccessSection() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Sandbox Access</h2>
+      <h2 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Sandbox Access</h2>
       <p className="text-xs text-[var(--foreground-dim)]">
         Authorize company (OAuth/IDP) users for specific sandboxes. Changes take effect immediately.
       </p>
@@ -258,7 +258,7 @@ function SandboxAccessSection() {
                 key={`${entry.sandboxName}:${entry.email}:${index}`}
                 className="flex items-center justify-between gap-2 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-2 py-1.5 text-xs font-mono"
               >
-                <span className="truncate text-[var(--foreground)]">{entry.sandboxName}</span>
+                <span className="truncate text-[var(--foreground-hex)]">{entry.sandboxName}</span>
                 <span className="flex-1 truncate text-[var(--foreground-dim)]">{entry.email}</span>
                 <button
                   type="button"
@@ -278,7 +278,7 @@ function SandboxAccessSection() {
               <select
                 value={pickedSandbox}
                 onChange={(event) => setPickedSandbox(event.target.value)}
-                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-2 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-2 py-1.5 text-xs text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
               >
                 {sandboxOptions.map((name) => (
                   <option key={name} value={name}>{name}</option>
@@ -290,7 +290,7 @@ function SandboxAccessSection() {
                 value={pickedSandbox}
                 onChange={(event) => setPickedSandbox(event.target.value)}
                 placeholder="sandbox name"
-                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-2 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-2 py-1.5 text-xs text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
               />
             )}
             <input
@@ -298,12 +298,12 @@ function SandboxAccessSection() {
               value={newEmail}
               onChange={(event) => setNewEmail(event.target.value)}
               placeholder="user@example.com"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-2 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-2 py-1.5 text-xs text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
             />
             <button
               type="button"
               onClick={addEntry}
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--foreground)] hover:border-[var(--nvidia-green)] hover:text-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--foreground-hex)] hover:border-[var(--nvidia-green)] hover:text-[var(--nvidia-green)]"
             >
               + Add
             </button>

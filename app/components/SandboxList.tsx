@@ -181,7 +181,7 @@ function PermissionMenu({
                   key={request.chunkId}
                   className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-3 py-2"
                 >
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--foreground)]" title={label}>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--foreground-hex)]" title={label}>
                     {label}
                   </span>
                   <button
@@ -200,7 +200,7 @@ function PermissionMenu({
                       setOpen(false)
                       onReject(request.chunkId)
                     }}
-                    className="rounded-sm border border-[var(--border-medium)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] hover:border-[var(--foreground-dim)] hover:text-[var(--foreground)]"
+                    className="rounded-sm border border-[var(--border-medium)] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] hover:border-[var(--foreground-dim)] hover:text-[var(--foreground-hex)]"
                   >
                     Deny
                   </button>
@@ -213,7 +213,7 @@ function PermissionMenu({
                 setOpen(false)
                 onDismiss()
               }}
-              className="w-full px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] hover:text-[var(--foreground)]"
+              className="w-full px-3 py-2 text-left font-mono text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] hover:text-[var(--foreground-hex)]"
             >
               Do nothing — hide alerts
             </button>
@@ -318,7 +318,7 @@ function DrawerSection({
         className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--nvidia-green)] max-sm:p-4"
       >
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">{title}</h4>
+          <h4 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">{title}</h4>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">{summary}</p>
         </div>
         <svg
@@ -644,7 +644,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
           <svg className="w-12 h-12 mx-auto mb-4 text-[var(--foreground-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
-          <h3 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">No Sandboxes Detected</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">No Sandboxes Detected</h3>
           <p className="text-xs text-[var(--foreground-dim)] mt-2">
             No live OpenShell sandboxes reported yet
           </p>
@@ -656,7 +656,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
               <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">
                 Inventory
               </p>
-              <h3 className="mt-1 text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">
+              <h3 className="mt-1 text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">
                 {isDestroyMode ? 'SELECT SANDBOX TO DESTROY' : 'ACTIVE SANDBOXES'}
               </h3>
             </div>
@@ -703,7 +703,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                         )
                       })()}
                       <span title={sandbox.name} className={`truncate font-mono text-sm font-semibold ${
-                        isDestroyMode ? 'text-[var(--status-stopped)]' : 'text-[var(--foreground)]'
+                        isDestroyMode ? 'text-[var(--status-stopped)]' : 'text-[var(--foreground-hex)]'
                       }`}>
                         {sandbox.name}
                       </span>
@@ -754,7 +754,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                     ] as Array<[string, string]>).map(([label, value]) => (
                       <div key={label} className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3">
                         <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{label}</span>
-                        <span className="text-xs font-mono truncate text-[var(--foreground)]" title={value}>{value}</span>
+                        <span className="text-xs font-mono truncate text-[var(--foreground-hex)]" title={value}>{value}</span>
                       </div>
                     ))}
                   </div>
@@ -908,7 +908,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                     </div>
                     <div className="metric p-4">
                       <p className="text-[10px] text-[var(--foreground-dim)] uppercase tracking-wider">UPDATED</p>
-                      <p className="text-sm font-mono text-[var(--foreground)] mt-1">{new Date(telemetry.timestamp).toLocaleTimeString()}</p>
+                      <p className="text-sm font-mono text-[var(--foreground-hex)] mt-1">{new Date(telemetry.timestamp).toLocaleTimeString()}</p>
                     </div>
                   </div>
                 </div>
@@ -981,9 +981,9 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-4 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 max-sm:flex-col max-sm:items-start">
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Sandbox Manifest</h4>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Sandbox Manifest</h4>
                       <p className="mt-1 text-xs text-[var(--foreground-dim)]">
-                        Writes <span className="font-mono text-[var(--foreground)]">/sandbox/openshell_control_mcp.md</span> with broker URL and sandbox token only.
+                        Writes <span className="font-mono text-[var(--foreground-hex)]">/sandbox/openshell_control_mcp.md</span> with broker URL and sandbox token only.
                       </p>
                     </div>
                     <button
@@ -1013,7 +1013,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                           <div key={server.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <h4 className="truncate text-sm font-mono font-semibold text-[var(--foreground)]">{server.name}</h4>
+                                <h4 className="truncate text-sm font-mono font-semibold text-[var(--foreground-hex)]">{server.name}</h4>
                                 <p className="mt-1 break-all font-mono text-[11px] text-[var(--foreground-dim)]">{server.command} {server.args.join(' ')}</p>
                               </div>
                               <span className={`status-chip px-2 py-1 ${hasAccess ? 'bg-[var(--status-running-bg)] text-[var(--status-running)]' : 'bg-[var(--status-pending-bg)] text-[var(--status-pending)]'}`}>
@@ -1077,7 +1077,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                         <div className="flex items-start justify-between gap-4 max-md:flex-col">
                           <div className="min-w-0 space-y-2">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-mono font-semibold text-[var(--foreground)]">
+                              <span className="text-xs font-mono font-semibold text-[var(--foreground-hex)]">
                                 {request.endpoints.join(', ') || request.rule}
                               </span>
                               {request.confidence ? (
@@ -1104,7 +1104,7 @@ const [restartInProgress, setRestartInProgress] = useState(false)
                               type="button"
                               disabled={grantingSandboxId === selectedSandbox.id}
                               onClick={() => resolvePermissionRequest(selectedSandbox, 'reject', request.chunkId)}
-                              className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono uppercase tracking-wider text-[var(--foreground)] disabled:opacity-50"
+                              className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)] disabled:opacity-50"
                             >
                               Reject
                             </button>

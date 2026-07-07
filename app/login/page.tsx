@@ -59,7 +59,7 @@ export default function LoginPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoFocus
-            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
           />
         </label>
 
@@ -87,7 +87,7 @@ export default function LoginPage() {
 
             <a
               href={`${oauthLoginUrl}${oauthLoginUrl.includes("?") ? "&" : "?"}state=${encodeURIComponent(nextPath)}`}
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-[var(--foreground)] hover:border-[var(--nvidia-green)] hover:text-[var(--nvidia-green)] transition-all text-center block"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)] hover:border-[var(--nvidia-green)] hover:text-[var(--nvidia-green)] transition-all text-center block"
             >
               Sign In via Company Portal
             </a>

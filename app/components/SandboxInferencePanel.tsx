@@ -337,7 +337,7 @@ export default function SandboxInferencePanel({
       {showHeader && (
         <div className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
           <div>
-            <h4 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">
+            <h4 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">
               {sandbox.name} - INFERENCE ROUTES
             </h4>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">
@@ -347,7 +347,7 @@ export default function SandboxInferencePanel({
           <button
             onClick={load}
             disabled={loading || saving}
-            className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50"
+            className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50"
           >
             Refresh
           </button>
@@ -363,7 +363,7 @@ export default function SandboxInferencePanel({
               <button
                 onClick={load}
                 disabled={loading || saving}
-                className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50"
+                className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50"
               >
                 Refresh
               </button>
@@ -371,7 +371,7 @@ export default function SandboxInferencePanel({
           )}
           <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
             <div className="flex items-center justify-between gap-4">
-              <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Verified Working Routes</h5>
+              <h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Verified Working Routes</h5>
               <span className="text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">{verifiedRoutes.length} Available</span>
             </div>
             {verifiedRoutes.length === 0 ? (
@@ -383,13 +383,13 @@ export default function SandboxInferencePanel({
                     key={`${route.source}-${route.id}`}
                     type="button"
                     onClick={() => addRoute(route.provider, route.model, route.label)}
-                    className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-left hover:border-[var(--nvidia-green)]"
+                    className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-left hover:border-[var(--nvidia-green)]"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{route.scope}</span>
                       <span className="text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">Add</span>
                     </div>
-                    <div className="mt-2 text-xs font-mono text-[var(--foreground)]">{route.provider}</div>
+                    <div className="mt-2 text-xs font-mono text-[var(--foreground-hex)]">{route.provider}</div>
                     <div className="mt-1 break-all text-[11px] font-mono text-[var(--foreground-dim)]">{route.model}</div>
                     {route.label && <div className="mt-2 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{route.label}</div>}
                   </button>
@@ -401,20 +401,20 @@ export default function SandboxInferencePanel({
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)_minmax(160px,220px)_auto] gap-3 items-end">
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Endpoint</label>
-              <select value={draftProvider} onChange={(event) => setDraftProvider(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+              <select value={draftProvider} onChange={(event) => setDraftProvider(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
                 <option value="">Select provider</option>
                 {providers.map((item) => item.name ? <option key={item.name} value={item.name}>{item.name}</option> : null)}
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Model</label>
-              <input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="model id" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+              <input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="model id" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Label</label>
-              <input value={draftLabel} onChange={(event) => setDraftLabel(event.target.value)} placeholder="optional" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+              <input value={draftLabel} onChange={(event) => setDraftLabel(event.target.value)} placeholder="optional" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
             </div>
-            <button onClick={() => addRoute()} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)]">
+            <button onClick={() => addRoute()} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)]">
               Add Route
             </button>
           </div>
@@ -422,8 +422,8 @@ export default function SandboxInferencePanel({
           {draftProviderIsOllama && (
             <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
               <div className="flex items-center justify-between gap-4">
-                <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Ollama Models</h5>
-                <button type="button" onClick={loadOllamaModels} disabled={ollamaLoading} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] disabled:opacity-50">
+                <h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Ollama Models</h5>
+                <button type="button" onClick={loadOllamaModels} disabled={ollamaLoading} className="px-3 py-2 rounded-sm bg-[var(--background-hex)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] disabled:opacity-50">
                   {ollamaLoading ? "Polling..." : "Poll"}
                 </button>
               </div>
@@ -432,8 +432,8 @@ export default function SandboxInferencePanel({
               ) : (
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {ollamaModels.map((item) => (
-                    <button key={ollamaModelKey(item)} type="button" onClick={() => addRoute(draftProvider, item.name, "Ollama")} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-left hover:border-[var(--nvidia-green)]">
-                      <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-[var(--foreground)]"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
+                    <button key={ollamaModelKey(item)} type="button" onClick={() => addRoute(draftProvider, item.name, "Ollama")} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-left hover:border-[var(--nvidia-green)]">
+                      <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-[var(--foreground-hex)]"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
                       <div className="mt-1 text-[11px] text-[var(--foreground-dim)]">
                         {[item.parameterSize, item.quantization, item.sizeLabel].filter(Boolean).join(" · ") || "local model"}
                       </div>
@@ -445,7 +445,7 @@ export default function SandboxInferencePanel({
           )}
 
           <div className="space-y-2">
-            <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Enabled Routes</h5>
+            <h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Enabled Routes</h5>
             {routes.length === 0 ? (
               <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-xs text-[var(--foreground-dim)]">No routes enabled for this sandbox.</div>
             ) : (
@@ -456,15 +456,15 @@ export default function SandboxInferencePanel({
                       <input type="radio" checked={primaryRouteId === route.id} onChange={() => setPrimaryRouteId(route.id)} />
                       Default
                     </label>
-                    <span className="text-xs font-mono text-[var(--foreground)]">{route.provider}</span>
-                    <input value={route.model} onChange={(event) => updateRoute(route.id, { model: event.target.value })} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
-                    <input value={route.label} onChange={(event) => updateRoute(route.id, { label: event.target.value })} placeholder="label" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                    <span className="text-xs font-mono text-[var(--foreground-hex)]">{route.provider}</span>
+                    <input value={route.model} onChange={(event) => updateRoute(route.id, { model: event.target.value })} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                    <input value={route.label} onChange={(event) => updateRoute(route.id, { label: event.target.value })} placeholder="label" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                     <div className="flex items-center justify-end gap-3">
                       <label className="flex items-center gap-2 text-xs text-[var(--foreground-dim)]">
                         <input type="checkbox" checked={route.enabled} onChange={(event) => updateRoute(route.id, { enabled: event.target.checked })} />
                         Enabled
                       </label>
-                      <button onClick={() => removeRoute(route.id)} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--status-stopped)] border border-[var(--border-subtle)]">
+                      <button onClick={() => removeRoute(route.id)} className="px-3 py-2 rounded-sm bg-[var(--background-hex)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:border-[var(--status-stopped)] border border-[var(--border-subtle)]">
                         Remove
                       </button>
                     </div>
@@ -478,7 +478,7 @@ export default function SandboxInferencePanel({
             <button onClick={save} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
               {saving ? "Saving..." : "Save Sandbox Routes"}
             </button>
-            <button onClick={applyToContainer} disabled={saving || applying} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50">
+            <button onClick={applyToContainer} disabled={saving || applying} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50">
               {applying ? "Applying..." : "Apply to Running Container"}
             </button>
             {updatedAt && <span className="text-[11px] text-[var(--foreground-dim)]">Updated {new Date(updatedAt).toLocaleString()}</span>}

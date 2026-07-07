@@ -124,14 +124,14 @@ export default function HermesRemotePanel({ sandboxName }: { sandboxName: string
       <div className="space-y-2 font-mono text-xs">
         <div className="flex items-center gap-2">
           <span className="w-24 shrink-0 text-[var(--foreground-dim)] uppercase tracking-wider">Remote URL</span>
-          <span className="truncate text-[var(--foreground)]">{access.url}</span>
+          <span className="truncate text-[var(--foreground-hex)]">{access.url}</span>
           <button onClick={() => copy('url', access.url)} className="action-button px-2 py-1 shrink-0">
             {copied === 'url' ? 'Copied!' : 'Copy'}
           </button>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-24 shrink-0 text-[var(--foreground-dim)] uppercase tracking-wider">Token</span>
-          <span className="truncate text-[var(--foreground)]">{tokenRevealed ? access.token : maskedToken}</span>
+          <span className="truncate text-[var(--foreground-hex)]">{tokenRevealed ? access.token : maskedToken}</span>
           <button onClick={() => setTokenRevealed((v) => !v)} className="action-button px-2 py-1 shrink-0">
             {tokenRevealed ? 'Hide' : 'Reveal'}
           </button>
@@ -153,7 +153,7 @@ export default function HermesRemotePanel({ sandboxName }: { sandboxName: string
       </div>
 
       <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs text-[var(--foreground-dim)]">
-        <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">Hermes Desktop setup</p>
+        <p className="font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Hermes Desktop setup</p>
         <ol className="mt-2 list-decimal space-y-1 pl-4">
           <li>Settings → Gateway → choose <span className="font-mono">Remote gateway</span></li>
           <li>Paste the Remote URL, wait for the probe, then paste the Session token</li>

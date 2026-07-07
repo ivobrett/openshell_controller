@@ -37,14 +37,14 @@ interface ConfigurationPanelProps {
 }
 
 function FieldHelp({ text }: { text: string }) {
-  return <span className="ml-2 inline-flex align-middle group relative"><span className="w-4 h-4 rounded-full border border-[var(--foreground-dim)] text-[10px] text-[var(--foreground-dim)] flex items-center justify-center cursor-help">?</span><span className="pointer-events-none absolute left-0 top-6 z-50 hidden w-80 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-panel)] p-2 text-[11px] text-[var(--foreground)] shadow-lg group-hover:block">{text}</span></span>
+  return <span className="ml-2 inline-flex align-middle group relative"><span className="w-4 h-4 rounded-full border border-[var(--foreground-dim)] text-[10px] text-[var(--foreground-dim)] flex items-center justify-center cursor-help">?</span><span className="pointer-events-none absolute left-0 top-6 z-50 hidden w-80 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-panel)] p-2 text-[11px] text-[var(--foreground-hex)] shadow-lg group-hover:block">{text}</span></span>
 }
 function Badge({ children, tone }: { children: React.ReactNode; tone: "dynamic" | "static" | "danger" }) {
   const cls = tone === "dynamic" ? "bg-[rgba(118,185,0,0.12)] text-[var(--nvidia-green)] border-[rgba(118,185,0,0.35)]" : tone === "danger" ? "bg-[rgba(220,38,38,0.12)] text-red-400 border-[rgba(220,38,38,0.35)]" : "bg-[rgba(245,158,11,0.10)] text-amber-400 border-[rgba(245,158,11,0.35)]"
   return <span className={`text-[10px] uppercase tracking-wider border px-2 py-1 rounded-sm ${cls}`}>{children}</span>
 }
 function TextListEditor({ label, tooltipText, value, onChange, placeholder }: { label: string; tooltipText: string; value: string[]; onChange: (v: string[]) => void; placeholder: string }) {
-  return <div className="space-y-2"><label className="text-xs uppercase tracking-wider text-[var(--foreground-dim)]">{label}<FieldHelp text={tooltipText} /></label><textarea value={value.join("\n")} onChange={(e) => onChange(e.target.value.split("\n").map(s => s.trim()).filter(Boolean))} placeholder={placeholder} rows={4} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" /></div>
+  return <div className="space-y-2"><label className="text-xs uppercase tracking-wider text-[var(--foreground-dim)]">{label}<FieldHelp text={tooltipText} /></label><textarea value={value.join("\n")} onChange={(e) => onChange(e.target.value.split("\n").map(s => s.trim()).filter(Boolean))} placeholder={placeholder} rows={4} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" /></div>
 }
 
 const defaultPolicy: OpenShellPolicy = {
@@ -212,7 +212,7 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
     <div className={embedded ? "" : "panel p-6 mt-6 border-t-2 border-[var(--nvidia-green)]"}>
       {showHeader && (
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-[var(--border-subtle)]">
-          <h4 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">
+          <h4 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">
             {mode === 'create' ? 'New Sandbox' : `${sandboxId} - OpenShell Policy`}
           </h4>
           <button onClick={savePolicy} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
@@ -224,14 +224,14 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
         {mode === 'create' && (
           <section className="space-y-4 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
             <div>
-              <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Create Sandbox</h5>
+              <h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Create Sandbox</h5>
               <p className="text-xs text-[var(--foreground-dim)] mt-1">Choose a template and enter a sandbox name.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {blueprints.map((bp) => (
-                <button key={bp.id} type="button" onClick={() => setSelectedBlueprint(bp.id)} className={`rounded-sm border p-4 text-left ${selectedBlueprint === bp.id ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background)]'}`}>
+                <button key={bp.id} type="button" onClick={() => setSelectedBlueprint(bp.id)} className={`rounded-sm border p-4 text-left ${selectedBlueprint === bp.id ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-hex)]'}`}>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">{bp.label}</span>
+                    <span className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">{bp.label}</span>
                     <Badge tone={bp.type === 'blueprint' ? 'dynamic' : 'static'}>{bp.type}</Badge>
                   </div>
                   <p className="text-xs text-[var(--foreground-dim)] mt-2">{bp.description}</p>
@@ -240,30 +240,30 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
             </div>
             <div>
               <label className="text-xs uppercase tracking-wider text-[var(--foreground-dim)]">Sandbox Name<FieldHelp text="Lowercase letters, numbers, and hyphens only." /></label>
-              <input value={sandboxName} onChange={(e) => setSandboxName(e.target.value)} placeholder={selectedBlueprint === 'nemoclaw-hermes' ? 'my-hermes' : selectedBlueprint === 'nemoclaw-deepagents-code' ? 'my-deepagents-code' : selectedBlueprint === 'nemoclaw-blueprint' ? 'my-assistant' : selectedBlueprint === 'redeploy-image' ? 'my-assistant-copy' : 'custom-sandbox'} className="mt-2 w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)]" />
+              <input value={sandboxName} onChange={(e) => setSandboxName(e.target.value)} placeholder={selectedBlueprint === 'nemoclaw-hermes' ? 'my-hermes' : selectedBlueprint === 'nemoclaw-deepagents-code' ? 'my-deepagents-code' : selectedBlueprint === 'nemoclaw-blueprint' ? 'my-assistant' : selectedBlueprint === 'redeploy-image' ? 'my-assistant-copy' : 'custom-sandbox'} className="mt-2 w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)]" />
             </div>
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-4">
+            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 space-y-4">
               <div>
-                <h6 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">GPU Passthrough</h6>
+                <h6 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">GPU Passthrough</h6>
                 <p className="mt-1 text-xs text-[var(--foreground-dim)]">Choose whether new sandboxes should request NVIDIA GPU devices.</p>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createGpuMode === 'none' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createGpuMode === 'none' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="radio" name="create-gpu-mode" checked={createGpuMode === 'none'} onChange={() => setCreateGpuMode('none')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">No GPU</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Passes --no-gpu to NemoClaw and avoids CDI setup.</span></span>
                 </label>
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createGpuMode === 'auto' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createGpuMode === 'auto' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="radio" name="create-gpu-mode" checked={createGpuMode === 'auto'} onChange={() => setCreateGpuMode('auto')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">Auto</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Let NemoClaw/OpenShell infer GPU intent.</span></span>
                 </label>
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createGpuMode === 'required' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createGpuMode === 'required' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="radio" name="create-gpu-mode" checked={createGpuMode === 'required'} onChange={() => setCreateGpuMode('required')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">Require GPU</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Requires NVIDIA CDI devices or gateway GPU support.</span></span>
                 </label>
               </div>
             </div>
             {isNemoClawOnboardBlueprint && freshBaseline && (
-              <div className="space-y-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
+              <div className="space-y-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"
@@ -273,7 +273,7 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
                     className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]"
                   />
                   <span className="flex-1">
-                    <span className="block text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">
+                    <span className="block text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">
                       Use prebuilt baseline {canUseBaseline ? '(fast — ~30s)' : '(not available on this host)'}
                     </span>
                     <span className="mt-1 block text-[11px] text-[var(--foreground-dim)] font-mono">
@@ -289,22 +289,22 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
               </div>
             )}
             {selectedBlueprint === 'redeploy-image' && (
-              <div className="space-y-4 rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
+              <div className="space-y-4 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
                 <p className="text-xs text-[var(--foreground-dim)]">Quick Deploy clones the running image of an existing sandbox and skips the Docker rebuild. Use Fresh NemoClaw Image when you need to rebuild the image layers.</p>
                 <div>
-                  <h6 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Agent</h6>
+                  <h6 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Agent</h6>
                   <p className="mt-1 text-xs text-[var(--foreground-dim)]">Pick which kind of running sandbox to clone from. The newest matching one is used as the source.</p>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${quickDeployAgent === 'openclaw' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                  <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${quickDeployAgent === 'openclaw' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                     <input type="radio" name="quick-deploy-agent" checked={quickDeployAgent === 'openclaw'} onChange={() => setQuickDeployAgent('openclaw')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                     <span><span className="block text-xs font-mono uppercase tracking-wider">OpenClaw</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Clone the most recent OpenClaw sandbox.</span></span>
                   </label>
-                  <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${quickDeployAgent === 'hermes' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                  <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${quickDeployAgent === 'hermes' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                     <input type="radio" name="quick-deploy-agent" checked={quickDeployAgent === 'hermes'} onChange={() => setQuickDeployAgent('hermes')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                     <span><span className="block text-xs font-mono uppercase tracking-wider">Hermes</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Clone the most recent Hermes sandbox.</span></span>
                   </label>
-                  <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${quickDeployAgent === 'custom' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                  <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${quickDeployAgent === 'custom' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                     <input type="radio" name="quick-deploy-agent" checked={quickDeployAgent === 'custom'} onChange={() => setQuickDeployAgent('custom')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                     <span><span className="block text-xs font-mono uppercase tracking-wider">Custom</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Clone the most recent Custom sandbox. Bare image, no NemoClaw runtime.</span></span>
                   </label>
@@ -312,30 +312,30 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
               </div>
             )}
             {activeBlueprint?.supportsTailscale && (
-              <label className="flex items-center gap-3 text-sm text-[var(--foreground)] font-mono">
+              <label className="flex items-center gap-3 text-sm text-[var(--foreground-hex)] font-mono">
                 <input type="checkbox" checked={enableTailscale} onChange={(e) => setEnableTailscale(e.target.checked)} /> Enable Tailscale
               </label>
             )}
             {enableTailscale && <div className="rounded-sm border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">Tailscale-enabled creation requires NVIDIA_INFERENCE_API_KEY (or legacy NVIDIA_API_KEY) in the dashboard process environment.</div>}
-            {isNemoClawOnboardBlueprint && <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-4">
+            {isNemoClawOnboardBlueprint && <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 space-y-4">
               <div>
-                <h6 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Inference at Create</h6>
+                <h6 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Inference at Create</h6>
                 <p className="mt-1 text-xs text-[var(--foreground-dim)]">Choose the provider NemoClaw should use while onboarding this sandbox.</p>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createInferenceMode === 'auto' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createInferenceMode === 'auto' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="checkbox" checked={createInferenceMode === 'auto'} onChange={() => setCreateInferenceMode('auto')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">Auto</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Let NemoClaw choose.</span></span>
                 </label>
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createInferenceMode === 'vllm' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createInferenceMode === 'vllm' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="checkbox" checked={createInferenceMode === 'vllm'} onChange={() => setCreateInferenceMode('vllm')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">Use vLLM in experimental mode</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Sets NEMOCLAW_EXPERIMENTAL and vLLM.</span></span>
                 </label>
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createInferenceMode === 'nvidia' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createInferenceMode === 'nvidia' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="checkbox" checked={createInferenceMode === 'nvidia'} onChange={() => setCreateInferenceMode('nvidia')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">NVIDIA hosted API</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Uses NemoClaw build provider and requires an nvapi-* key.</span></span>
                 </label>
-                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground)] ${createInferenceMode === 'compatible' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
+                <label className={`flex items-start gap-3 rounded-sm border p-3 text-sm text-[var(--foreground-hex)] ${createInferenceMode === 'compatible' ? 'border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]' : 'border-[var(--border-subtle)] bg-[var(--background-tertiary)]'}`}>
                   <input type="checkbox" checked={createInferenceMode === 'compatible'} onChange={() => setCreateInferenceMode('compatible')} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
                   <span><span className="block text-xs font-mono uppercase tracking-wider">OpenAI-compatible endpoint</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Sets NEMOCLAW_PROVIDER=custom, endpoint URL, and compatible API key.</span></span>
                 </label>
@@ -344,36 +344,36 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Model</label>
-                    <input value={createInferenceModel} onChange={(e) => setCreateInferenceModel(e.target.value)} placeholder={createInferenceMode === 'vllm' ? 'auto-detect from vLLM' : 'model name'} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)]" />
+                    <input value={createInferenceModel} onChange={(e) => setCreateInferenceModel(e.target.value)} placeholder={createInferenceMode === 'vllm' ? 'auto-detect from vLLM' : 'model name'} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)]" />
                   </div>
                   {createInferenceMode === 'compatible' && (
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Endpoint URL</label>
-                      <input value={createInferenceEndpointUrl} onChange={(e) => setCreateInferenceEndpointUrl(e.target.value)} placeholder="https://integrate.api.nvidia.com/v1" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)]" />
+                      <input value={createInferenceEndpointUrl} onChange={(e) => setCreateInferenceEndpointUrl(e.target.value)} placeholder="https://integrate.api.nvidia.com/v1" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)]" />
                     </div>
                   )}
                   {(createInferenceMode === 'nvidia' || createInferenceMode === 'compatible') && (
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Provider API Key</label>
-                      <input type="password" value={createNvidiaApiKey} onChange={(e) => setCreateNvidiaApiKey(e.target.value)} placeholder={createInferenceMode === 'nvidia' ? 'nvapi-...' : 'endpoint token or blank for no auth'} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)]" />
+                      <input type="password" value={createNvidiaApiKey} onChange={(e) => setCreateNvidiaApiKey(e.target.value)} placeholder={createInferenceMode === 'nvidia' ? 'nvapi-...' : 'endpoint token or blank for no auth'} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)]" />
                     </div>
                   )}
                 </div>
               )}
             </div>}
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-4">
+            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 space-y-4">
               <label className="flex items-start gap-3">
                 <input type="checkbox" checked={restoreFromBackup} onChange={(e) => setRestoreFromBackup(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" />
-                <span><span className="block text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Restore from Backup</span><span className="mt-1 block text-xs text-[var(--foreground-dim)]">After the sandbox reaches Ready, restore a .tar.gz archive into it.</span></span>
+                <span><span className="block text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Restore from Backup</span><span className="mt-1 block text-xs text-[var(--foreground-dim)]">After the sandbox reaches Ready, restore a .tar.gz archive into it.</span></span>
               </label>
-              {restoreFromBackup && <div className="grid grid-cols-1 gap-4 md:grid-cols-2"><div className="space-y-2"><label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Backup Archive</label><input type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" onChange={(e) => setRestoreArchive(e.target.files?.[0] || null)} className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-tertiary)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground)]" /></div><div className="space-y-2"><label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Restore Target</label><input value={restorePath} onChange={(e) => setRestorePath(e.target.value)} placeholder="/sandbox" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)]" /></div><label className="md:col-span-2 flex items-start gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3"><input type="checkbox" checked={restoreReplace} onChange={(e) => setRestoreReplace(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" /><span><span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">Replace target contents</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Recommended for cloning from a backup into a fresh sandbox.</span></span></label></div>}
+              {restoreFromBackup && <div className="grid grid-cols-1 gap-4 md:grid-cols-2"><div className="space-y-2"><label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Backup Archive</label><input type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" onChange={(e) => setRestoreArchive(e.target.files?.[0] || null)} className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-tertiary)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground-hex)]" /></div><div className="space-y-2"><label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Restore Target</label><input value={restorePath} onChange={(e) => setRestorePath(e.target.value)} placeholder="/sandbox" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)]" /></div><label className="md:col-span-2 flex items-start gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3"><input type="checkbox" checked={restoreReplace} onChange={(e) => setRestoreReplace(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]" /><span><span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)]">Replace target contents</span><span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Recommended for cloning from a backup into a fresh sandbox.</span></span></label></div>}
             </div>
           </section>
         )}
-        <section className="space-y-4"><div className="flex items-center justify-between gap-4 flex-wrap"><div><h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Security Presets</h5><p className="text-xs text-[var(--foreground-dim)] mt-1">Use a canned profile for new sandboxes or switch an existing sandbox policy baseline on the fly.</p></div><div className="min-w-[260px]"><select value={selectedPreset} onChange={(e) => { const value = e.target.value as SecurityPresetId | ''; setSelectedPreset(value); if (value) applyPreset(value) }} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)]"><option value="">Select preset…</option>{SECURITY_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></div></div>{activePreset && <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-3"><div className="flex items-center gap-3 flex-wrap"><span className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">{activePreset.label}</span></div><p className="text-sm text-[var(--foreground-dim)]">{activePreset.summary}</p></div>}</section>
-        <section className="space-y-4"><div className="flex items-center gap-3"><h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Filesystem Policy</h5><Badge tone="static">Static</Badge></div><label className="flex items-center gap-3 text-sm text-[var(--foreground)] font-mono"><input type="checkbox" checked={policy.filesystem_policy.include_workdir} onChange={(e) => setPolicy({ ...policy, filesystem_policy: { ...policy.filesystem_policy, include_workdir: e.target.checked } })} />Include workdir<FieldHelp text="Automatically adds the agent working directory to read_write. Static: changing this requires recreating the sandbox." /></label><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><TextListEditor label="Read-only paths" tooltipText="Absolute paths the sandbox can read but not modify. Paths not listed are inaccessible." value={policy.filesystem_policy.read_only} onChange={(v) => setPolicy({ ...policy, filesystem_policy: { ...policy.filesystem_policy, read_only: v } })} placeholder="/usr\n/lib\n/etc" /><TextListEditor label="Read-write paths" tooltipText="Absolute paths the sandbox can read and write. Keep this scoped; broad paths are rejected." value={policy.filesystem_policy.read_write} onChange={(v) => setPolicy({ ...policy, filesystem_policy: { ...policy.filesystem_policy, read_write: v } })} placeholder="/sandbox\n/tmp" /></div></section>
-        <section className="space-y-4"><div className="flex items-center gap-3"><h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Network Policies</h5><Badge tone="dynamic">Dynamic</Badge></div><button onClick={addBlock} className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">Add policy block</button></section>
-        {mode === 'existing' && <section className="space-y-3"><h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Policy JSON</h5><pre className="overflow-auto rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-[11px] leading-5 text-[var(--foreground)]">{JSON.stringify(assembledPolicy, null, 2)}</pre></section>}
+        <section className="space-y-4"><div className="flex items-center justify-between gap-4 flex-wrap"><div><h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Security Presets</h5><p className="text-xs text-[var(--foreground-dim)] mt-1">Use a canned profile for new sandboxes or switch an existing sandbox policy baseline on the fly.</p></div><div className="min-w-[260px]"><select value={selectedPreset} onChange={(e) => { const value = e.target.value as SecurityPresetId | ''; setSelectedPreset(value); if (value) applyPreset(value) }} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)]"><option value="">Select preset…</option>{SECURITY_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}</select></div></div>{activePreset && <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-3"><div className="flex items-center gap-3 flex-wrap"><span className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">{activePreset.label}</span></div><p className="text-sm text-[var(--foreground-dim)]">{activePreset.summary}</p></div>}</section>
+        <section className="space-y-4"><div className="flex items-center gap-3"><h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Filesystem Policy</h5><Badge tone="static">Static</Badge></div><label className="flex items-center gap-3 text-sm text-[var(--foreground-hex)] font-mono"><input type="checkbox" checked={policy.filesystem_policy.include_workdir} onChange={(e) => setPolicy({ ...policy, filesystem_policy: { ...policy.filesystem_policy, include_workdir: e.target.checked } })} />Include workdir<FieldHelp text="Automatically adds the agent working directory to read_write. Static: changing this requires recreating the sandbox." /></label><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><TextListEditor label="Read-only paths" tooltipText="Absolute paths the sandbox can read but not modify. Paths not listed are inaccessible." value={policy.filesystem_policy.read_only} onChange={(v) => setPolicy({ ...policy, filesystem_policy: { ...policy.filesystem_policy, read_only: v } })} placeholder="/usr\n/lib\n/etc" /><TextListEditor label="Read-write paths" tooltipText="Absolute paths the sandbox can read and write. Keep this scoped; broad paths are rejected." value={policy.filesystem_policy.read_write} onChange={(v) => setPolicy({ ...policy, filesystem_policy: { ...policy.filesystem_policy, read_write: v } })} placeholder="/sandbox\n/tmp" /></div></section>
+        <section className="space-y-4"><div className="flex items-center gap-3"><h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Network Policies</h5><Badge tone="dynamic">Dynamic</Badge></div><button onClick={addBlock} className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">Add policy block</button></section>
+        {mode === 'existing' && <section className="space-y-3"><h5 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Policy JSON</h5><pre className="overflow-auto rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-[11px] leading-5 text-[var(--foreground-hex)]">{JSON.stringify(assembledPolicy, null, 2)}</pre></section>}
         <button onClick={savePolicy} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">{saving ? "Working..." : mode === 'create' ? 'Create Sandbox' : 'Save Policy'}</button>
         {message && <div className="text-sm text-[var(--foreground-dim)] whitespace-pre-wrap">{message}</div>}
       </div>}

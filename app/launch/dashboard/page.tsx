@@ -42,10 +42,10 @@ function LaunchDashboardInner() {
   }, [sandboxId, instanceId])
 
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center p-6">
+    <main className="min-h-screen bg-[var(--background-hex)] text-[var(--foreground-hex)] flex items-center justify-center p-6">
       <section className="panel max-w-md w-full p-8 space-y-4 text-center">
         <h1 className="text-sm uppercase tracking-[0.2em] text-[var(--foreground-dim)]">OpenClaw Gateway Dashboard</h1>
-        <p className="text-base text-[var(--foreground)]">{sandboxId || instanceId || "(no sandbox)"}</p>
+        <p className="text-base text-[var(--foreground-hex)]">{sandboxId || instanceId || "(no sandbox)"}</p>
         <p className="text-xs text-[var(--foreground-dim)]">{message}</p>
       </section>
     </main>
@@ -54,7 +54,7 @@ function LaunchDashboardInner() {
 
 export default function LaunchDashboardPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-8">Loading…</main>}>
+    <Suspense fallback={<main className="min-h-screen bg-[var(--background-hex)] text-[var(--foreground-hex)] p-8">Loading…</main>}>
       <LaunchDashboardInner />
     </Suspense>
   )

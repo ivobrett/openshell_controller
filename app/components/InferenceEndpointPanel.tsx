@@ -298,7 +298,7 @@ function VllmAdvancedConfiguration({
     <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xs uppercase tracking-wider text-[var(--foreground)]">vLLM Advanced Configuration</h3>
+          <h3 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">vLLM Advanced Configuration</h3>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">Input budget at 4096 output tokens: {maxInputWithDefaultOutput.toLocaleString()} tokens.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -308,7 +308,7 @@ function VllmAdvancedConfiguration({
           <button type="button" onClick={restartVllmContainer} disabled={restarting || applying} className="px-3 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
             {restarting ? "Restarting" : "Restart"}
           </button>
-          <button type="button" onClick={copyRunCommand} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">
+          <button type="button" onClick={copyRunCommand} className="px-3 py-2 rounded-sm bg-[var(--background-hex)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
@@ -317,39 +317,39 @@ function VllmAdvancedConfiguration({
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <FieldLabel>Container</FieldLabel>
-          <input value={containerName} onChange={(event) => setContainerName(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={containerName} onChange={(event) => setContainerName(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2 md:col-span-2">
           <FieldLabel>Image</FieldLabel>
-          <input value={image} onChange={(event) => setImage(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={image} onChange={(event) => setImage(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>GPU Device</FieldLabel>
-          <input value={gpuDevice} onChange={(event) => setGpuDevice(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={gpuDevice} onChange={(event) => setGpuDevice(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>Host Port</FieldLabel>
-          <input value={hostPort} onChange={(event) => setHostPort(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={hostPort} onChange={(event) => setHostPort(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>Container Port</FieldLabel>
-          <input value={containerPort} onChange={(event) => setContainerPort(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={containerPort} onChange={(event) => setContainerPort(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>Max Model Len</FieldLabel>
-          <input value={maxModelLen} onChange={(event) => setMaxModelLen(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={maxModelLen} onChange={(event) => setMaxModelLen(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>GPU Memory</FieldLabel>
-          <input value={gpuMemoryUtilization} onChange={(event) => setGpuMemoryUtilization(event.target.value)} inputMode="decimal" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={gpuMemoryUtilization} onChange={(event) => setGpuMemoryUtilization(event.target.value)} inputMode="decimal" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>Tensor Parallel</FieldLabel>
-          <input value={tensorParallelSize} onChange={(event) => setTensorParallelSize(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={tensorParallelSize} onChange={(event) => setTensorParallelSize(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>dtype</FieldLabel>
-          <select value={dtype} onChange={(event) => setDtype(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+          <select value={dtype} onChange={(event) => setDtype(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
             <option value="bfloat16">bfloat16</option>
             <option value="float16">float16</option>
             <option value="auto">auto</option>
@@ -357,7 +357,7 @@ function VllmAdvancedConfiguration({
         </div>
         <div className="space-y-2">
           <FieldLabel>KV Cache dtype</FieldLabel>
-          <select value={kvCacheDtype} onChange={(event) => setKvCacheDtype(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+          <select value={kvCacheDtype} onChange={(event) => setKvCacheDtype(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
             <option value="fp8">fp8</option>
             <option value="fp8_e4m3">fp8_e4m3</option>
             <option value="fp8_e5m2">fp8_e5m2</option>
@@ -366,7 +366,7 @@ function VllmAdvancedConfiguration({
         </div>
         <div className="space-y-2">
           <FieldLabel>Tool Parser</FieldLabel>
-          <select value={toolCallParser} onChange={(event) => setToolCallParser(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+          <select value={toolCallParser} onChange={(event) => setToolCallParser(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
             <option value="hermes">hermes</option>
             <option value="llama3_json">llama3_json</option>
             <option value="mistral">mistral</option>
@@ -375,46 +375,46 @@ function VllmAdvancedConfiguration({
         </div>
         <div className="space-y-2">
           <FieldLabel>Max Batched Tokens</FieldLabel>
-          <input value={maxNumBatchedTokens} onChange={(event) => setMaxNumBatchedTokens(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={maxNumBatchedTokens} onChange={(event) => setMaxNumBatchedTokens(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>Max Seqs</FieldLabel>
-          <input value={maxNumSeqs} onChange={(event) => setMaxNumSeqs(event.target.value)} inputMode="numeric" placeholder="auto" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={maxNumSeqs} onChange={(event) => setMaxNumSeqs(event.target.value)} inputMode="numeric" placeholder="auto" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
         </div>
         <div className="space-y-2">
           <FieldLabel>YaRN Factor</FieldLabel>
-          <input value={yarnFactor} onChange={(event) => setYarnFactor(event.target.value)} inputMode="decimal" disabled={!enableYarnScaling} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)] disabled:opacity-50" />
+          <input value={yarnFactor} onChange={(event) => setYarnFactor(event.target.value)} inputMode="decimal" disabled={!enableYarnScaling} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)] disabled:opacity-50" />
         </div>
         <div className="space-y-2">
           <FieldLabel>Original Context</FieldLabel>
-          <input value={originalContext} onChange={(event) => setOriginalContext(event.target.value)} inputMode="numeric" disabled={!enableYarnScaling} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)] disabled:opacity-50" />
+          <input value={originalContext} onChange={(event) => setOriginalContext(event.target.value)} inputMode="numeric" disabled={!enableYarnScaling} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)] disabled:opacity-50" />
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+        <label className="flex items-center gap-2 text-xs text-[var(--foreground-hex)]">
           <input type="checkbox" checked={enableYarnScaling} onChange={(event) => setEnableYarnScaling(event.target.checked)} />
           YaRN/RoPE scaling
         </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+        <label className="flex items-center gap-2 text-xs text-[var(--foreground-hex)]">
           <input type="checkbox" checked={allowLongMaxModelLen} onChange={(event) => setAllowLongMaxModelLen(event.target.checked)} />
           Allow long max len
         </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+        <label className="flex items-center gap-2 text-xs text-[var(--foreground-hex)]">
           <input type="checkbox" checked={enableChunkedPrefill} onChange={(event) => setEnableChunkedPrefill(event.target.checked)} />
           Chunked prefill
         </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+        <label className="flex items-center gap-2 text-xs text-[var(--foreground-hex)]">
           <input type="checkbox" checked={enableAutoToolChoice} onChange={(event) => setEnableAutoToolChoice(event.target.checked)} />
           Auto tool choice
         </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+        <label className="flex items-center gap-2 text-xs text-[var(--foreground-hex)]">
           <input type="checkbox" checked={calculateKvScales} onChange={(event) => setCalculateKvScales(event.target.checked)} />
           Calculate KV scales
         </label>
       </div>
 
-      <textarea readOnly value={runCommand} className="mt-4 min-h-[240px] w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-[11px] font-mono leading-5 text-[var(--foreground)] focus:outline-none" />
+      <textarea readOnly value={runCommand} className="mt-4 min-h-[240px] w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-[11px] font-mono leading-5 text-[var(--foreground-hex)] focus:outline-none" />
       {restartMessage && <p className="mt-3 text-xs text-[var(--foreground-dim)]">{restartMessage}</p>}
     </div>
   )
@@ -626,7 +626,7 @@ export default function InferenceEndpointPanel() {
         <button
           onClick={load}
           disabled={loading || saving}
-          className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-secondary)] disabled:opacity-50"
+          className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-secondary)] disabled:opacity-50"
         >
           Refresh
         </button>
@@ -639,13 +639,13 @@ export default function InferenceEndpointPanel() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="metric p-4">
               <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Sandbox Route</p>
-              <p className="mt-2 text-sm font-mono text-[var(--foreground)]">{gateway.configured ? gateway.provider : "not configured"}</p>
+              <p className="mt-2 text-sm font-mono text-[var(--foreground-hex)]">{gateway.configured ? gateway.provider : "not configured"}</p>
               <p className="mt-1 text-xs font-mono text-[var(--foreground-dim)]">{gateway.model || "No model selected"}</p>
               {gateway.timeout && <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">Timeout {gateway.timeout}</p>}
             </div>
             <div className="metric p-4">
               <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">System Route</p>
-              <p className="mt-2 text-sm font-mono text-[var(--foreground)]">{system.configured ? system.provider : "not configured"}</p>
+              <p className="mt-2 text-sm font-mono text-[var(--foreground-hex)]">{system.configured ? system.provider : "not configured"}</p>
               <p className="mt-1 text-xs font-mono text-[var(--foreground-dim)]">{system.model || "No model selected"}</p>
               {system.timeout && <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">Timeout {system.timeout}</p>}
             </div>
@@ -656,18 +656,18 @@ export default function InferenceEndpointPanel() {
               <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Ollama Models</h3>
+                    <h3 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Ollama Models</h3>
                     <p className="mt-1 text-xs text-[var(--foreground-dim)]">{ollamaMessage || "Polling local Ollama every 10 seconds."}</p>
                   </div>
-                  <button type="button" onClick={() => loadOllamaModels()} disabled={ollamaLoading} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] disabled:opacity-50">
+                  <button type="button" onClick={() => loadOllamaModels()} disabled={ollamaLoading} className="px-3 py-2 rounded-sm bg-[var(--background-hex)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] disabled:opacity-50">
                     {ollamaLoading ? "Polling..." : "Poll"}
                   </button>
                 </div>
                 {ollamaModels.length > 0 ? (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                     {ollamaModels.map((item) => (
-                      <button key={ollamaModelKey(item)} type="button" onClick={() => applyOllamaModelPreset(item)} className={`rounded-sm border p-3 text-left ${isOllamaEndpoint && model === item.name ? "border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]" : "border-[var(--border-subtle)] bg-[var(--background)] hover:border-[var(--nvidia-green)]"}`}>
-                        <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-[var(--foreground)]"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
+                      <button key={ollamaModelKey(item)} type="button" onClick={() => applyOllamaModelPreset(item)} className={`rounded-sm border p-3 text-left ${isOllamaEndpoint && model === item.name ? "border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]" : "border-[var(--border-subtle)] bg-[var(--background-hex)] hover:border-[var(--nvidia-green)]"}`}>
+                        <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-[var(--foreground-hex)]"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
                         <div className="mt-1 text-[11px] text-[var(--foreground-dim)]">
                           {[item.parameterSize, item.quantization, item.sizeLabel].filter(Boolean).join(" · ") || item.family || "local model"}
                         </div>
@@ -682,50 +682,50 @@ export default function InferenceEndpointPanel() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <FieldLabel>Provider Name</FieldLabel>
-                  <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Provider Type</FieldLabel>
-                  <select value={type} onChange={(event) => setType(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+                  <select value={type} onChange={(event) => setType(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
                     {providerTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <FieldLabel>Model</FieldLabel>
                   {isOllamaEndpoint && ollamaModels.length > 0 ? (
-                    <select value={model} onChange={(event) => setModel(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+                    <select value={model} onChange={(event) => setModel(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
                       {ollamaModels.map((item) => <option key={ollamaModelKey(item)} value={item.name}>{item.hostLabel ? `[${item.hostLabel}] ` : ""}{item.name}</option>)}
                     </select>
                   ) : (
-                    <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="provider/model-name" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                    <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="provider/model-name" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                   )}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <FieldLabel>Endpoint URL</FieldLabel>
-                  <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://example.com/v1" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://example.com/v1" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Credential Env Key</FieldLabel>
-                  <input value={credentialKey} onChange={(event) => setCredentialKey(event.target.value.toUpperCase())} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={credentialKey} onChange={(event) => setCredentialKey(event.target.value.toUpperCase())} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>API Key</FieldLabel>
-                  <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder={activeProvider ? "leave blank to keep stored key" : "stored in OpenShell provider"} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder={activeProvider ? "leave blank to keep stored key" : "stored in OpenShell provider"} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Route</FieldLabel>
-                  <select value={route} onChange={(event) => setRoute(event.target.value as "gateway" | "system")} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+                  <select value={route} onChange={(event) => setRoute(event.target.value as "gateway" | "system")} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]">
                     <option value="gateway">Sandbox inference</option>
                     <option value="system">System inference</option>
                   </select>
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Timeout Seconds</FieldLabel>
-                  <input value={timeout} onChange={(event) => setTimeoutValue(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={timeout} onChange={(event) => setTimeoutValue(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]" />
                 </div>
               </div>
 
-              <label className="flex items-center gap-3 text-sm text-[var(--foreground)]">
+              <label className="flex items-center gap-3 text-sm text-[var(--foreground-hex)]">
                 <input type="checkbox" checked={noVerify} onChange={(event) => setNoVerify(event.target.checked)} />
                 Skip provider verification while saving
               </label>
@@ -738,7 +738,7 @@ export default function InferenceEndpointPanel() {
                 <button onClick={saveEndpoint} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
                   {saving ? "Saving..." : "Save Endpoint"}
                 </button>
-                <button type="button" onClick={useVllmPreset} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-secondary)] disabled:opacity-50">
+                <button type="button" onClick={useVllmPreset} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-secondary)] disabled:opacity-50">
                   vLLM Preset
                 </button>
                 {message && <p className="text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">{message}</p>}
@@ -746,7 +746,7 @@ export default function InferenceEndpointPanel() {
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Configured Providers</h3>
+              <h3 className="text-xs uppercase tracking-wider text-[var(--foreground-hex)]">Configured Providers</h3>
               {providers.length === 0 ? (
                 <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-xs text-[var(--foreground-dim)]">No providers configured.</div>
               ) : (
@@ -755,7 +755,7 @@ export default function InferenceEndpointPanel() {
                     <div key={provider.name || provider.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
                       <button type="button" onClick={() => selectProvider(provider)} className="w-full text-left">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-mono text-[var(--foreground)]">{provider.name}</span>
+                          <span className="text-sm font-mono text-[var(--foreground-hex)]">{provider.name}</span>
                           {provider.name === gateway.provider && <span className="text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">active</span>}
                         </div>
                         <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">{provider.type || "unknown"} · credentials {provider.credentialKeys.length} · config {provider.configKeys.length}</p>

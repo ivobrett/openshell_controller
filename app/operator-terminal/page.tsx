@@ -334,7 +334,7 @@ function OperatorTerminalInner() {
   const shellHint = data?.attach?.shellHint || DEFAULT_SHELL_HINT
 
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-6">
+    <main className="min-h-screen bg-[var(--background-hex)] text-[var(--foreground-hex)] p-6">
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -342,14 +342,14 @@ function OperatorTerminalInner() {
             <h1 className="text-xl font-semibold uppercase tracking-wider mt-2">Operator Terminal</h1>
             <p className="mt-2 max-w-2xl text-xs text-[var(--foreground-dim)]">{terminalDescription}</p>
           </div>
-          <Link href="/" className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">Back to Dashboard</Link>
+          <Link href="/" className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground-hex)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">Back to Dashboard</Link>
         </div>
 
         <section className={`panel px-4 py-3 border ${readiness.tone}`}>
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Sandbox</span>
-              <span className="text-sm font-mono text-[var(--foreground)] truncate">{sandboxId || 'host'}</span>
+              <span className="text-sm font-mono text-[var(--foreground-hex)] truncate">{sandboxId || 'host'}</span>
             </div>
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Status</span>
@@ -360,7 +360,7 @@ function OperatorTerminalInner() {
         </section>
 
         <section className={isFullscreen
-          ? "fixed inset-0 z-50 bg-[var(--background)] p-4 flex flex-col gap-3"
+          ? "fixed inset-0 z-50 bg-[var(--background-hex)] p-4 flex flex-col gap-3"
           : "panel p-6 space-y-4"}>
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
@@ -409,8 +409,8 @@ function OperatorTerminalInner() {
             <div className="space-y-3">
               <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4"><p className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Preferred attach command</p><code className="block mt-2 text-sm font-mono text-[var(--nvidia-green)] break-all">{aliasCommand}</code><button onClick={() => copyCommand(aliasCommand)} className="mt-3 px-3 py-2 rounded-sm border border-[var(--border-subtle)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)]">Copy Alias Command</button></div>
               <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-3">
-                <div><p className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Fallback if alias or agent config is missing</p><code className="block mt-2 text-sm font-mono text-[var(--foreground)] break-all">{fallbackCommand}</code><p className="text-xs text-[var(--foreground-dim)] mt-2">{shellHint}</p><button onClick={() => copyCommand(fallbackCommand)} className="mt-3 px-3 py-2 rounded-sm border border-[var(--border-subtle)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)]">Copy Fallback Command</button></div>
-                <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3"><p className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Login-shell retry for Homebrew/path issues</p><code className="block mt-2 text-sm font-mono text-[var(--foreground)] break-all">{loginShellCommand}</code><button onClick={() => copyCommand(loginShellCommand)} className="mt-3 px-3 py-2 rounded-sm border border-[var(--border-subtle)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)]">Copy Login-Shell Retry</button></div>
+                <div><p className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Fallback if alias or agent config is missing</p><code className="block mt-2 text-sm font-mono text-[var(--foreground-hex)] break-all">{fallbackCommand}</code><p className="text-xs text-[var(--foreground-dim)] mt-2">{shellHint}</p><button onClick={() => copyCommand(fallbackCommand)} className="mt-3 px-3 py-2 rounded-sm border border-[var(--border-subtle)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)]">Copy Fallback Command</button></div>
+                <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3"><p className="text-[10px] uppercase tracking-[0.2em] text-[var(--foreground-dim)] font-mono">Login-shell retry for Homebrew/path issues</p><code className="block mt-2 text-sm font-mono text-[var(--foreground-hex)] break-all">{loginShellCommand}</code><button onClick={() => copyCommand(loginShellCommand)} className="mt-3 px-3 py-2 rounded-sm border border-[var(--border-subtle)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)]">Copy Login-Shell Retry</button></div>
               </div>
             </div>
             {copyMessage && <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs text-[var(--foreground-dim)]">{copyMessage}</div>}
@@ -423,7 +423,7 @@ function OperatorTerminalInner() {
 
 export default function OperatorTerminalPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-8"><div className="mx-auto max-w-6xl"><div className="panel p-6">Loading operator terminal…</div></div></main>}>
+    <Suspense fallback={<main className="min-h-screen bg-[var(--background-hex)] text-[var(--foreground-hex)] p-8"><div className="mx-auto max-w-6xl"><div className="panel p-6">Loading operator terminal…</div></div></main>}>
       <OperatorTerminalInner />
     </Suspense>
   )

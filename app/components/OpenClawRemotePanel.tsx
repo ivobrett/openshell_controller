@@ -188,7 +188,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
   const Row = ({ label, value, copyKey }: { label: string; value: string; copyKey: string }) => (
     <div className="flex items-center gap-2">
       <span className="w-24 shrink-0 text-[var(--foreground-dim)] uppercase tracking-wider">{label}</span>
-      <span className="truncate text-[var(--foreground)]">{value}</span>
+      <span className="truncate text-[var(--foreground-hex)]">{value}</span>
       <button onClick={() => copy(copyKey, value)} className="action-button px-2 py-1 shrink-0">
         {copied === copyKey ? 'Copied!' : 'Copy'}
       </button>
@@ -203,7 +203,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
         <Row label="URL" value={access.url} copyKey="url" />
         <div className="flex items-center gap-2">
           <span className="w-24 shrink-0 text-[var(--foreground-dim)] uppercase tracking-wider">Token</span>
-          <span className="truncate text-[var(--foreground)]">{tokenRevealed ? access.token : maskedToken}</span>
+          <span className="truncate text-[var(--foreground-hex)]">{tokenRevealed ? access.token : maskedToken}</span>
           <button onClick={() => setTokenRevealed((v) => !v)} className="action-button px-2 py-1 shrink-0">
             {tokenRevealed ? 'Hide' : 'Reveal'}
           </button>
@@ -225,7 +225,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
 
       <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs text-[var(--foreground-dim)]">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">OpenClaw mobile app — pair by QR</p>
+          <p className="font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">OpenClaw mobile app — pair by QR</p>
           <button onClick={() => void generateQr()} disabled={qr.status === 'loading'} className="action-button px-2 py-1">
             {qr.status === 'loading' ? 'Generating…' : qr.status === 'ready' ? 'Regenerate QR' : 'Generate QR'}
           </button>
@@ -244,7 +244,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
             ) : null}
             <div className="flex items-center gap-2">
               <span className="w-24 shrink-0 uppercase tracking-wider">Setup code</span>
-              <span className="truncate font-mono text-[var(--foreground)]">{qr.setupCode.slice(0, 16)}…</span>
+              <span className="truncate font-mono text-[var(--foreground-hex)]">{qr.setupCode.slice(0, 16)}…</span>
               <button onClick={() => copy('setup', qr.setupCode)} className="action-button px-2 py-1 shrink-0">
                 {copied === 'setup' ? 'Copied!' : 'Copy'}
               </button>
@@ -266,7 +266,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
 
       <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-semibold uppercase tracking-wider text-[var(--foreground)]">Node approval</p>
+          <p className="font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Node approval</p>
           <div className="flex items-center gap-2">
             <button onClick={() => void loadPairing()} disabled={pairing.status === 'loading' || approving} className="action-button px-2 py-1">
               {pairing.status === 'loading' ? 'Checking…' : 'Check pending'}
@@ -281,7 +281,7 @@ export default function OpenClawRemotePanel({ sandboxName }: { sandboxName: stri
           <ul className="mt-2 space-y-1">
             {pairing.requests.map((req) => (
               <li key={req.requestId} className="flex items-center gap-2">
-                <span className="truncate font-mono text-[var(--foreground)]">
+                <span className="truncate font-mono text-[var(--foreground-hex)]">
                   {req.label || req.requestId}{req.role ? ` · ${req.role}` : ''}{req.scopes && req.scopes.length ? ` · ${req.scopes.join(',')}` : ''}
                 </span>
                 <button onClick={() => void approve(req.requestId)} disabled={approving} className="action-button ml-auto shrink-0 px-2 py-1">

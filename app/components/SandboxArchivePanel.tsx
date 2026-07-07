@@ -163,20 +163,20 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 max-lg:flex-col">
         <div>
-          <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Backup / Restore</h5>
+          <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Backup / Restore</h5>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">
             Export sandbox contents as a compressed archive, or restore an archive into this sandbox.
           </p>
         </div>
-        <span className="status-chip border border-[var(--border-subtle)] bg-[var(--background)] px-2.5 py-1 text-[var(--foreground-dim)]">
+        <span className="status-chip border border-[var(--border-subtle)] bg-[var(--background-hex)] px-2.5 py-1 text-[var(--foreground-dim)]">
           tar.gz
         </span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-3">
+        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 space-y-3">
           <div>
-            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">Backup</h6>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Backup</h6>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">Archive a directory for cold storage or cloning.</p>
           </div>
           <label className="block space-y-2">
@@ -185,7 +185,7 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
               value={backupPath}
               onChange={(event) => setBackupPath(event.target.value)}
               placeholder="/sandbox"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
             />
           </label>
           <div className="flex flex-wrap gap-2">
@@ -208,16 +208,16 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
           </div>
         </div>
 
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-3">
+        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 space-y-3">
           <div>
-            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">Restore</h6>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Restore</h6>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">Merge into the target directory, or replace it first.</p>
           </div>
           <input
             type="file"
             accept=".tar.gz,.tgz,application/gzip,application/x-gzip"
             onChange={(event) => setSelectedArchive(event.target.files?.[0] || null)}
-            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-tertiary)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground)]"
+            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-tertiary)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground-hex)]"
           />
           <label className="block space-y-2">
             <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Target Directory</span>
@@ -225,7 +225,7 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
               value={restorePath}
               onChange={(event) => setRestorePath(event.target.value)}
               placeholder="/sandbox"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
             />
           </label>
           <label className="flex items-start gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
@@ -236,7 +236,7 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
               className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]"
             />
             <span>
-              <span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">Replace target contents</span>
+              <span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)]">Replace target contents</span>
               <span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Deletes existing files in the target directory before extracting.</span>
             </span>
           </label>
@@ -251,10 +251,10 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
         </div>
       </div>
 
-      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-3">
+      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 space-y-3">
         <div className="flex items-start justify-between gap-4 max-md:flex-col">
           <div>
-            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">Backup Catalog</h6>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Backup Catalog</h6>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">Host-side cold storage for cloning and redeploying sandboxes later.</p>
           </div>
           <button type="button" onClick={() => loadCatalog().catch((error) => setMessage(error.message))} className="action-button px-3 py-2">
@@ -267,7 +267,7 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
             <div key={backup.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
               <div className="flex items-start justify-between gap-4 max-lg:flex-col">
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-mono text-[var(--foreground)]">{backup.fileName}</p>
+                  <p className="truncate text-xs font-mono text-[var(--foreground-hex)]">{backup.fileName}</p>
                   <p className="mt-1 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">
                     {backup.sandboxName} / {backup.sourcePath} / {formatBytes(backup.size)} / {new Date(backup.createdAt).toLocaleString()}
                   </p>
@@ -305,7 +305,7 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       </div>
 
       {message && (
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">
+        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">
           {message}
         </div>
       )}

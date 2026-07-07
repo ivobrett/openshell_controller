@@ -57,7 +57,7 @@ export default function ActivityPanel() {
     <section className="panel p-5">
       <div className="flex items-start justify-between gap-4 max-md:flex-col">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Activity Log</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Activity Log</h2>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">Recent sandbox creation, backup, restore, catalog, and support actions recorded by the controller.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -72,10 +72,10 @@ export default function ActivityPanel() {
 
       <div className="mt-4 space-y-2">
         {pageEntries.map((entry) => (
-          <div key={entry.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3">
+          <div key={entry.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="truncate text-xs font-mono text-[var(--foreground)]">{entry.message}</p>
+                <p className="truncate text-xs font-mono text-[var(--foreground-hex)]">{entry.message}</p>
                 <p className="mt-1 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">
                   {entry.sandboxName || entry.type} / {new Date(entry.timestamp).toLocaleString()}
                 </p>
@@ -87,7 +87,7 @@ export default function ActivityPanel() {
           </div>
         ))}
         {entries.length === 0 && (
-          <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 text-sm text-[var(--foreground-dim)]">
+          <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 text-sm text-[var(--foreground-dim)]">
             No activity recorded yet.
           </div>
         )}
@@ -107,7 +107,7 @@ export default function ActivityPanel() {
             >
               Newer
             </button>
-            <span className="font-mono text-[var(--foreground)]">
+            <span className="font-mono text-[var(--foreground-hex)]">
               Page {safePage + 1} / {pageCount}
             </span>
             <button

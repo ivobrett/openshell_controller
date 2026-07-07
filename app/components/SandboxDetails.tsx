@@ -78,7 +78,7 @@ export default function SandboxDetails({
           <svg className="w-16 h-16 mx-auto mb-4 text-[var(--foreground-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
-          <h3 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">Select a Sandbox</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">Select a Sandbox</h3>
           <p className="text-xs text-[var(--foreground-dim)] mt-2">
             Choose a sandbox from the menu to view details
           </p>
@@ -93,7 +93,7 @@ export default function SandboxDetails({
       <div className="panel p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-mono font-semibold text-[var(--foreground)] uppercase tracking-tight">
+            <h2 className="text-lg font-mono font-semibold text-[var(--foreground-hex)] uppercase tracking-tight">
               {sandboxName}
             </h2>
             <div className="flex items-center gap-4 mt-3">
@@ -118,7 +118,7 @@ export default function SandboxDetails({
 
       {/* Telemetry Grid - Technical */}
       <div className="panel p-6">
-        <h3 className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wider mb-4">
+        <h3 className="text-xs font-semibold text-[var(--foreground-hex)] uppercase tracking-wider mb-4">
           TELEMETRY
         </h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -170,7 +170,7 @@ export default function SandboxDetails({
 
       {/* Configuration - Technical */}
       <div className="panel p-6">
-        <h3 className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wider mb-4">
+        <h3 className="text-xs font-semibold text-[var(--foreground-hex)] uppercase tracking-wider mb-4">
           SANDBOX CONFIGURATION
         </h3>
         <div className="space-y-2">
@@ -186,7 +186,7 @@ export default function SandboxDetails({
                   onChange={() => toggleConfig(item.name)}
                   className="w-4 h-4 rounded-sm border-[var(--border-medium)] bg-[var(--metric-bg)] text-[var(--nvidia-green)] focus:ring-[var(--nvidia-green)] focus:ring-offset-0"
                 />
-                <span className="text-sm font-mono text-[var(--foreground)]">
+                <span className="text-sm font-mono text-[var(--foreground-hex)]">
                   {item.name.replace(/([A-Z])/g, ' $1').trim().toUpperCase()}
                 </span>
               </div>

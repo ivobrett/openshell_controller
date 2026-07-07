@@ -82,7 +82,7 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
       >
         <div>
           <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">Operator Checks</p>
-          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Sandbox Health</h2>
+          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Sandbox Health</h2>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">OpenShell reachability, runtime state, SSH config, and backup coverage.</p>
         </div>
         <svg
@@ -104,7 +104,7 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
               <select
                 value={selectedSandbox?.id || ""}
                 onChange={(event) => setSelectedSandboxId(event.target.value)}
-                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:border-[var(--nvidia-green)] focus:outline-none"
+                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:border-[var(--nvidia-green)] focus:outline-none"
               >
                 {sandboxes.map((sandbox) => (
                   <option key={sandbox.id} value={sandbox.id}>
@@ -118,7 +118,7 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
           {selectedSandbox ? (
             <SandboxHealthPanel sandbox={selectedSandbox} />
           ) : (
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 text-sm text-[var(--foreground-dim)]">
+            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 text-sm text-[var(--foreground-dim)]">
               No sandboxes are available for health checks yet.
             </div>
           )}
@@ -188,7 +188,7 @@ function McpHealthAccordion() {
       >
         <div>
           <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">Operator Checks</p>
-          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">MCP Server Health</h2>
+          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">MCP Server Health</h2>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">Starts each enabled MCP server from the control host and lists its tools.</p>
         </div>
         <svg
@@ -216,16 +216,16 @@ function McpHealthAccordion() {
           {message && <div className="rounded-sm border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">{message}</div>}
 
           {checks.length === 0 ? (
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 text-sm text-[var(--foreground-dim)]">
+            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 text-sm text-[var(--foreground-dim)]">
               {loading ? "Checking enabled MCP servers..." : "No enabled MCP servers to check."}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {checks.map((check) => (
-                <div key={check.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
+                <div key={check.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="truncate text-sm font-mono font-semibold text-[var(--foreground)]">{check.name}</h3>
+                      <h3 className="truncate text-sm font-mono font-semibold text-[var(--foreground-hex)]">{check.name}</h3>
                       <p className="mt-1 break-all text-[11px] font-mono text-[var(--foreground-dim)]">{check.command} {check.args.join(" ")}</p>
                     </div>
                     <span className={`status-chip px-2 py-1 ${check.ok ? "bg-[var(--status-running-bg)] text-[var(--status-running)]" : "bg-[var(--status-error-bg)] text-[var(--status-error)]"}`}>
@@ -276,7 +276,7 @@ export default function HelpPanel({
         <div className="flex items-start justify-between gap-4 max-md:flex-col">
           <div>
             <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">Operator Guide</p>
-            <h1 className="mt-2 text-xl font-semibold uppercase tracking-wider text-[var(--foreground)]">Help</h1>
+            <h1 className="mt-2 text-xl font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Help</h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--foreground-dim)]">
               Quick reference for running sandboxes, moving files, preserving work, and cloning a prepared environment.
             </p>
@@ -290,7 +290,7 @@ export default function HelpPanel({
       <section className="panel p-5">
         <div className="flex items-start justify-between gap-4 max-md:flex-col">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">API Reference</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">API Reference</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--foreground-dim)]">
               Swagger opens the controller-node API reference in a separate page, including OpenAPI JSON, endpoint details, schemas, and example payloads.
             </p>
@@ -309,7 +309,7 @@ export default function HelpPanel({
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {helpSections.map((section) => (
           <article key={section.title} className="panel p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">{section.title}</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">{section.title}</h2>
             <ul className="mt-4 space-y-3">
               {section.items.map((item) => (
                 <li key={item} className="flex gap-3 text-sm leading-6 text-[var(--foreground-dim)]">
@@ -323,7 +323,7 @@ export default function HelpPanel({
       </section>
 
       <section className="panel p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground)]">Common Paths</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Common Paths</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           {[
             ["/sandbox", "Primary writable workspace for persisted sandbox contents."],
@@ -349,7 +349,7 @@ export default function HelpPanel({
             className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]"
           />
           <span>
-            <span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">
+            <span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)]">
               Enable Telemetry Bar - EXPERIMENTAL
             </span>
             <span className="mt-1 block text-xs leading-5 text-[var(--foreground-dim)]">

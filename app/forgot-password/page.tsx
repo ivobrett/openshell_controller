@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
             value={recoveryToken}
             onChange={(event) => setRecoveryToken(event.target.value)}
             autoFocus
-            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
           />
         </label>
 
@@ -58,7 +58,7 @@ export default function ForgotPasswordPage() {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
           />
         </label>
 
@@ -68,7 +68,7 @@ export default function ForgotPasswordPage() {
             type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
-            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--nvidia-green)]"
+            className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm text-[var(--foreground-hex)] outline-none focus:border-[var(--nvidia-green)]"
           />
         </label>
 

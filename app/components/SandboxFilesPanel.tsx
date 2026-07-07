@@ -184,7 +184,7 @@ export default function SandboxFilesPanel({
       {showHeader && (
         <div className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
           <div>
-            <h4 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">
+            <h4 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">
               {sandbox.name} - FILE TRANSFER
             </h4>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">
@@ -197,7 +197,7 @@ export default function SandboxFilesPanel({
       <div className={`${showHeader ? "mt-5" : ""} grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)] gap-5`}>
         <section className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-4">
           <div>
-            <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Upload</h5>
+            <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Upload</h5>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">Destination must be under /sandbox or /tmp.</p>
           </div>
           <input
@@ -207,7 +207,7 @@ export default function SandboxFilesPanel({
               setSelectedFile(event.target.files?.[0] || null)
               setSelectedDirectoryFiles([])
             }}
-            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground)]"
+            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-hex)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground-hex)]"
           />
           <input
             type="file"
@@ -218,7 +218,7 @@ export default function SandboxFilesPanel({
               setSelectedDirectoryFiles(Array.from(event.target.files || []))
               setSelectedFile(null)
             }}
-            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground)]"
+            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-hex)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground-hex)]"
           />
           <div className="space-y-2">
             <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Destination Path</label>
@@ -226,7 +226,7 @@ export default function SandboxFilesPanel({
               value={uploadPath}
               onChange={(event) => setUploadPath(event.target.value)}
               placeholder="/sandbox/file.txt"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
             />
             {selectedFile && (
               <p className="text-[11px] font-mono text-[var(--foreground-dim)]">Target: {suggestedUploadPath}</p>
@@ -248,7 +248,7 @@ export default function SandboxFilesPanel({
 
         <section className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-4">
           <div>
-            <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Download</h5>
+            <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Download</h5>
             <p className="mt-1 text-xs text-[var(--foreground-dim)]">Browse sandbox files or enter a file or directory path under /sandbox or /tmp.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
@@ -256,7 +256,7 @@ export default function SandboxFilesPanel({
               value={listPath}
               onChange={(event) => setListPath(event.target.value)}
               placeholder="/sandbox"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
             />
             <button
               type="button"
@@ -275,7 +275,7 @@ export default function SandboxFilesPanel({
               Up
             </button>
           </div>
-          <div className="overflow-hidden rounded-sm border border-[var(--border-subtle)] bg-[var(--background)]">
+          <div className="overflow-hidden rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)]">
             <div className="grid grid-cols-[1fr_84px_116px_76px] gap-3 border-b border-[var(--border-subtle)] px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] max-md:grid-cols-[1fr_72px]">
               <span>Name</span>
               <span className="max-md:hidden">Size</span>
@@ -305,7 +305,7 @@ export default function SandboxFilesPanel({
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <span className={`h-2 w-2 shrink-0 rounded-full ${entry.type === "directory" ? "bg-[var(--nvidia-green)]" : "bg-[var(--foreground-dim)]"}`} />
-                        <span className="truncate text-xs font-mono text-[var(--foreground)]">{entry.name}</span>
+                        <span className="truncate text-xs font-mono text-[var(--foreground-hex)]">{entry.name}</span>
                       </span>
                     </button>
                     <span className="text-xs font-mono text-[var(--foreground-dim)] max-md:hidden">{entry.type === "directory" ? "dir" : formatBytes(entry.size)}</span>
@@ -339,7 +339,7 @@ export default function SandboxFilesPanel({
               value={downloadPath}
               onChange={(event) => setDownloadPath(event.target.value)}
               placeholder="/sandbox/file.txt"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
             />
           </div>
           <button

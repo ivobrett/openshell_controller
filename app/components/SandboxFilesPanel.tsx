@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import type { SandboxInventoryItem } from "../hooks/useSandboxInventory"
+import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 type SandboxFileEntry = {
   name: string

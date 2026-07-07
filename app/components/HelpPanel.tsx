@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import ActivityPanel from "./ActivityPanel"
 import SandboxHealthPanel from "./SandboxHealthPanel"
-import type { SandboxInventoryItem } from "../hooks/useSandboxInventory"
+import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 const helpSections = [
   {

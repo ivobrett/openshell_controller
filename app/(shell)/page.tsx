@@ -1,19 +1,22 @@
 "use client"
 
-import { useEffect, useMemo, useState, Suspense } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { toast } from "sonner"
-import SandboxList from "@/app/components/SandboxList"
-import ActivityPanel from "@/app/components/ActivityPanel"
+import { Card } from "@/app/components/ui/card"
+import { Button } from "@/app/components/ui/button"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
+import { PageHeader } from "@/app/components/PageHeader"
+import { StatusLed } from "@/app/components/StatusLed"
+import { SandboxTable } from "@/app/components/sandbox/SandboxTable"
+import { GatewayRepairButton } from "@/app/components/GatewayRepairButton"
 import LiveTelemetryBar from "@/app/components/LiveTelemetryBar"
-import { useSandboxInventory } from "@/app/hooks/useSandboxInventory"
-import {
-  createHydrationSafeDashboardSessionState,
-  buildOperatorTerminalRoute,
-  loadDashboardSessionState,
-  persistDashboardSessionState,
-  updateDashboardSessionSelection,
-} from "@/app/lib/dashboardSession"
+import { useInventory, useActivity, usePermissionFeeds } from "@/app/hooks/queries"
+import { loadDismissedPermissionAlerts } from "@/app/lib/permissionAlerts"
+import { relativeTime } from "@/app/lib/format"
+import { useAuth } from "@/app/components/providers/AuthProvider"
+import { createHydrationSafeDashboardSessionState, loadDashboardSessionState } from "@/app/lib/dashboardSession"
 
 const TELEMETRY_BAR_ENABLED_KEY = "openshell-control.telemetry-bar-enabled"
 
@@ -30,104 +33,59 @@ function DeniedToast() {
   return null
 }
 
+function ActivityDot({ status }: { status?: string }) {
+  const cls =
+    status === "success"
+      ? "bg-success"
+      : status === "error"
+        ? "bg-destructive"
+        : status === "warning"
+          ? "bg-warning"
+          : "bg-muted-foreground"
+  return <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${cls}`} />
+}
+
 export default function DashboardPage() {
-  const [dashboardSession, setDashboardSession] = useState(() =>
-    createHydrationSafeDashboardSessionState(),
+  const { me, can } = useAuth()
+  const { sandboxes, nemoclaw, isLoading, error, refetch } = useInventory()
+  const activityQuery = useActivity(5)
+  const recentActivity = can("viewActivity") ? (activityQuery.data ?? []).slice(0, 5) : []
+
+  const approvalSandboxes = can("approvePermissions") ? sandboxes : []
+  const feedQuery = usePermissionFeeds(approvalSandboxes)
+  const feeds = feedQuery.data ?? {}
+  const dismissedAlerts = loadDismissedPermissionAlerts()
+
+  const [dashboardSessionId, setDashboardSessionId] = useState(
+    () => createHydrationSafeDashboardSessionState().dashboardSessionId,
   )
-  const [isDestroyMode, setIsDestroyMode] = useState(false)
-  const [deletingSandboxId, setDeletingSandboxId] = useState<string | null>(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [lifecycleMessage, setLifecycleMessage] = useState<string | null>(null)
-  const [deleteInProgress, setDeleteInProgress] = useState(false)
   const [telemetryBarEnabled, setTelemetryBarEnabled] = useState(false)
 
-  const { sandboxes, nemoclaw, loading, error, refresh } = useSandboxInventory({ enabled: true })
-
   useEffect(() => {
-    setDashboardSession(loadDashboardSessionState())
+    const s = loadDashboardSessionState()
+    setDashboardSessionId(s.dashboardSessionId)
     setTelemetryBarEnabled(window.localStorage.getItem(TELEMETRY_BAR_ENABLED_KEY) === "true")
   }, [])
 
-  useEffect(() => {
-    persistDashboardSessionState(dashboardSession)
-  }, [dashboardSession])
+  const running = sandboxes.filter((s) => s.status === "running" && s.ready).length
+  const total = sandboxes.length
+  const needsAction = can("approvePermissions")
+    ? sandboxes.reduce((n, s) => {
+        const feed = feeds[s.id]
+        const pending = (feed?.pending || []).filter(
+          (r) => !dismissedAlerts[s.id]?.includes(r.chunkId),
+        ).length
+        return n + pending
+      }, 0)
+    : 0
 
-  useEffect(() => {
-    if (loading) return
-    if (sandboxes.length === 0) {
-      if (dashboardSession.selectedSandboxId)
-        setDashboardSession((s) => updateDashboardSessionSelection(s, null))
-      return
-    }
-    const stillExists = sandboxes.some((s) => s.id === dashboardSession.selectedSandboxId)
-    if (stillExists) return
-    const next = sandboxes.find((s) => s.isDefault)?.id || sandboxes[0]?.id || null
-    setDashboardSession((s) => updateDashboardSessionSelection(s, next))
-  }, [dashboardSession.selectedSandboxId, loading, sandboxes])
+  const gatewayAvailable = nemoclaw?.available ?? false
 
-  const selectedSandbox = useMemo(
-    () => sandboxes.find((s) => s.id === dashboardSession.selectedSandboxId) ?? null,
-    [sandboxes, dashboardSession.selectedSandboxId],
-  )
-  const deletingSandbox = useMemo(
-    () => sandboxes.find((s) => s.id === deletingSandboxId) ?? null,
-    [sandboxes, deletingSandboxId],
-  )
-
-  const handleSandboxSelect = (id: string | null) => {
-    if (isDestroyMode && id) {
-      setDeletingSandboxId(id)
-      setShowDeleteConfirm(true)
-    } else {
-      setDashboardSession((s) => updateDashboardSessionSelection(s, id))
-    }
-  }
-
-  const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
-
-  const refreshUntilSandboxGone = async (sandboxId: string, sandboxName: string) => {
-    for (let i = 0; i < 10; i++) {
-      const latest = await refresh({ force: true })
-      if (!latest.find((s) => s.id === sandboxId || s.name === sandboxName))
-        return { latest, gone: true }
-      await sleep(1500)
-    }
-    return { latest: await refresh({ force: true }), gone: false }
-  }
-
-  const confirmDelete = async () => {
-    if (!deletingSandboxId || deleteInProgress) return
-    const sandbox = sandboxes.find((s) => s.id === deletingSandboxId)
-    const sandboxName = sandbox?.name ?? deletingSandboxId
-    try {
-      setDeleteInProgress(true)
-      setLifecycleMessage(`Destroying sandbox ${sandboxName}…`)
-      const r = await fetch("/api/sandbox/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sandboxName, agent: sandbox?.agent || "openclaw" }),
-      })
-      const data = await r.json()
-      if (!r.ok) throw new Error([data.error, data.stdout, data.stderr].filter(Boolean).join("\n\n") || "Failed to destroy sandbox")
-      const { gone } = await refreshUntilSandboxGone(deletingSandboxId, sandboxName)
-      setDashboardSession((s) =>
-        updateDashboardSessionSelection(s, s.selectedSandboxId === deletingSandboxId ? null : s.selectedSandboxId),
-      )
-      toast[gone ? "success" : "warning"](
-        gone ? `Sandbox ${sandboxName} destroyed.` : `Delete started for ${sandboxName}. Inventory still reports it while cleanup finishes.`,
-      )
-      setLifecycleMessage(null)
-      setShowDeleteConfirm(false)
-      setDeletingSandboxId(null)
-      setIsDestroyMode(false)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to destroy sandbox"
-      setLifecycleMessage(msg)
-      toast.error(msg)
-    } finally {
-      setDeleteInProgress(false)
-    }
-  }
+  const headerDesc = isLoading
+    ? "Loading…"
+    : total > 0
+      ? `${running} running · ${total} total · gateway ${gatewayAvailable ? "available" : "not detected"}`
+      : `Gateway ${gatewayAvailable ? "available" : "not detected"}`
 
   return (
     <>
@@ -137,101 +95,131 @@ export default function DashboardPage() {
 
       {telemetryBarEnabled && <LiveTelemetryBar />}
 
-      {/* Destroy mode banner */}
-      {isDestroyMode && (
-        <div className="mb-4 flex items-center gap-3 rounded-md border-2 border-[var(--status-stopped)] bg-[var(--status-stopped-bg)] px-4 py-3">
-          <p className="flex-1 text-sm font-mono uppercase tracking-wider text-[var(--status-stopped)]">
-            Destroy mode — select a sandbox to delete it
-          </p>
-          <button
-            onClick={() => { setIsDestroyMode(false); setDeletingSandboxId(null) }}
-            className="action-button px-3 py-1.5 text-xs"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+      <PageHeader
+        title="Sandboxes"
+        description={headerDesc}
+        actions={
+          can("createSandbox") ? (
+            <Button asChild>
+              <Link href="/sandboxes/new">New sandbox</Link>
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {lifecycleMessage && (
-        <div className="mb-4 panel p-3 text-xs text-[var(--foreground-dim)] whitespace-pre-wrap" data-testid="sandbox-lifecycle-message">
-          {lifecycleMessage}
-        </div>
-      )}
-
-      {/* Activity panel */}
-      <div className="mb-6">
-        <ActivityPanel />
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-3 mb-6 lg:grid-cols-4">
+        <Card className="p-4 space-y-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Total</p>
+          <p className="text-2xl font-semibold font-mono">{total}</p>
+        </Card>
+        <Card className="p-4 space-y-1">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Running</p>
+          <div className="flex items-center gap-2">
+            <StatusLed status={running > 0 ? "running" : "stopped"} ready={running > 0} dotOnly />
+            <p className="text-2xl font-semibold font-mono">{running}</p>
+          </div>
+        </Card>
+        {can("approvePermissions") && (
+          <Card className="p-4 space-y-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Needs action</p>
+            <p className={`text-2xl font-semibold font-mono ${needsAction > 0 ? "text-warning" : ""}`}>
+              {needsAction}
+            </p>
+          </Card>
+        )}
+        {me.role === "operator" && (
+          <Card className="p-4 space-y-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Gateway</p>
+            <div className="flex items-center gap-2">
+              <StatusLed status={gatewayAvailable ? "running" : "stopped"} ready={gatewayAvailable} dotOnly />
+              <p className="text-xs font-mono">{gatewayAvailable ? "available" : "not detected"}</p>
+            </div>
+          </Card>
+        )}
       </div>
 
-      {/* Sandbox inventory */}
-      {loading ? (
-        <div className="flex items-center justify-center h-48" data-testid="inventory-loading-state">
-          <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Initializing…</p>
-        </div>
-      ) : error ? (
-        <div className="panel p-8 text-center" data-testid="inventory-error-state">
-          <h3 className="text-sm font-semibold text-[var(--status-stopped)] uppercase tracking-wider">Inventory Unavailable</h3>
-          <p className="mt-2 text-xs font-mono text-muted-foreground">{error}</p>
-        </div>
-      ) : sandboxes.length === 0 ? (
-        <div className="panel p-8 text-center" data-testid="inventory-empty-state">
-          <svg className="w-12 h-12 mx-auto mb-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-          </svg>
-          <h3 className="text-sm font-semibold uppercase tracking-wider">No Sandboxes Detected</h3>
-          <p className="mt-2 text-xs text-muted-foreground">No live OpenShell sandboxes reported yet</p>
-        </div>
-      ) : (
-        <SandboxList
-          sandboxes={sandboxes}
-          nemoclaw={nemoclaw}
-          selectedSandboxId={dashboardSession.selectedSandboxId}
-          selectedSandbox={selectedSandbox}
-          onSandboxSelect={handleSandboxSelect}
-          isDestroyMode={isDestroyMode}
-          onInventoryRefresh={refresh}
-          dashboardSessionId={dashboardSession.dashboardSessionId}
-        />
+      {/* Error state (no data ever loaded) */}
+      {error && (
+        <Alert variant="destructive" className="mb-6" data-testid="inventory-error-state">
+          <AlertDescription className="space-y-3">
+            <p className="font-mono text-xs">{error}</p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => refetch()}>
+                Retry
+              </Button>
+              {me.role === "operator" && <GatewayRepairButton />}
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Destroy confirm modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="panel w-[min(92vw,28rem)] p-8 border-2 border-[var(--status-stopped)]">
-            <div className="flex items-center gap-4 mb-4">
-              <svg className="w-12 h-12 text-[var(--status-stopped)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      {/* Main content: table + recent activity */}
+      <div className="xl:flex xl:gap-6">
+        {/* Sandbox table */}
+        <div className="flex-1 min-w-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48" data-testid="inventory-loading-state">
+              <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Initializing…</p>
+            </div>
+          ) : !error && sandboxes.length === 0 ? (
+            <div className="py-16 text-center space-y-3" data-testid="inventory-empty-state">
+              <svg className="w-12 h-12 mx-auto text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
-              <h2 className="text-lg font-semibold text-[var(--status-stopped)] uppercase tracking-wider">
-                Warning: Destructive Action
-              </h2>
+              <h3 className="text-sm font-semibold uppercase tracking-wider">No sandboxes yet</h3>
+              <p className="text-xs text-muted-foreground">
+                {can("createSandbox")
+                  ? "Create your first sandbox to get started."
+                  : "Ask your operator to grant you access to a sandbox."}
+              </p>
+              {can("createSandbox") && (
+                <Button asChild size="sm">
+                  <Link href="/sandboxes/new">New sandbox</Link>
+                </Button>
+              )}
             </div>
-            <p className="text-sm mb-6">
-              Destroying <strong>{deletingSandbox?.name ?? "this sandbox"}</strong> will permanently delete it and it will not be recoverable. Are you sure?
-            </p>
-            {lifecycleMessage && (
-              <div className="mb-4 panel p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-                {lifecycleMessage}
-              </div>
-            )}
-            <div className="flex gap-4">
-              <button
-                onClick={confirmDelete}
-                disabled={deleteInProgress}
-                className="flex-1 px-4 py-2 rounded-sm bg-[var(--status-stopped)] text-white text-xs font-mono uppercase tracking-wider hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {deleteInProgress ? "Destroying…" : "Yes — Destroy"}
-              </button>
-              <button
-                onClick={() => { setShowDeleteConfirm(false); setDeletingSandboxId(null) }}
-                className="flex-1 px-4 py-2 rounded-sm action-button"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          ) : !error ? (
+            <SandboxTable
+              sandboxes={sandboxes}
+              permissionFeeds={feeds}
+              dismissedAlerts={dismissedAlerts}
+              dashboardSessionId={dashboardSessionId}
+            />
+          ) : null}
         </div>
-      )}
+
+        {/* Recent activity */}
+        {can("viewActivity") && (
+          <div className="mt-6 xl:mt-0 xl:w-80 shrink-0">
+            <Card className="p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Recent activity
+              </h3>
+              {recentActivity.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No recent activity.</p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {recentActivity.map((entry) => (
+                    <li key={entry.id} className="flex items-start gap-2 min-w-0">
+                      <ActivityDot status={entry.status} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs truncate">{entry.message}</p>
+                        <p className="text-[10px] font-mono text-muted-foreground">{relativeTime(entry.timestamp)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-3 pt-3 border-t border-border">
+                <Link href="/activity" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  View all →
+                </Link>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
     </>
   )
 }

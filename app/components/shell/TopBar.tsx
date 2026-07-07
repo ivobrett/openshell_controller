@@ -1,16 +1,17 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { Menu, Sun, Moon } from "lucide-react"
+import { Menu, Sun, Moon, RefreshCw, LogOut } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/app/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/app/components/ui/sheet"
 import { useAuth } from "@/app/components/providers/AuthProvider"
 import { useTheme } from "@/app/lib/useTheme"
+import { useConnectionHealth } from "@/app/hooks/useConnectionHealth"
+import { ApprovalsBell } from "@/app/components/ApprovalsBell"
 import { visibleNavItems } from "./nav"
 import Link from "next/link"
 import { cn } from "@/app/lib/utils"
-import { LogOut } from "lucide-react"
 
 function breadcrumb(pathname: string): string {
   if (pathname === "/") return "Dashboard"
@@ -38,6 +39,7 @@ export function TopBar() {
   const pathname = usePathname()
   const { me } = useAuth()
   const { theme, toggle } = useTheme()
+  const { reconnecting } = useConnectionHealth()
   const [sheetOpen, setSheetOpen] = useState(false)
   const items = visibleNavItems(me.capabilities)
 
@@ -61,6 +63,17 @@ export function TopBar() {
       <p className="flex-1 text-sm font-medium text-foreground truncate">
         {breadcrumb(pathname)}
       </p>
+
+      {/* Reconnecting badge */}
+      {reconnecting && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          <span className="hidden sm:inline">Reconnecting…</span>
+        </div>
+      )}
+
+      {/* Approvals bell */}
+      <ApprovalsBell />
 
       {/* Theme toggle — right side on mobile (sidebar is hidden) */}
       <Button

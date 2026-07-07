@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import McpConfigurationPanel from "@/app/components/McpConfigurationPanel"
 import { PageHeader } from "@/app/components/PageHeader"
-import { useSandboxInventory } from "@/app/hooks/useSandboxInventory"
+import { useInventory } from "@/app/hooks/queries"
 
 export default function McpPage() {
-  const { sandboxes } = useSandboxInventory({ enabled: true })
+  const { sandboxes } = useInventory()
   return (
     <>
       <PageHeader title="MCP" description="Model Context Protocol server configuration." />

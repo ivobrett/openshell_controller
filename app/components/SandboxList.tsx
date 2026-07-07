@@ -9,7 +9,7 @@ import SandboxArchivePanel from './SandboxArchivePanel'
 import SandboxFilesPanel from './SandboxFilesPanel'
 import SandboxInferencePanel from './SandboxInferencePanel'
 import { buildOperatorTerminalRoute } from '../lib/dashboardSession'
-import type { NemoClawSummary, SandboxInventoryItem } from '../hooks/useSandboxInventory'
+import type { NemoClawSummary, SandboxInventoryItem } from '../hooks/inventoryModel'
 
 interface TelemetryData {
   cpu: number

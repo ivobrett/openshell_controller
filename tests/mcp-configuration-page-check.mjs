@@ -330,6 +330,6 @@ assert.match(sandboxListSource, /Revoke/, 'Sandbox MCP access controls must incl
 assert.match(sidebarSource, /href:.*\/mcp/, 'Sidebar nav must include an MCP navigation item')
 assert.match(sidebarSource, /manageMcp/, 'Sidebar MCP item must be gated by manageMcp capability')
 assert.match(pageSource, /McpConfigurationPanel/, 'Dashboard must render MCP configuration panel')
-assert.match(pageSource, /useSandboxInventory/, 'MCP page must load sandbox inventory for access configuration')
+assert.match(pageSource, /useInventory/, 'MCP page must load sandbox inventory for access configuration')
 
 console.log('mcp-configuration-page-check: PASS MCP dashboard assertions')

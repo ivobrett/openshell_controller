@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { SandboxInventoryItem } from "../hooks/useSandboxInventory"
+import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 type HealthCheck = {
   key: string

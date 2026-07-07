@@ -18,7 +18,21 @@ const FALLBACK: AuthMe = {
   email: null, capabilities: null, allowedSandboxes: [],
 }
 
-const AuthContext = createContext<{ me: AuthMe; isLoading: boolean }>({ me: FALLBACK, isLoading: true })
+type AuthContextValue = {
+  me: AuthMe
+  isLoading: boolean
+  can: (cap: keyof Capabilities) => boolean
+}
+
+function makeCan(me: AuthMe) {
+  return (cap: keyof Capabilities) => Boolean(me.capabilities?.[cap])
+}
+
+const AuthContext = createContext<AuthContextValue>({
+  me: FALLBACK,
+  isLoading: true,
+  can: () => false,
+})
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data, isLoading } = useQuery({
@@ -27,8 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     staleTime: 60_000,
     refetchOnWindowFocus: true,
   })
+  const me = data ?? FALLBACK
   return (
-    <AuthContext.Provider value={{ me: data ?? FALLBACK, isLoading }}>
+    <AuthContext.Provider value={{ me, isLoading, can: makeCan(me) }}>
       {children}
     </AuthContext.Provider>
   )
@@ -40,6 +55,6 @@ export function useAuth() {
 
 /** Convenience: `can('deleteSandbox')` — false while loading or anonymous. */
 export function useCan() {
-  const { me } = useAuth()
-  return (cap: keyof Capabilities) => Boolean(me.capabilities?.[cap])
+  const { can } = useAuth()
+  return can
 }

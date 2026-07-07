@@ -3,12 +3,12 @@
 import { useState } from "react"
 import HelpPanel from "@/app/components/HelpPanel"
 import { PageHeader } from "@/app/components/PageHeader"
-import { useSandboxInventory } from "@/app/hooks/useSandboxInventory"
+import { useInventory } from "@/app/hooks/queries"
 
 const TELEMETRY_BAR_ENABLED_KEY = "openshell-control.telemetry-bar-enabled"
 
 export default function HelpPage() {
-  const { sandboxes } = useSandboxInventory({ enabled: false })
+  const { sandboxes } = useInventory()
   const [telemetryBarEnabled, setTelemetryBarEnabled] = useState(() => {
     if (typeof window === "undefined") return false
     return window.localStorage.getItem(TELEMETRY_BAR_ENABLED_KEY) === "true"

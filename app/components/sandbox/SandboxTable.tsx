@@ -120,10 +120,16 @@ export function SandboxTable({
   }
 
   const copyLink = async (type: "terminal" | "dashboard", sandbox: SandboxInventoryItem) => {
+    // Hermes sandboxes expose the Hermes web dashboard via the controller proxy;
+    // OpenClaw sandboxes use the launch page. Both are access-controlled server-side.
+    const dashboardPath =
+      sandbox.agent === "hermes"
+        ? `/api/sandbox/${encodeURIComponent(sandbox.name)}/hermes/dashboard/proxy/`
+        : `/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`
     const url =
       type === "terminal"
         ? window.location.origin + buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId })
-        : window.location.origin + `/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`
+        : window.location.origin + dashboardPath
     try {
       await navigator.clipboard.writeText(url)
       toast.success(type === "terminal" ? "Terminal link copied" : "Dashboard link copied")
@@ -189,7 +195,6 @@ export function SandboxTable({
   }
 
   const renderRowMenu = (sandbox: SandboxInventoryItem) => {
-    const isHermes = sandbox.agent === "hermes"
     const isCustom = sandbox.agent === "custom"
     const isRestarting = restartingId === sandbox.id
     return (
@@ -206,7 +211,7 @@ export function SandboxTable({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={() => copyLink("terminal", sandbox)}>Copy terminal link</DropdownMenuItem>
-          {!isHermes && !isCustom && (
+          {!isCustom && (
             <DropdownMenuItem onClick={() => copyLink("dashboard", sandbox)}>Copy dashboard link</DropdownMenuItem>
           )}
           {can("deleteSandbox") && (

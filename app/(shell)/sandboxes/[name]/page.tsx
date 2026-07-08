@@ -424,10 +424,15 @@ function SandboxDetailInner({ name }: { name: string }) {
                 >
                   Copy terminal link
                 </DropdownMenuItem>
-                {isOpenClaw && (
+                {!isCustom && (
                   <DropdownMenuItem
                     onClick={() =>
-                      copyLink(`/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`, "Dashboard link")
+                      copyLink(
+                        isHermes
+                          ? `/api/sandbox/${encodeURIComponent(sandbox.name)}/hermes/dashboard/proxy/`
+                          : `/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`,
+                        "Dashboard link",
+                      )
                     }
                   >
                     Copy dashboard link

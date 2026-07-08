@@ -47,7 +47,7 @@ export function TopBar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href)
 
   return (
-    <header className="fixed top-0 left-0 right-0 lg:left-60 z-10 flex h-14 items-center border-b border-border bg-background/95 backdrop-blur px-4 gap-3">
+    <header className="fixed top-0 left-0 right-0 lg:left-60 z-10 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center border-b border-border bg-background/95 backdrop-blur px-4 gap-3 pt-[env(safe-area-inset-top)]">
       {/* Hamburger — mobile only */}
       <Button
         variant="ghost"

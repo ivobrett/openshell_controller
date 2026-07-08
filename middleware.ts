@@ -16,6 +16,9 @@ const PUBLIC_PATHS = [
   "/favicon.ico",
   "/favicon.svg",
   "/favicon-32.png",
+  "/manifest.webmanifest",
+  "/icon-192.png",
+  "/icon-512.png",
 ]
 const BROKER_PATHS = [
   "/api/mcp/broker",

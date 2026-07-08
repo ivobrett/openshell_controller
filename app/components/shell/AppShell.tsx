@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <TopBar />
 
       {/* Main content */}
-      <main className="lg:pl-60 pt-14 pb-20 lg:pb-6">
+      <main className="lg:pl-60 pt-[calc(3.5rem+env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
         <div className="mx-auto max-w-7xl p-4 md:p-6">
           {children}
         </div>

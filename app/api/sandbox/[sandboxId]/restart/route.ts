@@ -30,14 +30,7 @@ async function runOpenShell(args: string[], timeout = 30000) {
 }
 
 async function runSandboxShell(sandboxName: string, script: string, timeout = 30000) {
-  // `openshell sandbox exec` rejects arguments containing newlines, so pass the
-  // multi-line script base64-encoded and decode it inside the sandbox (same
-  // pattern used elsewhere for newline-bearing exec payloads).
-  const encoded = Buffer.from(script, "utf8").toString("base64")
-  return runOpenShell(
-    ["sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", `echo ${encoded} | base64 -d | sh`],
-    timeout,
-  )
+  return runOpenShell(["sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", script], timeout)
 }
 
 async function waitForSandboxReady(sandboxName: string, timeoutMs: number, intervalMs: number) {
@@ -76,18 +69,13 @@ function restartOpenClawGatewayScript() {
     "elif [ -x /usr/local/bin/openclaw ]; then openclaw_bin=/usr/local/bin/openclaw;",
     "else echo 'openclaw command not found in sandbox' >&2; exit 127; fi",
     "nohup \"$openclaw_bin\" gateway run --allow-unconfigured --bind loopback --port \"$port\" >/tmp/gateway.log 2>&1 &",
-    // Fire-and-forget: don't block on the gateway becoming HTTP-responsive. A
-    // cold agent can take a while to warm up (e.g. while resolving its
-    // inference endpoint), during which the HTTP poll would false-fail even
-    // though the gateway is coming up fine. Just confirm the process spawned.
-    "sleep 2",
-    "if pgrep -f 'openclaw gateway run' >/dev/null 2>&1; then",
-    "  echo 'OpenClaw gateway relaunch dispatched (warming up).'",
-    "  exit 0",
-    "fi",
-    "echo 'OpenClaw gateway relaunch dispatched; process not yet visible. Last log lines:' >&2",
+    "for i in 1 2 3 4 5 6 7 8 9 10; do",
+    "  curl -fsS --max-time 2 \"http://127.0.0.1:$port/\" >/dev/null 2>&1 && exit 0",
+    "  sleep 1",
+    "done",
+    "echo 'OpenClaw gateway did not answer after restart. Last log lines:' >&2",
     "tail -40 /tmp/gateway.log >&2 2>/dev/null || true",
-    "exit 0",
+    "exit 1",
   ].join("\n")
 }
 
@@ -114,20 +102,30 @@ export async function POST(
     }
 
     const nemoclawRecover = await recoverSandboxWithNemoClaw(sandboxName)
-    if (nemoclawRecover.attempted && nemoclawRecover.ok) {
+    if (nemoclawRecover.attempted) {
+      // `nemoclaw <sandbox> recover` IS the recovery path on modern NemoClaw.
+      // Do NOT fall through to the in-sandbox exec relaunch below: current
+      // `openshell sandbox exec` builds wait for backgrounded child processes,
+      // so relaunching the long-running gateway through it hangs until timeout
+      // and surfaces the script source as a scary "Command failed" error. When
+      // recover ran but its probe didn't fully verify, treat it as
+      // fire-and-forget rather than blocking.
       return NextResponse.json({
         ok: true,
-        restarted: true,
+        restarted: nemoclawRecover.ok,
         restartMode: "nemoclaw-recover",
         sandboxId: resolved.id,
         sandboxName,
         readiness,
         nemoclawRecover,
         elapsedMs: Date.now() - startedAt,
-        note: "NemoClaw recover completed. The sandbox runtime and dashboard forward were checked without deleting the sandbox.",
+        note: nemoclawRecover.ok
+          ? "NemoClaw recover completed. The sandbox runtime and dashboard forward were checked without deleting the sandbox."
+          : "NemoClaw recover dispatched (fire-and-forget). It reported the gateway is running but could not fully verify the dashboard forward; give it a moment to settle.",
       })
     }
 
+    // Legacy path only: NemoClaw too old to expose `recover`.
     const runtime = await runSandboxShell(sandboxName, restartOpenClawGatewayScript(), 45000)
 
     return NextResponse.json({

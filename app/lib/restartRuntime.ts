@@ -32,7 +32,13 @@ export async function restartRuntime(sandbox: SandboxInventoryItem): Promise<Res
       `/api/sandbox/${encodeURIComponent(sandbox.id)}/restart`,
       { method: "POST", signal: AbortSignal.timeout(180_000) },
     )
-    // A 2xx response always means restarted:true (the not-Ready case is 409).
+    // restarted:false at 2xx = fire-and-forget dispatch that couldn't fully
+    // verify — surface it as a warning, not a success.
+    if (data.restarted === false) {
+      toast.warning(data.note || `Restart dispatched for ${sandbox.name}.`, { id: toastId })
+      queryClient.invalidateQueries({ queryKey: ["inventory"] })
+      return data
+    }
     const title =
       data.restartMode === "nemoclaw-recover"
         ? `Recovered ${sandbox.name} via NemoClaw`

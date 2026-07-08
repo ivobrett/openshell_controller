@@ -36,7 +36,10 @@ type NemoClawSummary = {
 }
 
 type NemoClawRegistryData = {
-  sandboxes?: Record<string, { name?: string; agent?: string | null }>
+  sandboxes?: Record<
+    string,
+    { name?: string; agent?: string | null; agentVersion?: string | null; hermesAuthMethod?: string | null }
+  >
 }
 
 type SandboxItem = {
@@ -179,6 +182,17 @@ function resolveSandboxAgent(
   const namedEntry = Object.values(entries).find((entry) => entry?.name === name || Boolean(id && entry?.name === id))
   const registryAgent = directEntry?.agent || namedEntry?.agent
   if (typeof registryAgent === "string" && registryAgent.trim()) return registryAgent.trim()
+
+  // The registry `agent` field is sometimes left null even for NemoClaw-built
+  // sandboxes. Infer from other registry signals before falling back to the
+  // container image: docker can report a bare image ID (not the tag) once a
+  // build tag is reused/detached, which makes isNemoClawImage miss and
+  // misclassifies an OpenClaw sandbox as "custom".
+  const entry = directEntry || namedEntry
+  if (entry) {
+    if (typeof entry.hermesAuthMethod === "string" && entry.hermesAuthMethod.trim()) return "hermes"
+    if (typeof entry.agentVersion === "string" && entry.agentVersion.trim()) return "openclaw"
+  }
 
   // No registry entry → use the container image. NemoClaw-built sandboxes
   // get "openclaw" as the default; bare openshell sandboxes are "custom".

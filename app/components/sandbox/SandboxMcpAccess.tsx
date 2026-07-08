@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { queryClient } from "@/app/lib/queryClient"
-import { useMcpServers } from "@/app/hooks/queries"
+import { useMcpServers, useInventory } from "@/app/hooks/queries"
 import type { SandboxInventoryItem } from "@/app/hooks/inventoryModel"
 import type { McpServerAccess } from "@/app/hooks/models"
 
@@ -63,6 +63,7 @@ interface SandboxMcpAccessProps {
 export function SandboxMcpAccess({ sandbox }: SandboxMcpAccessProps) {
   const mcpQuery = useMcpServers()
   const mcpServers = mcpQuery.data ?? []
+  const { sandboxes } = useInventory()
   const [mcpMessage, setMcpMessage] = useState("")
   const [mcpUpdatingServerId, setMcpUpdatingServerId] = useState<string | null>(null)
   const [mcpSyncing, setMcpSyncing] = useState(false)
@@ -114,6 +115,15 @@ export function SandboxMcpAccess({ sandbox }: SandboxMcpAccessProps) {
     const current = new Set(server.allowedSandboxIds)
     current.delete(sandbox.id)
     current.delete(sandbox.name)
+    // An allow_all server grants access via mode alone (allowedSandboxIds is
+    // typically empty), so switching it to allow_only would silently revoke
+    // every OTHER sandbox too. Re-add all peers first. (Ported from the
+    // pre-refactor SandboxList revoke path — restores the load-bearing branch.)
+    if (server.accessMode === "allow_all") {
+      for (const item of sandboxes) {
+        if (item.id !== sandbox.id) current.add(item.id)
+      }
+    }
     try {
       setMcpUpdatingServerId(server.id)
       setMcpMessage("")

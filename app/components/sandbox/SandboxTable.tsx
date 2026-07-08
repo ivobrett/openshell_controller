@@ -113,7 +113,7 @@ export function SandboxTable({
         : window.location.origin + `/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`
     try {
       await navigator.clipboard.writeText(url)
-      toast.success("Dashboard link copied")
+      toast.success(type === "terminal" ? "Terminal link copied" : "Dashboard link copied")
     } catch {
       toast.error("Failed to copy link")
     }

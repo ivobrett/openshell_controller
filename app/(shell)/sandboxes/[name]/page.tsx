@@ -151,24 +151,21 @@ function AgentCapabilitiesCard({
   )
 }
 
-function RuntimeCard({ sandbox, canRestart }: { sandbox: SandboxInventoryItem; canRestart: boolean }) {
-  const [busy, setBusy] = useState(false)
-  const [lastResult, setLastResult] = useState<string | null>(null)
-
+// Controlled by the parent so it shares a single busy flag with the header
+// Restart button — two independent controls could otherwise double-fire a
+// ~2-minute restart (concurrent POSTs / racing gateway kill+relaunch).
+function RuntimeCard({
+  canRestart,
+  busy,
+  lastResult,
+  onRestart,
+}: {
+  canRestart: boolean
+  busy: boolean
+  lastResult: string | null
+  onRestart: () => void
+}) {
   if (!canRestart) return null
-
-  const handleRestart = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      await restartRuntime(sandbox)
-      setLastResult(`Restart requested ${new Date().toLocaleTimeString()}`)
-    } catch {
-      // toast already surfaced by restartRuntime
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <Card className="p-4 space-y-3">
@@ -176,7 +173,7 @@ function RuntimeCard({ sandbox, canRestart }: { sandbox: SandboxInventoryItem; c
       <p className="text-xs text-muted-foreground">
         Recover the sandbox gateway and agent runtime (keeps all data).
       </p>
-      <Button size="sm" variant="outline" disabled={busy} onClick={handleRestart}>
+      <Button size="sm" variant="outline" disabled={busy} onClick={onRestart}>
         <RotateCcw className={busy ? "h-3.5 w-3.5 mr-1.5 animate-spin" : "h-3.5 w-3.5 mr-1.5"} />
         {busy ? "Restarting…" : "Restart runtime"}
       </Button>
@@ -265,11 +262,33 @@ function SandboxDetailInner({ name }: { name: string }) {
     router.replace(`/sandboxes/${encodeURIComponent(name)}${qs ? `?${qs}` : ""}`)
   }
 
-  const telemetryQuery = useSandboxTelemetry(activeTab === "overview" && !!sandbox)
+  const isHermes = sandbox?.agent === "hermes"
+  const isCustom = sandbox?.agent === "custom"
+  const isOpenClaw = !isHermes && !isCustom
+
+  // Tab visibility per §5.3. role === "user" gets Overview only.
+  type TabDef = { key: string; label: string; show: boolean; badge?: number }
+  const tabs: TabDef[] = [
+    { key: "overview", label: "Overview", show: true },
+    { key: "access", label: "Access", show: (isOpenClaw || isHermes) && me.role === "operator" },
+    { key: "files", label: "Files", show: can("manageFiles") },
+    { key: "inference", label: "Inference", show: can("manageInference") },
+    { key: "mcp", label: "MCP", show: can("manageMcp") },
+    { key: "policy", label: "Policy", show: can("approvePermissions"), badge: pendingCount },
+    { key: "backup", label: "Backup", show: can("backupRestore") },
+    { key: "shields", label: "Shields", show: isOpenClaw && can("manageShields") },
+  ]
+  const visibleTabs = tabs.filter((t) => t.show)
+  const currentTab = visibleTabs.some((t) => t.key === activeTab) ? activeTab : "overview"
+
+  // Telemetry only shows on Overview; gate on the RESOLVED tab so a deep link to
+  // an unauthorized tab (which falls back to Overview) still fetches the cards.
+  const telemetryQuery = useSandboxTelemetry(currentTab === "overview" && !!sandbox)
   const telemetry = telemetryQuery.data
 
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [restarting, setRestarting] = useState(false)
+  const [lastRestartResult, setLastRestartResult] = useState<string | null>(null)
 
   if (isLoading && !sandbox) {
     return (
@@ -294,15 +313,17 @@ function SandboxDetailInner({ name }: { name: string }) {
     )
   }
 
-  const isHermes = sandbox.agent === "hermes"
-  const isCustom = sandbox.agent === "custom"
-  const isOpenClaw = !isHermes && !isCustom
-
+  // Single busy flag shared by the header Restart button and the RuntimeCard.
   const handleRestart = async () => {
     if (restarting) return
     setRestarting(true)
     try {
-      await restartRuntime(sandbox)
+      const result = await restartRuntime(sandbox)
+      // 409 not-Ready resolves with restarted:false (warning toast) — don't
+      // claim success in that case.
+      if (result?.restarted !== false) {
+        setLastRestartResult(`Restart requested ${new Date().toLocaleTimeString()}`)
+      }
     } catch {
       // toast surfaced already
     } finally {
@@ -310,20 +331,14 @@ function SandboxDetailInner({ name }: { name: string }) {
     }
   }
 
-  // Tab visibility per §5.3. role === "user" gets Overview only.
-  type TabDef = { key: string; label: string; show: boolean; badge?: number }
-  const tabs: TabDef[] = [
-    { key: "overview", label: "Overview", show: true },
-    { key: "access", label: "Access", show: (isOpenClaw || isHermes) && me.role === "operator" },
-    { key: "files", label: "Files", show: can("manageFiles") },
-    { key: "inference", label: "Inference", show: can("manageInference") },
-    { key: "mcp", label: "MCP", show: can("manageMcp") },
-    { key: "policy", label: "Policy", show: can("approvePermissions"), badge: pendingCount },
-    { key: "backup", label: "Backup", show: can("backupRestore") },
-    { key: "shields", label: "Shields", show: isOpenClaw && can("manageShields") },
-  ]
-  const visibleTabs = tabs.filter((t) => t.show)
-  const currentTab = visibleTabs.some((t) => t.key === activeTab) ? activeTab : "overview"
+  const copyLink = async (path: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(window.location.origin + path)
+      toast.success(`${label} copied`)
+    } catch {
+      toast.error("Failed to copy link")
+    }
+  }
 
   return (
     <>
@@ -404,12 +419,7 @@ function SandboxDetailInner({ name }: { name: string }) {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={() =>
-                    navigator.clipboard
-                      .writeText(
-                        window.location.origin +
-                          buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId }),
-                      )
-                      .then(() => toast.success("Terminal link copied"))
+                    copyLink(buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId }), "Terminal link")
                   }
                 >
                   Copy terminal link
@@ -417,11 +427,7 @@ function SandboxDetailInner({ name }: { name: string }) {
                 {isOpenClaw && (
                   <DropdownMenuItem
                     onClick={() =>
-                      navigator.clipboard
-                        .writeText(
-                          window.location.origin + `/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`,
-                        )
-                        .then(() => toast.success("Dashboard link copied"))
+                      copyLink(`/launch/dashboard?sandboxId=${encodeURIComponent(sandbox.name)}`, "Dashboard link")
                     }
                   >
                     Copy dashboard link
@@ -475,7 +481,12 @@ function SandboxDetailInner({ name }: { name: string }) {
 
           <SandboxHealthPanel sandbox={sandbox} />
 
-          <RuntimeCard sandbox={sandbox} canRestart={can("restartSandbox")} />
+          <RuntimeCard
+            canRestart={can("restartSandbox")}
+            busy={restarting}
+            lastResult={lastRestartResult}
+            onRestart={handleRestart}
+          />
 
           <Card className="p-4 space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details</h3>

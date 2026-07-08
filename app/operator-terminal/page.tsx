@@ -342,7 +342,12 @@ function OperatorTerminalInner() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <Button variant="outline" size="sm" onClick={startNewSession} disabled={connState === "connecting"}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startNewSession}
+              disabled={connState === "connecting" || connState === "reconnecting"}
+            >
               {connState === "connecting" ? "Connecting…" : "New session"}
             </Button>
             <Button variant="outline" size="sm" onClick={refreshReadiness} disabled={!sandboxId}>

@@ -18,8 +18,12 @@ export type RestartResult = {
 /**
  * Restart a sandbox runtime with the §12.4 loading→result toast lifecycle.
  * Shared by the SandboxTable row menu and the sandbox detail header.
+ *
+ * Returns the RestartResult so callers can distinguish a real restart from the
+ * not-Ready 409 skip (restarted:false) — the 409 path resolves (warning toast),
+ * it does not throw, so callers must NOT treat resolution as success.
  */
-export async function restartRuntime(sandbox: SandboxInventoryItem): Promise<void> {
+export async function restartRuntime(sandbox: SandboxInventoryItem): Promise<RestartResult | undefined> {
   const toastId = toast.loading(
     `Restarting runtime for ${sandbox.name}… (can take up to 2 minutes)`,
   )
@@ -35,11 +39,12 @@ export async function restartRuntime(sandbox: SandboxInventoryItem): Promise<voi
         : `Restarted OpenClaw runtime in ${sandbox.name}`
     toast.success(title, { id: toastId, description: data.note })
     queryClient.invalidateQueries({ queryKey: ["inventory"] })
+    return data
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) {
       const body = error.body as RestartResult | null
       toast.warning(body?.note || `Restart skipped for ${sandbox.name}.`, { id: toastId })
-      return
+      return body ?? { restarted: false }
     }
     toast.error(error instanceof Error ? error.message : "Failed to restart runtime", {
       id: toastId,

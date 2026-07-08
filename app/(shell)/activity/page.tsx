@@ -76,7 +76,7 @@ export default function ActivityPage() {
           <ul className="divide-y divide-border">
             {pageEntries.map((entry) => (
               <li key={entry.id} className="flex items-start gap-3 px-4 py-3">
-                <span className={`mt-0.5 shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-mono uppercase ${toneClass(entry.status)}`}>
+                <span className={`mt-0.5 shrink-0 inline-flex justify-center w-16 rounded-sm py-0.5 text-[10px] font-mono uppercase ${toneClass(entry.status)}`}>
                   {entry.status || "info"}
                 </span>
                 <div className="min-w-0 flex-1">

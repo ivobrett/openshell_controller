@@ -440,66 +440,63 @@ export function SandboxTable({
                   <SandboxTypeLogo agent={sandbox.agent} size="sm" />
                   <span className="truncate font-mono text-sm font-medium">{sandbox.name}</span>
                   <StatusLed status={sandbox.status} ready={sandbox.ready} dotOnly />
-                  {pending.length > 0 && (
-                    <Badge variant="outline" className="border-warning text-warning text-[10px] ml-auto shrink-0">
-                      {pending.length}
-                    </Badge>
-                  )}
+                  <div className="ml-auto flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {pending.length > 0 && (
+                      <Badge variant="outline" className="border-warning text-warning text-[10px]">
+                        {pending.length}
+                      </Badge>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-10 w-10">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {!isHermes && !isCustom && can("openDashboard") && (
+                          <DropdownMenuItem onClick={() => launchOpenClawDashboard(sandbox.name)}>
+                            Open dashboard
+                          </DropdownMenuItem>
+                        )}
+                        {can("openTerminal") && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              window.open(
+                                buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId }),
+                                "_blank",
+                                "noopener,noreferrer",
+                              )
+                            }
+                          >
+                            Terminal
+                          </DropdownMenuItem>
+                        )}
+                        {can("restartSandbox") && (
+                          <DropdownMenuItem onClick={() => handleRestart(sandbox)}>
+                            Restart runtime
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => copyLink("terminal", sandbox)}>
+                          Copy terminal link
+                        </DropdownMenuItem>
+                        {can("deleteSandbox") && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteTarget(sandbox)}
+                            >
+                              Delete…
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                   <span>{displaySandboxAgent(sandbox.agent)}</span>
                   <CapabilityChips sandbox={sandbox} mcpServers={mcpServers} />
-                </div>
-                <div
-                  className="absolute right-2 top-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-10 w-10">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {!isHermes && !isCustom && can("openDashboard") && (
-                        <DropdownMenuItem onClick={() => launchOpenClawDashboard(sandbox.name)}>
-                          Open dashboard
-                        </DropdownMenuItem>
-                      )}
-                      {can("openTerminal") && (
-                        <DropdownMenuItem
-                          onClick={() =>
-                            window.open(
-                              buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId }),
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                        >
-                          Terminal
-                        </DropdownMenuItem>
-                      )}
-                      {can("restartSandbox") && (
-                        <DropdownMenuItem onClick={() => handleRestart(sandbox)}>
-                          Restart runtime
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem onClick={() => copyLink("terminal", sandbox)}>
-                        Copy terminal link
-                      </DropdownMenuItem>
-                      {can("deleteSandbox") && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setDeleteTarget(sandbox)}
-                          >
-                            Delete…
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               </div>
             )

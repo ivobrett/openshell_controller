@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, MoreHorizontal, PanelsTopLeft, SquareTerminal, MonitorSmartphone } from "lucide-react"
 import { toast } from "sonner"
-import { queryClient } from "@/app/lib/queryClient"
 import { Input } from "@/app/components/ui/input"
 import { Badge } from "@/app/components/ui/badge"
 import { Button } from "@/app/components/ui/button"
@@ -30,6 +29,7 @@ import { CapabilityChips } from "./CapabilityChips"
 import { DeleteSandboxDialog } from "./DeleteSandboxDialog"
 import { buildOperatorTerminalRoute } from "@/app/lib/dashboardSession"
 import { launchOpenClawDashboard } from "@/app/lib/launchDashboard"
+import { restartRuntime } from "@/app/lib/restartRuntime"
 import { visiblePendingRequests } from "@/app/lib/permissionAlerts"
 import { useAuth } from "@/app/components/providers/AuthProvider"
 import { useMcpServers } from "@/app/hooks/queries"
@@ -98,17 +98,9 @@ export function SandboxTable({
     if (restartingId) return
     setRestartingId(sandbox.id)
     try {
-      const r = await fetch("/api/sandbox/restart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sandboxName: sandbox.name, agent: sandbox.agent || "openclaw" }),
-      })
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.error || "Failed to restart")
-      toast.success(`Restart requested for ${sandbox.name}`)
-      queryClient.invalidateQueries({ queryKey: ["inventory"] })
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to restart")
+      await restartRuntime(sandbox)
+    } catch {
+      // restartRuntime surfaces its own toast
     } finally {
       setRestartingId(null)
     }

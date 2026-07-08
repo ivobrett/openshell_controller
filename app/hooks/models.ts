@@ -20,6 +20,7 @@ export type TelemetryData = {
 export type McpServerAccess = {
   id: string
   name: string
+  summary?: string
   command: string
   args: string[]
   enabled: boolean

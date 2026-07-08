@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Search, MoreHorizontal, PanelsTopLeft, SquareTerminal, MonitorSmartphone } from "lucide-react"
+import { Search, MoreHorizontal, PanelsTopLeft, SquareTerminal, MonitorSmartphone, List, LayoutGrid } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/app/components/ui/input"
 import { Badge } from "@/app/components/ui/badge"
@@ -39,6 +39,8 @@ import { cn } from "@/app/lib/utils"
 
 type StatusFilter = "all" | "running" | "stopped" | "attention"
 
+const VIEW_MODE_KEY = "openshell-control.sandbox-view"
+
 function displaySandboxAgent(agent?: string) {
   if (agent === "hermes") return "Hermes"
   if (agent === "custom") return "Custom"
@@ -66,6 +68,17 @@ export function SandboxTable({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [deleteTarget, setDeleteTarget] = useState<SandboxInventoryItem | null>(null)
   const [restartingId, setRestartingId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<"list" | "tiles">("list")
+
+  useEffect(() => {
+    const v = window.localStorage.getItem(VIEW_MODE_KEY)
+    if (v === "tiles" || v === "list") setViewMode(v)
+  }, [])
+
+  const changeView = (v: "list" | "tiles") => {
+    setViewMode(v)
+    window.localStorage.setItem(VIEW_MODE_KEY, v)
+  }
 
   const hasPending = (sandbox: SandboxInventoryItem) =>
     visiblePendingRequests(permissionFeeds[sandbox.id], sandbox, dismissedAlerts).length > 0
@@ -119,6 +132,99 @@ export function SandboxTable({
     }
   }
 
+  // Shared between the list (table row) and tiles views so their actions can't
+  // drift apart.
+  const renderActionIcons = (sandbox: SandboxInventoryItem) => {
+    const isHermes = sandbox.agent === "hermes"
+    const isCustom = sandbox.agent === "custom"
+    return (
+      <>
+        {!isHermes && !isCustom && can("openDashboard") && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Open dashboard"
+            onClick={() => launchOpenClawDashboard(sandbox.name)}
+          >
+            <PanelsTopLeft className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {isHermes && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Open Hermes dashboard"
+            onClick={() =>
+              window.open(
+                `/api/sandbox/${encodeURIComponent(sandbox.name)}/hermes/dashboard/proxy/`,
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
+          >
+            <MonitorSmartphone className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {can("openTerminal") && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Terminal"
+            onClick={() =>
+              window.open(
+                buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId }),
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
+          >
+            <SquareTerminal className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </>
+    )
+  }
+
+  const renderRowMenu = (sandbox: SandboxInventoryItem) => {
+    const isHermes = sandbox.agent === "hermes"
+    const isCustom = sandbox.agent === "custom"
+    const isRestarting = restartingId === sandbox.id
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions">
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {can("restartSandbox") && (
+            <DropdownMenuItem disabled={isRestarting} onClick={() => handleRestart(sandbox)}>
+              {isRestarting ? "Restarting…" : "Restart runtime"}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={() => copyLink("terminal", sandbox)}>Copy terminal link</DropdownMenuItem>
+          {!isHermes && !isCustom && (
+            <DropdownMenuItem onClick={() => copyLink("dashboard", sandbox)}>Copy dashboard link</DropdownMenuItem>
+          )}
+          {can("deleteSandbox") && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteTarget(sandbox)}
+              >
+                Delete…
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
   return (
     <>
       {/* Filter row */}
@@ -148,6 +254,33 @@ export function SandboxTable({
             </button>
           ))}
         </div>
+        {/* List / Tiles toggle (desktop only — mobile always uses compact cards) */}
+        <div className="hidden md:flex md:ml-auto items-center rounded-md border border-border p-0.5">
+          <button
+            type="button"
+            aria-label="List view"
+            title="List view"
+            onClick={() => changeView("list")}
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-sm transition-colors",
+              viewMode === "list" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <List className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Tiles view"
+            title="Tiles view"
+            onClick={() => changeView("tiles")}
+            className={cn(
+              "flex items-center justify-center h-7 w-7 rounded-sm transition-colors",
+              viewMode === "tiles" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 && (sandboxes.length > 0) && (
@@ -162,8 +295,8 @@ export function SandboxTable({
         </div>
       )}
 
-      {/* Desktop table */}
-      {filtered.length > 0 && (
+      {/* Desktop list (table) */}
+      {viewMode === "list" && filtered.length > 0 && (
         <Card className="hidden md:block p-0 overflow-hidden">
           <Table>
             <TableHeader>
@@ -179,9 +312,6 @@ export function SandboxTable({
             <TableBody>
               {filtered.map((sandbox) => {
                 const pending = visiblePendingRequests(permissionFeeds[sandbox.id], sandbox, dismissedAlerts)
-                const isHermes = sandbox.agent === "hermes"
-                const isCustom = sandbox.agent === "custom"
-                const isRestarting = restartingId === sandbox.id
                 return (
                   <TableRow
                     key={sandbox.id}
@@ -224,87 +354,8 @@ export function SandboxTable({
                     </TableCell>
                     <TableCell className="pr-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        {!isHermes && !isCustom && can("openDashboard") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Open dashboard"
-                            onClick={() => launchOpenClawDashboard(sandbox.name)}
-                          >
-                            <PanelsTopLeft className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {isHermes && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Open Hermes dashboard"
-                            onClick={() =>
-                              window.open(
-                                `/api/sandbox/${encodeURIComponent(sandbox.name)}/hermes/dashboard/proxy/`,
-                                "_blank",
-                                "noopener,noreferrer",
-                              )
-                            }
-                          >
-                            <MonitorSmartphone className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {can("openTerminal") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Terminal"
-                            onClick={() =>
-                              window.open(
-                                buildOperatorTerminalRoute({ sandboxId: sandbox.name, dashboardSessionId }),
-                                "_blank",
-                                "noopener,noreferrer",
-                              )
-                            }
-                          >
-                            <SquareTerminal className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title="More actions">
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {can("restartSandbox") && (
-                              <DropdownMenuItem
-                                disabled={isRestarting}
-                                onClick={() => handleRestart(sandbox)}
-                              >
-                                {isRestarting ? "Restarting…" : "Restart runtime"}
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => copyLink("terminal", sandbox)}>
-                              Copy terminal link
-                            </DropdownMenuItem>
-                            {!isHermes && !isCustom && (
-                              <DropdownMenuItem onClick={() => copyLink("dashboard", sandbox)}>
-                                Copy dashboard link
-                              </DropdownMenuItem>
-                            )}
-                            {can("deleteSandbox") && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => setDeleteTarget(sandbox)}
-                                >
-                                  Delete…
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {renderActionIcons(sandbox)}
+                        {renderRowMenu(sandbox)}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -313,6 +364,58 @@ export function SandboxTable({
             </TableBody>
           </Table>
         </Card>
+      )}
+
+      {/* Desktop tiles — logo-forward "home of agents" grid, same info as the list */}
+      {viewMode === "tiles" && filtered.length > 0 && (
+        <div className="hidden md:grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filtered.map((sandbox) => {
+            const pending = visiblePendingRequests(permissionFeeds[sandbox.id], sandbox, dismissedAlerts)
+            return (
+              <div
+                key={sandbox.id}
+                className="group relative rounded-lg border border-border bg-card p-4 cursor-pointer hover:bg-accent/30 hover:border-primary/40 transition-colors"
+                onClick={() => router.push(`/sandboxes/${encodeURIComponent(sandbox.name)}`)}
+              >
+                <div className="absolute right-2 top-2" onClick={(e) => e.stopPropagation()}>
+                  {renderRowMenu(sandbox)}
+                </div>
+                <div className="flex flex-col items-center text-center gap-2">
+                  <SandboxTypeLogo agent={sandbox.agent} size="lg" />
+                  <div className="flex items-center gap-2 min-w-0 max-w-full">
+                    <span className="truncate font-mono text-sm font-medium">{sandbox.name}</span>
+                    {sandbox.isDefault && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">default</Badge>
+                    )}
+                  </div>
+                  <StatusLed status={sandbox.status} ready={sandbox.ready} />
+                  <span className="text-xs text-muted-foreground">{displaySandboxAgent(sandbox.agent)}</span>
+                  <CapabilityChips sandbox={sandbox} mcpServers={mcpServers} />
+                  {pending.length > 0 ? (
+                    <Badge
+                      variant="outline"
+                      className="border-warning text-warning text-[10px] cursor-pointer hover:bg-warning/10"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/sandboxes/${encodeURIComponent(sandbox.name)}?tab=policy`)
+                      }}
+                    >
+                      {pending.length} pending
+                    </Badge>
+                  ) : (
+                    <span className="inline-block h-2 w-2 rounded-full bg-success/70" title="No pending requests" />
+                  )}
+                </div>
+                <div
+                  className="mt-3 pt-3 border-t border-border flex items-center justify-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {renderActionIcons(sandbox)}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
 
       {/* Mobile cards */}

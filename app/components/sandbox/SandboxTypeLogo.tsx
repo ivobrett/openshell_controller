@@ -1,7 +1,7 @@
 const OPENCLAW_SANDBOX_LOGO = "/sandbox-logos/openclaw.svg"
 const HERMES_SANDBOX_LOGO = "/sandbox-logos/hermes.png"
 
-export function SandboxTypeLogo({ agent, size = "md" }: { agent?: string; size?: "sm" | "md" }) {
+export function SandboxTypeLogo({ agent, size = "md" }: { agent?: string; size?: "sm" | "md" | "lg" }) {
   const isHermes = agent === "hermes"
   const isCustom = agent === "custom"
   const label = isHermes ? "Hermes sandbox" : isCustom ? "Custom sandbox" : "OpenClaw sandbox"
@@ -11,9 +11,9 @@ export function SandboxTypeLogo({ agent, size = "md" }: { agent?: string; size?:
     : isCustom
       ? "border-border bg-muted/40"
       : "border-rose-300/60 bg-rose-500/15"
-  const dim = size === "sm" ? "h-6 w-6" : "h-8 w-8"
-  const logoDim = size === "sm" ? "h-4 w-4" : "h-6 w-6"
-  const iconDim = size === "sm" ? "h-3 w-3" : "h-4 w-4"
+  const dim = size === "sm" ? "h-6 w-6" : size === "lg" ? "h-16 w-16" : "h-8 w-8"
+  const logoDim = size === "sm" ? "h-4 w-4" : size === "lg" ? "h-11 w-11" : "h-6 w-6"
+  const iconDim = size === "sm" ? "h-3 w-3" : size === "lg" ? "h-8 w-8" : "h-4 w-4"
   return (
     <span
       aria-label={label}

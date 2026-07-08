@@ -479,7 +479,9 @@ function SandboxDetailInner({ name }: { name: string }) {
 
           <AgentCapabilitiesCard sandbox={sandbox} mcpServers={mcpServers} canManage={can("manageMcp")} />
 
-          <SandboxHealthPanel sandbox={sandbox} />
+          {/* Health checks hit an operator-only endpoint (/api/sandbox/<id>/health,
+              403 for IdP users) — don't show the broken panel to them. */}
+          {me.role === "operator" && <SandboxHealthPanel sandbox={sandbox} />}
 
           <RuntimeCard
             canRestart={can("restartSandbox")}

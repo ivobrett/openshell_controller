@@ -5,6 +5,7 @@ import { PageHeader } from "@/app/components/PageHeader"
 import { Card } from "@/app/components/ui/card"
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select"
 import { Alert, AlertDescription } from "@/app/components/ui/alert"
 import { useAuth } from "@/app/components/providers/AuthProvider"
 import { useInventory } from "@/app/hooks/queries"
@@ -276,13 +277,16 @@ function SandboxAccessSection() {
               Add Assignment
             </p>
             {sandboxOptions.length > 0 ? (
-              <select
-                value={pickedSandbox}
-                onChange={(e) => setPickedSandbox(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                {sandboxOptions.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <Select value={pickedSandbox || undefined} onValueChange={setPickedSandbox}>
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <SelectValue placeholder="Select a sandbox" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sandboxOptions.map((n) => (
+                    <SelectItem key={n} value={n}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : (
               <Input
                 type="text"

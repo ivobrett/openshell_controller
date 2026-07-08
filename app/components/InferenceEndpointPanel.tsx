@@ -1,6 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Button } from "@/app/components/ui/button"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
+import { Card } from "@/app/components/ui/card"
 
 type InferenceRoute = {
   configured: boolean
@@ -54,6 +57,9 @@ const DEFAULT_VLLM_MAX_MODEL_LEN = "32768"
 const DEFAULT_VLLM_YARN_FACTOR = "1.0"
 const DEFAULT_VLLM_ORIGINAL_CONTEXT = "32768"
 
+const inputCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+const inputClsSm = "w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
 function isVllmEndpoint(name: string, baseUrl: string) {
   return [name, baseUrl].some((value) => /vllm/i.test(value))
 }
@@ -73,12 +79,12 @@ function emptyRoute(): InferenceRoute {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{children}</label>
+  return <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{children}</label>
 }
 
 function OllamaHostBadge({ label }: { label?: string | null }) {
   if (!label) return null
-  return <span className="shrink-0 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-[var(--foreground-dim)]">[{label}]</span>
+  return <span className="shrink-0 rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-muted-foreground">[{label}]</span>
 }
 
 function ollamaModelKey(item: OllamaModel) {
@@ -133,6 +139,7 @@ function VllmAdvancedConfiguration({
   const [applying, setApplying] = useState(false)
   const [restarting, setRestarting] = useState(false)
   const [restartMessage, setRestartMessage] = useState("")
+  const [restartIsError, setRestartIsError] = useState(false)
 
   useEffect(() => {
     if (port && hostPort === "8000") setHostPort(port)
@@ -230,44 +237,29 @@ function VllmAdvancedConfiguration({
     }
   }
 
+  function setRMsg(text: string, error = false) { setRestartIsError(error); setRestartMessage(text) }
+
   async function applyVllmContainer() {
     const target = containerName.trim() || DEFAULT_VLLM_CONTAINER
     if (!window.confirm(`Recreate vLLM container '${target}' with this configuration?`)) return
     try {
-      setApplying(true)
-      setRestartMessage("")
+      setApplying(true); setRMsg("")
       const response = await fetch("/api/inference/vllm/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          containerName: target,
-          image,
-          gpuDevice,
-          hostPort,
-          containerPort,
-          model: model || DEFAULT_VLLM_MODEL,
-          tensorParallelSize,
-          maxModelLen,
-          gpuMemoryUtilization,
-          dtype,
-          kvCacheDtype,
-          maxNumBatchedTokens,
-          maxNumSeqs,
-          toolCallParser,
-          allowLongMaxModelLen,
-          enableYarnScaling,
-          yarnFactor,
-          originalContext,
-          enableChunkedPrefill,
-          enableAutoToolChoice,
-          calculateKvScales,
+          containerName: target, image, gpuDevice, hostPort, containerPort,
+          model: model || DEFAULT_VLLM_MODEL, tensorParallelSize, maxModelLen,
+          gpuMemoryUtilization, dtype, kvCacheDtype, maxNumBatchedTokens, maxNumSeqs,
+          toolCallParser, allowLongMaxModelLen, enableYarnScaling, yarnFactor,
+          originalContext, enableChunkedPrefill, enableAutoToolChoice, calculateKvScales,
         }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to apply vLLM configuration")
-      setRestartMessage(`Recreated ${data.container || target}. Wait for the model to finish loading before sending requests.`)
+      setRMsg(`Recreated ${data.container || target}. Wait for the model to finish loading before sending requests.`)
     } catch (error) {
-      setRestartMessage(error instanceof Error ? error.message : "Failed to apply vLLM configuration")
+      setRMsg(error instanceof Error ? error.message : "Failed to apply vLLM configuration", true)
     } finally {
       setApplying(false)
     }
@@ -277,8 +269,7 @@ function VllmAdvancedConfiguration({
     const target = containerName.trim() || DEFAULT_VLLM_CONTAINER
     if (!window.confirm(`Restart vLLM container '${target}'?`)) return
     try {
-      setRestarting(true)
-      setRestartMessage("")
+      setRestarting(true); setRMsg("")
       const response = await fetch("/api/inference/vllm/restart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -286,70 +277,72 @@ function VllmAdvancedConfiguration({
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to restart vLLM container")
-      setRestartMessage(`Restarted ${data.container || target}. Wait for the model to finish loading before sending requests.`)
+      setRMsg(`Restarted ${data.container || target}. Wait for the model to finish loading before sending requests.`)
     } catch (error) {
-      setRestartMessage(error instanceof Error ? error.message : "Failed to restart vLLM container")
+      setRMsg(error instanceof Error ? error.message : "Failed to restart vLLM container", true)
     } finally {
       setRestarting(false)
     }
   }
 
+  const selectCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
   return (
-    <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
+    <div className="rounded-md border border-border bg-muted/30 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xs uppercase tracking-wider text-[var(--foreground)]">vLLM Advanced Configuration</h3>
-          <p className="mt-1 text-xs text-[var(--foreground-dim)]">Input budget at 4096 output tokens: {maxInputWithDefaultOutput.toLocaleString()} tokens.</p>
+          <h3 className="text-xs uppercase tracking-wider font-semibold">vLLM Advanced Configuration</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Input budget at 4096 output tokens: {maxInputWithDefaultOutput.toLocaleString()} tokens.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={applyVllmContainer} disabled={applying || restarting} className="px-3 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
+          <Button type="button" onClick={applyVllmContainer} disabled={applying || restarting} size="sm">
             {applying ? "Applying" : "Apply"}
-          </button>
-          <button type="button" onClick={restartVllmContainer} disabled={restarting || applying} className="px-3 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
+          </Button>
+          <Button type="button" onClick={restartVllmContainer} disabled={restarting || applying} size="sm">
             {restarting ? "Restarting" : "Restart"}
-          </button>
-          <button type="button" onClick={copyRunCommand} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)]">
+          </Button>
+          <Button type="button" onClick={copyRunCommand} variant="outline" size="sm">
             {copied ? "Copied" : "Copy"}
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <FieldLabel>Container</FieldLabel>
-          <input value={containerName} onChange={(event) => setContainerName(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={containerName} onChange={(event) => setContainerName(event.target.value)} className={inputCls} />
         </div>
         <div className="space-y-2 md:col-span-2">
           <FieldLabel>Image</FieldLabel>
-          <input value={image} onChange={(event) => setImage(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={image} onChange={(event) => setImage(event.target.value)} className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>GPU Device</FieldLabel>
-          <input value={gpuDevice} onChange={(event) => setGpuDevice(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={gpuDevice} onChange={(event) => setGpuDevice(event.target.value)} className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>Host Port</FieldLabel>
-          <input value={hostPort} onChange={(event) => setHostPort(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={hostPort} onChange={(event) => setHostPort(event.target.value)} inputMode="numeric" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>Container Port</FieldLabel>
-          <input value={containerPort} onChange={(event) => setContainerPort(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={containerPort} onChange={(event) => setContainerPort(event.target.value)} inputMode="numeric" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>Max Model Len</FieldLabel>
-          <input value={maxModelLen} onChange={(event) => setMaxModelLen(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={maxModelLen} onChange={(event) => setMaxModelLen(event.target.value)} inputMode="numeric" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>GPU Memory</FieldLabel>
-          <input value={gpuMemoryUtilization} onChange={(event) => setGpuMemoryUtilization(event.target.value)} inputMode="decimal" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={gpuMemoryUtilization} onChange={(event) => setGpuMemoryUtilization(event.target.value)} inputMode="decimal" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>Tensor Parallel</FieldLabel>
-          <input value={tensorParallelSize} onChange={(event) => setTensorParallelSize(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={tensorParallelSize} onChange={(event) => setTensorParallelSize(event.target.value)} inputMode="numeric" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>dtype</FieldLabel>
-          <select value={dtype} onChange={(event) => setDtype(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+          <select value={dtype} onChange={(event) => setDtype(event.target.value)} className={selectCls}>
             <option value="bfloat16">bfloat16</option>
             <option value="float16">float16</option>
             <option value="auto">auto</option>
@@ -357,7 +350,7 @@ function VllmAdvancedConfiguration({
         </div>
         <div className="space-y-2">
           <FieldLabel>KV Cache dtype</FieldLabel>
-          <select value={kvCacheDtype} onChange={(event) => setKvCacheDtype(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+          <select value={kvCacheDtype} onChange={(event) => setKvCacheDtype(event.target.value)} className={selectCls}>
             <option value="fp8">fp8</option>
             <option value="fp8_e4m3">fp8_e4m3</option>
             <option value="fp8_e5m2">fp8_e5m2</option>
@@ -366,7 +359,7 @@ function VllmAdvancedConfiguration({
         </div>
         <div className="space-y-2">
           <FieldLabel>Tool Parser</FieldLabel>
-          <select value={toolCallParser} onChange={(event) => setToolCallParser(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+          <select value={toolCallParser} onChange={(event) => setToolCallParser(event.target.value)} className={selectCls}>
             <option value="hermes">hermes</option>
             <option value="llama3_json">llama3_json</option>
             <option value="mistral">mistral</option>
@@ -375,47 +368,44 @@ function VllmAdvancedConfiguration({
         </div>
         <div className="space-y-2">
           <FieldLabel>Max Batched Tokens</FieldLabel>
-          <input value={maxNumBatchedTokens} onChange={(event) => setMaxNumBatchedTokens(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={maxNumBatchedTokens} onChange={(event) => setMaxNumBatchedTokens(event.target.value)} inputMode="numeric" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>Max Seqs</FieldLabel>
-          <input value={maxNumSeqs} onChange={(event) => setMaxNumSeqs(event.target.value)} inputMode="numeric" placeholder="auto" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+          <input value={maxNumSeqs} onChange={(event) => setMaxNumSeqs(event.target.value)} inputMode="numeric" placeholder="auto" className={inputCls} />
         </div>
         <div className="space-y-2">
           <FieldLabel>YaRN Factor</FieldLabel>
-          <input value={yarnFactor} onChange={(event) => setYarnFactor(event.target.value)} inputMode="decimal" disabled={!enableYarnScaling} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)] disabled:opacity-50" />
+          <input value={yarnFactor} onChange={(event) => setYarnFactor(event.target.value)} inputMode="decimal" disabled={!enableYarnScaling} className={inputCls + " disabled:opacity-50"} />
         </div>
         <div className="space-y-2">
           <FieldLabel>Original Context</FieldLabel>
-          <input value={originalContext} onChange={(event) => setOriginalContext(event.target.value)} inputMode="numeric" disabled={!enableYarnScaling} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)] disabled:opacity-50" />
+          <input value={originalContext} onChange={(event) => setOriginalContext(event.target.value)} inputMode="numeric" disabled={!enableYarnScaling} className={inputCls + " disabled:opacity-50"} />
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
-          <input type="checkbox" checked={enableYarnScaling} onChange={(event) => setEnableYarnScaling(event.target.checked)} />
-          YaRN/RoPE scaling
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
-          <input type="checkbox" checked={allowLongMaxModelLen} onChange={(event) => setAllowLongMaxModelLen(event.target.checked)} />
-          Allow long max len
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
-          <input type="checkbox" checked={enableChunkedPrefill} onChange={(event) => setEnableChunkedPrefill(event.target.checked)} />
-          Chunked prefill
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
-          <input type="checkbox" checked={enableAutoToolChoice} onChange={(event) => setEnableAutoToolChoice(event.target.checked)} />
-          Auto tool choice
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
-          <input type="checkbox" checked={calculateKvScales} onChange={(event) => setCalculateKvScales(event.target.checked)} />
-          Calculate KV scales
-        </label>
+        {[
+          { label: "YaRN/RoPE scaling", checked: enableYarnScaling, onChange: setEnableYarnScaling },
+          { label: "Allow long max len", checked: allowLongMaxModelLen, onChange: setAllowLongMaxModelLen },
+          { label: "Chunked prefill", checked: enableChunkedPrefill, onChange: setEnableChunkedPrefill },
+          { label: "Auto tool choice", checked: enableAutoToolChoice, onChange: setEnableAutoToolChoice },
+          { label: "Calculate KV scales", checked: calculateKvScales, onChange: setCalculateKvScales },
+        ].map(({ label, checked, onChange }) => (
+          <label key={label} className="flex items-center gap-2 text-xs text-foreground">
+            <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+            {label}
+          </label>
+        ))}
       </div>
 
-      <textarea readOnly value={runCommand} className="mt-4 min-h-[240px] w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-[11px] font-mono leading-5 text-[var(--foreground)] focus:outline-none" />
-      {restartMessage && <p className="mt-3 text-xs text-[var(--foreground-dim)]">{restartMessage}</p>}
+      <textarea readOnly value={runCommand} className="mt-4 min-h-[240px] w-full rounded-md border border-border bg-background p-3 text-[11px] font-mono leading-5 text-foreground focus:outline-none" />
+
+      {restartMessage && (
+        <Alert variant={restartIsError ? "destructive" : "default"} className="mt-3">
+          <AlertDescription className="text-xs">{restartMessage}</AlertDescription>
+        </Alert>
+      )}
     </div>
   )
 }
@@ -424,6 +414,7 @@ export default function InferenceEndpointPanel() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
+  const [isError, setIsError] = useState(false)
   const [providers, setProviders] = useState<ProviderSummary[]>([])
   const [gateway, setGateway] = useState<InferenceRoute>(emptyRoute)
   const [system, setSystem] = useState<InferenceRoute>(emptyRoute)
@@ -441,6 +432,8 @@ export default function InferenceEndpointPanel() {
   const [ollamaMessage, setOllamaMessage] = useState("")
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null)
 
+  function setMsg(text: string, error = false) { setIsError(error); setMessage(text) }
+
   const activeProvider = useMemo(
     () => providers.find((provider) => provider.name === gateway.provider) ?? null,
     [providers, gateway.provider]
@@ -457,8 +450,7 @@ export default function InferenceEndpointPanel() {
 
   async function load() {
     try {
-      setLoading(true)
-      setMessage("")
+      setLoading(true); setMsg("")
       const response = await fetch("/api/inference", { cache: "no-store" })
       const data = await response.json() as InferenceResponse & { error?: string }
       if (!response.ok) throw new Error(data.error || "Failed to load inference configuration")
@@ -468,21 +460,17 @@ export default function InferenceEndpointPanel() {
       if (data.gateway?.provider) setName(data.gateway.provider)
       if (data.gateway?.model) setModel(data.gateway.model)
       if (data.gateway?.provider?.toLowerCase().includes("ollama")) {
-        setType("openai")
-        setBaseUrl(OLLAMA_BASE_URL)
-        setCredentialKey("OLLAMA_API_KEY")
+        setType("openai"); setBaseUrl(OLLAMA_BASE_URL); setCredentialKey("OLLAMA_API_KEY")
       }
       if (data.gateway?.provider && isVllmEndpoint(data.gateway.provider, "")) setType("vllm")
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to load inference configuration")
+      setMsg(error instanceof Error ? error.message : "Failed to load inference configuration", true)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   const loadOllamaModels = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
@@ -499,7 +487,9 @@ export default function InferenceEndpointPanel() {
       const sources = ollamaSourceSummary(models)
       const checked = ollamaProbeSummary(data.checkedHostLabels)
       setOllamaModels(models)
-      setOllamaMessage(models.length > 0 ? `${models.length} Ollama model${models.length === 1 ? "" : "s"} available${sources ? ` from ${sources}` : ""}${checked && checked !== sources ? `. Checked ${checked}.` : ""} Click one to load the Ollama endpoint preset.` : (checked ? `Checked ${checked}; no Ollama models reported.` : "Ollama is reachable but has no models installed."))
+      setOllamaMessage(models.length > 0
+        ? `${models.length} Ollama model${models.length === 1 ? "" : "s"} available${sources ? ` from ${sources}` : ""}${checked && checked !== sources ? `. Checked ${checked}.` : ""} Click one to load the Ollama endpoint preset.`
+        : (checked ? `Checked ${checked}; no Ollama models reported.` : "Ollama is reachable but has no models installed."))
       if (models[0]?.name) setModel((current) => current || models[0].name)
     } catch (error) {
       setOllamaModels([])
@@ -516,16 +506,10 @@ export default function InferenceEndpointPanel() {
   }, [loadOllamaModels])
 
   function applyOllamaModelPreset(item: OllamaModel) {
-    const modelName = item.name
-    setName(ollamaProviderName(item))
-    setType("openai")
-    setModel(modelName)
-    setBaseUrl(ollamaOpenAiBaseUrl(item))
-    setCredentialKey("OLLAMA_API_KEY")
-    setApiKey("")
-    setRoute("gateway")
-    setNoVerify(true)
-    setMessage(`Ollama preset loaded for ${modelName}. Save to route sandbox inference through local Ollama.`)
+    setName(ollamaProviderName(item)); setType("openai"); setModel(item.name)
+    setBaseUrl(ollamaOpenAiBaseUrl(item)); setCredentialKey("OLLAMA_API_KEY")
+    setApiKey(""); setRoute("gateway"); setNoVerify(true)
+    setMsg(`Ollama preset loaded for ${item.name}. Save to route sandbox inference through local Ollama.`)
   }
 
   function selectProvider(provider: ProviderSummary) {
@@ -534,54 +518,33 @@ export default function InferenceEndpointPanel() {
     setType(isVllmEndpoint(provider.name, "") ? "vllm" : provider.type || "openai")
     setCredentialKey(provider.credentialKeys[0] || "OPENAI_API_KEY")
     if (provider.name.toLowerCase().includes("ollama")) {
-      setBaseUrl(OLLAMA_BASE_URL)
-      setCredentialKey(provider.credentialKeys[0] || "OLLAMA_API_KEY")
-      setApiKey("")
+      setBaseUrl(OLLAMA_BASE_URL); setCredentialKey(provider.credentialKeys[0] || "OLLAMA_API_KEY"); setApiKey("")
     }
-    setMessage(`Loaded ${provider.name}. Enter a model and save to make it active.`)
+    setMsg(`Loaded ${provider.name}. Enter a model and save to make it active.`)
   }
 
   function useVllmPreset() {
-    setName("vllm-local")
-    setType("vllm")
-    setModel(DEFAULT_VLLM_MODEL)
-    setBaseUrl("http://host.docker.internal:8000/v1")
-    setCredentialKey("OPENAI_API_KEY")
-    setApiKey("")
-    setRoute("gateway")
-    setNoVerify(true)
-    setMessage("vLLM preset loaded. Adjust the endpoint URL if your server is bound somewhere else, then save.")
+    setName("vllm-local"); setType("vllm"); setModel(DEFAULT_VLLM_MODEL)
+    setBaseUrl("http://host.docker.internal:8000/v1"); setCredentialKey("OPENAI_API_KEY")
+    setApiKey(""); setRoute("gateway"); setNoVerify(true)
+    setMsg("vLLM preset loaded. Adjust the endpoint URL if your server is bound somewhere else, then save.")
   }
 
   async function saveEndpoint() {
     try {
-      setSaving(true)
-      setMessage("")
+      setSaving(true); setMsg("")
       const response = await fetch("/api/inference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          type,
-          model,
-          baseUrl,
-          credentialKey,
-          apiKey,
-          route,
-          timeout: Number(timeout || "0"),
-          noVerify,
-          makeActive: true,
-        }),
+        body: JSON.stringify({ name, type, model, baseUrl, credentialKey, apiKey, route, timeout: Number(timeout || "0"), noVerify, makeActive: true }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to save inference endpoint")
-      setGateway(data.gateway ?? gateway)
-      setSystem(data.system ?? system)
-      setApiKey("")
-      setMessage(`Inference endpoint '${name}' saved and routed to ${route === "system" ? "system" : "sandbox"} inference.`)
+      setGateway(data.gateway ?? gateway); setSystem(data.system ?? system); setApiKey("")
+      setMsg(`Inference endpoint '${name}' saved and routed to ${route === "system" ? "system" : "sandbox"} inference.`)
       await load()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save inference endpoint")
+      setMsg(error instanceof Error ? error.message : "Failed to save inference endpoint", true)
     } finally {
       setSaving(false)
     }
@@ -591,8 +554,7 @@ export default function InferenceEndpointPanel() {
     if (!providerName) return
     if (!window.confirm(`Delete inference provider '${providerName}'?`)) return
     try {
-      setDeletingProvider(providerName)
-      setMessage("")
+      setDeletingProvider(providerName); setMsg("")
       const response = await fetch("/api/inference", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -600,132 +562,135 @@ export default function InferenceEndpointPanel() {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to delete inference provider")
-      setGateway(data.gateway ?? gateway)
-      setSystem(data.system ?? system)
+      setGateway(data.gateway ?? gateway); setSystem(data.system ?? system)
       setProviders(Array.isArray(data.providers) ? data.providers : [])
       if (name === providerName) setName("")
-      setMessage(`Deleted inference provider '${providerName}'.`)
+      setMsg(`Deleted inference provider '${providerName}'.`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to delete inference provider")
+      setMsg(error instanceof Error ? error.message : "Failed to delete inference provider", true)
     } finally {
       setDeletingProvider(null)
     }
   }
 
+  const selectCls = "w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+
   return (
-    <div className="panel p-8">
-      <div className="flex items-start justify-between gap-6 border-b border-[var(--border-subtle)] pb-5">
+    <Card className="p-8">
+      <div className="flex items-start justify-between gap-6 border-b border-border pb-5">
         <div>
-          <h2 className="text-lg font-semibold text-[var(--nvidia-green)] uppercase tracking-wider">
+          <h2 className="text-lg font-semibold text-primary uppercase tracking-wider">
             INFERENCE ENDPOINTS
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-[var(--foreground-dim)]">
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             Configure the OpenShell gateway route used by sandboxes through inference.local.
           </p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading || saving}
-          className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-secondary)] disabled:opacity-50"
-        >
-          Refresh
-        </button>
+        <Button onClick={load} disabled={loading || saving} variant="outline" size="sm">Refresh</Button>
       </div>
 
       {loading ? (
-        <div className="py-12 text-xs uppercase tracking-wider text-[var(--foreground-dim)]">Loading inference routes...</div>
+        <div className="py-12 text-xs uppercase tracking-wider text-muted-foreground">Loading inference routes...</div>
       ) : (
         <div className="mt-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="metric p-4">
-              <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Sandbox Route</p>
-              <p className="mt-2 text-sm font-mono text-[var(--foreground)]">{gateway.configured ? gateway.provider : "not configured"}</p>
-              <p className="mt-1 text-xs font-mono text-[var(--foreground-dim)]">{gateway.model || "No model selected"}</p>
-              {gateway.timeout && <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">Timeout {gateway.timeout}</p>}
+            <div className="rounded-md border border-border bg-muted/30 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Sandbox Route</p>
+              <p className="mt-2 text-sm font-mono text-foreground">{gateway.configured ? gateway.provider : "not configured"}</p>
+              <p className="mt-1 text-xs font-mono text-muted-foreground">{gateway.model || "No model selected"}</p>
+              {gateway.timeout && <p className="mt-1 text-[11px] text-muted-foreground">Timeout {gateway.timeout}</p>}
             </div>
-            <div className="metric p-4">
-              <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">System Route</p>
-              <p className="mt-2 text-sm font-mono text-[var(--foreground)]">{system.configured ? system.provider : "not configured"}</p>
-              <p className="mt-1 text-xs font-mono text-[var(--foreground-dim)]">{system.model || "No model selected"}</p>
-              {system.timeout && <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">Timeout {system.timeout}</p>}
+            <div className="rounded-md border border-border bg-muted/30 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">System Route</p>
+              <p className="mt-2 text-sm font-mono text-foreground">{system.configured ? system.provider : "not configured"}</p>
+              <p className="mt-1 text-xs font-mono text-muted-foreground">{system.model || "No model selected"}</p>
+              {system.timeout && <p className="mt-1 text-[11px] text-muted-foreground">Timeout {system.timeout}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
             <section className="space-y-4">
-              <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
+              <div className="rounded-md border border-border bg-muted/30 p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Ollama Models</h3>
-                    <p className="mt-1 text-xs text-[var(--foreground-dim)]">{ollamaMessage || "Polling local Ollama every 10 seconds."}</p>
+                    <h3 className="text-xs uppercase tracking-wider font-semibold">Ollama Models</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{ollamaMessage || "Polling local Ollama every 10 seconds."}</p>
                   </div>
-                  <button type="button" onClick={() => loadOllamaModels()} disabled={ollamaLoading} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] disabled:opacity-50">
+                  <Button type="button" onClick={() => loadOllamaModels()} disabled={ollamaLoading} variant="outline" size="sm">
                     {ollamaLoading ? "Polling..." : "Poll"}
-                  </button>
+                  </Button>
                 </div>
                 {ollamaModels.length > 0 ? (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                     {ollamaModels.map((item) => (
-                      <button key={ollamaModelKey(item)} type="button" onClick={() => applyOllamaModelPreset(item)} className={`rounded-sm border p-3 text-left ${isOllamaEndpoint && model === item.name ? "border-[var(--nvidia-green)] bg-[rgba(118,185,0,0.08)]" : "border-[var(--border-subtle)] bg-[var(--background)] hover:border-[var(--nvidia-green)]"}`}>
-                        <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-[var(--foreground)]"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
-                        <div className="mt-1 text-[11px] text-[var(--foreground-dim)]">
+                      <button
+                        key={ollamaModelKey(item)}
+                        type="button"
+                        onClick={() => applyOllamaModelPreset(item)}
+                        className={`rounded-md border p-3 text-left transition-colors ${isOllamaEndpoint && model === item.name ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary"}`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-foreground">
+                          <span className="truncate">{item.name}</span>
+                          <OllamaHostBadge label={item.hostLabel} />
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
                           {[item.parameterSize, item.quantization, item.sizeLabel].filter(Boolean).join(" · ") || item.family || "local model"}
                         </div>
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-xs text-[var(--foreground-dim)]">No local Ollama models reported.</p>
+                  <p className="mt-3 text-xs text-muted-foreground">No local Ollama models reported.</p>
                 )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <FieldLabel>Provider Name</FieldLabel>
-                  <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={name} onChange={(event) => setName(event.target.value)} className={inputClsSm} />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Provider Type</FieldLabel>
-                  <select value={type} onChange={(event) => setType(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+                  <select value={type} onChange={(event) => setType(event.target.value)} className={selectCls}>
                     {providerTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <FieldLabel>Model</FieldLabel>
                   {isOllamaEndpoint && ollamaModels.length > 0 ? (
-                    <select value={model} onChange={(event) => setModel(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+                    <select value={model} onChange={(event) => setModel(event.target.value)} className={selectCls}>
                       {ollamaModels.map((item) => <option key={ollamaModelKey(item)} value={item.name}>{item.hostLabel ? `[${item.hostLabel}] ` : ""}{item.name}</option>)}
                     </select>
                   ) : (
-                    <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="provider/model-name" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                    <input value={model} onChange={(event) => setModel(event.target.value)} placeholder="provider/model-name" className={inputClsSm} />
                   )}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <FieldLabel>Endpoint URL</FieldLabel>
-                  <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://example.com/v1" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://example.com/v1" className={inputClsSm} />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Credential Env Key</FieldLabel>
-                  <input value={credentialKey} onChange={(event) => setCredentialKey(event.target.value.toUpperCase())} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={credentialKey} onChange={(event) => setCredentialKey(event.target.value.toUpperCase())} className={inputClsSm} />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>API Key</FieldLabel>
-                  <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder={activeProvider ? "leave blank to keep stored key" : "stored in OpenShell provider"} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder={activeProvider ? "leave blank to keep stored key" : "stored in OpenShell provider"} className={inputClsSm} />
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Route</FieldLabel>
-                  <select value={route} onChange={(event) => setRoute(event.target.value as "gateway" | "system")} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+                  <select value={route} onChange={(event) => setRoute(event.target.value as "gateway" | "system")} className={selectCls}>
                     <option value="gateway">Sandbox inference</option>
                     <option value="system">System inference</option>
                   </select>
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Timeout Seconds</FieldLabel>
-                  <input value={timeout} onChange={(event) => setTimeoutValue(event.target.value)} inputMode="numeric" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                  <input value={timeout} onChange={(event) => setTimeoutValue(event.target.value)} inputMode="numeric" className={inputClsSm} />
                 </div>
               </div>
 
-              <label className="flex items-center gap-3 text-sm text-[var(--foreground)]">
+              <label className="flex items-center gap-3 text-sm text-foreground">
                 <input type="checkbox" checked={noVerify} onChange={(event) => setNoVerify(event.target.checked)} />
                 Skip provider verification while saving
               </label>
@@ -734,35 +699,49 @@ export default function InferenceEndpointPanel() {
                 <VllmAdvancedConfiguration model={model} port={vllmPort} />
               )}
 
-              <div className="flex items-center gap-3">
-                <button onClick={saveEndpoint} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={saveEndpoint} disabled={saving} size="sm">
                   {saving ? "Saving..." : "Save Endpoint"}
-                </button>
-                <button type="button" onClick={useVllmPreset} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-secondary)] disabled:opacity-50">
+                </Button>
+                <Button type="button" onClick={useVllmPreset} disabled={saving} variant="outline" size="sm">
                   vLLM Preset
-                </button>
-                {message && <p className="text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">{message}</p>}
+                </Button>
               </div>
+
+              {message && (
+                <Alert variant={isError ? "destructive" : "default"}>
+                  <AlertDescription className="text-xs whitespace-pre-wrap">{message}</AlertDescription>
+                </Alert>
+              )}
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Configured Providers</h3>
+              <h3 className="text-xs uppercase tracking-wider font-semibold">Configured Providers</h3>
               {providers.length === 0 ? (
-                <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-xs text-[var(--foreground-dim)]">No providers configured.</div>
+                <div className="rounded-md border border-border bg-muted/30 p-4 text-xs text-muted-foreground">No providers configured.</div>
               ) : (
                 <div className="space-y-2">
                   {providers.map((provider) => (
-                    <div key={provider.name || provider.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
+                    <div key={provider.name || provider.id} className="rounded-md border border-border bg-muted/30 p-3">
                       <button type="button" onClick={() => selectProvider(provider)} className="w-full text-left">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-mono text-[var(--foreground)]">{provider.name}</span>
-                          {provider.name === gateway.provider && <span className="text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">active</span>}
+                          <span className="text-sm font-mono text-foreground">{provider.name}</span>
+                          {provider.name === gateway.provider && (
+                            <span className="text-[10px] uppercase tracking-wider text-primary">active</span>
+                          )}
                         </div>
-                        <p className="mt-1 text-[11px] text-[var(--foreground-dim)]">{provider.type || "unknown"} · credentials {provider.credentialKeys.length} · config {provider.configKeys.length}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">{provider.type || "unknown"} · credentials {provider.credentialKeys.length} · config {provider.configKeys.length}</p>
                       </button>
-                      <button type="button" onClick={() => deleteProvider(provider.name)} disabled={!provider.name || deletingProvider === provider.name} className="mt-3 px-3 py-2 rounded-sm border border-red-500/40 text-red-300 text-[10px] font-mono uppercase tracking-wider hover:bg-red-500/10 disabled:opacity-50">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteProvider(provider.name)}
+                        disabled={!provider.name || deletingProvider === provider.name}
+                        className="mt-3 border-destructive/40 text-destructive hover:bg-destructive/10"
+                      >
                         {deletingProvider === provider.name ? "Deleting..." : "Delete"}
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -771,6 +750,6 @@ export default function InferenceEndpointPanel() {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

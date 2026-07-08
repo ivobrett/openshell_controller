@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { SandboxInventoryItem } from "../hooks/useSandboxInventory"
+import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 type HealthCheck = {
   key: string
@@ -57,7 +57,7 @@ export default function SandboxHealthPanel({ sandbox }: { sandbox: SandboxInvent
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 max-lg:flex-col">
         <div>
-          <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Sandbox Health</h5>
+          <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Sandbox Health</h5>
           <p className="mt-1 text-xs text-[var(--foreground-dim)]">
             Quick checks for OpenShell resolution, runtime phase, SSH config, and saved backups.
           </p>
@@ -74,9 +74,9 @@ export default function SandboxHealthPanel({ sandbox }: { sandbox: SandboxInvent
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {(checks.length ? checks : [{ key: "loading", label: "Health", ok: false, detail: loading ? "Checking..." : "No health data yet." }]).map((check) => (
-          <div key={check.key} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4">
+          <div key={check.key} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
             <div className="flex items-center justify-between gap-3">
-              <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">{check.label}</h6>
+              <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">{check.label}</h6>
               <span className={`status-chip px-2 py-1 ${check.ok ? "bg-[var(--status-running-bg)] text-[var(--status-running)]" : "bg-amber-400/15 text-amber-300"}`}>
                 {check.ok ? "ok" : "check"}
               </span>
@@ -87,7 +87,7 @@ export default function SandboxHealthPanel({ sandbox }: { sandbox: SandboxInvent
       </div>
 
       {health && (
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-xs text-[var(--foreground-dim)]">
+        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-3 text-xs text-[var(--foreground-dim)]">
           Checked {new Date(health.checkedAt).toLocaleString()} in {health.durationMs} ms
           {health.sandbox ? ` / ${health.sandbox.name} / ${health.sandbox.phase}` : ""}
           {health.error ? ` / ${health.error}` : ""}

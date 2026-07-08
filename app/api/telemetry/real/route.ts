@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { execFile } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { hostname, networkInterfaces } from "node:os"
@@ -7,6 +7,9 @@ import { promisify } from "node:util"
 import { NEMOCLAW_BIN, NODE_BIN, OPENSHELL_BIN, hostCommandEnv } from "@/app/lib/hostCommands"
 import { resolveRuntimeAuthority } from "@/app/lib/runtimeAuthority"
 import { isUserAuthorizedForSandbox } from "@/app/lib/controlAuth"
+import { isOperator, oauthEmail } from "@/app/lib/auth/context"
+import { getSandboxAccessMap } from "@/app/lib/auth/sandboxAccessStore"
+import { filterInventoryForUser } from "@/app/lib/auth/filterInventory.mjs"
 import { isNemoClawImage, readSandboxContainerImageMap, type SandboxImageMap } from "@/app/lib/sandboxContainerImage"
 
 const execFileAsync = promisify(execFile)
@@ -33,7 +36,10 @@ type NemoClawSummary = {
 }
 
 type NemoClawRegistryData = {
-  sandboxes?: Record<string, { name?: string; agent?: string | null }>
+  sandboxes?: Record<
+    string,
+    { name?: string; agent?: string | null; agentVersion?: string | null; hermesAuthMethod?: string | null }
+  >
 }
 
 type SandboxItem = {
@@ -176,6 +182,17 @@ function resolveSandboxAgent(
   const namedEntry = Object.values(entries).find((entry) => entry?.name === name || Boolean(id && entry?.name === id))
   const registryAgent = directEntry?.agent || namedEntry?.agent
   if (typeof registryAgent === "string" && registryAgent.trim()) return registryAgent.trim()
+
+  // The registry `agent` field is sometimes left null even for NemoClaw-built
+  // sandboxes. Infer from other registry signals before falling back to the
+  // container image: docker can report a bare image ID (not the tag) once a
+  // build tag is reused/detached, which makes isNemoClawImage miss and
+  // misclassifies an OpenClaw sandbox as "custom".
+  const entry = directEntry || namedEntry
+  if (entry) {
+    if (typeof entry.hermesAuthMethod === "string" && entry.hermesAuthMethod.trim()) return "hermes"
+    if (typeof entry.agentVersion === "string" && entry.agentVersion.trim()) return "openclaw"
+  }
 
   // No registry entry → use the container image. NemoClaw-built sandboxes
   // get "openclaw" as the default; bare openshell sandboxes are "custom".
@@ -334,7 +351,7 @@ async function readSandbox(name: string, defaultSandboxNames: Set<string>, regis
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const userEmail = request.headers.get("x-forwarded-user")
     const { stdout: sandboxListStdout } = await execOpenShell(["sandbox", "list"])
@@ -366,7 +383,7 @@ export async function GET(request: Request) {
     const inventoryCount = sandboxes.length
     const hasMappedFallbackWithoutInventory = inventoryCount === 0
 
-    return NextResponse.json({
+    let payload = {
       sandboxes,
       pods: { items },
       nemoclaw,
@@ -392,7 +409,25 @@ export async function GET(request: Request) {
       message: hasMappedFallbackWithoutInventory
         ? "Fetched live OpenShell inventory: zero sandboxes reported, so any mapped NemoClaw dashboard should be treated as fallback-only."
         : "Fetched live sandbox inventory from the clean OpenShell runtime",
-    })
+    }
+
+    // Defense in depth: non-operators only receive sandboxes they're granted,
+    // and the host-level nemoclaw gateway detail is stripped. The name-level
+    // x-forwarded-user filter above already narrows the list; this also scrubs
+    // the pods/nemoclaw blocks and re-derives access from the verified cookie.
+    if (!(await isOperator(request))) {
+      const email = await oauthEmail(request)
+      const allowed = new Set<string>()
+      if (email) {
+        const map = getSandboxAccessMap()
+        for (const [name, emails] of map.entries()) {
+          if (emails.has(email.toLowerCase())) allowed.add(name)
+        }
+      }
+      payload = filterInventoryForUser(payload, allowed)
+    }
+
+    return NextResponse.json(payload)
   } catch (error) {
     console.error("Error fetching real telemetry:", error)
 

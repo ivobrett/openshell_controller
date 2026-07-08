@@ -81,7 +81,7 @@ function MetricBlock({
       {children}
       <div className="min-w-0">
         <p className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{label}</p>
-        <p className="mt-1 font-mono text-2xl text-[var(--foreground)]">{value}</p>
+        <p className="mt-1 font-mono text-2xl text-[var(--foreground-hex)]">{value}</p>
         <p className="mt-1 truncate text-[11px] text-[var(--foreground-dim)]">{subtext}</p>
       </div>
     </div>

@@ -113,14 +113,16 @@ assert.match(
   'terminal bootstrap must execute the resolved session command'
 )
 
-const operatorTerminalSource = await readFile(path.join(root, 'app/operator-terminal/page.tsx'), 'utf8')
+// The xterm + socket machinery (incl. transport metadata + status copy) was
+// extracted from the page into app/hooks/useTerminalConnection.ts in Phase 4b.
+const terminalConnectionSource = await readFile(path.join(root, 'app/hooks/useTerminalConnection.ts'), 'utf8')
 assert.match(
-  operatorTerminalSource,
+  terminalConnectionSource,
   /transport\?: string/,
-  'operator terminal UI must track actual transport metadata'
+  'operator terminal connection must track actual transport metadata'
 )
 assert.match(
-  operatorTerminalSource,
+  terminalConnectionSource,
   /via \$\{liveSession\.transport\}/,
   'operator terminal status must disclose the actual live transport to avoid misleading readiness copy'
 )

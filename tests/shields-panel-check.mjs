@@ -4,11 +4,11 @@ import path from 'node:path'
 
 const root = process.cwd()
 
-const [nemoclawCliSource, routeSource, panelSource, sandboxListSource] = await Promise.all([
+const [nemoclawCliSource, routeSource, panelSource, detailSource] = await Promise.all([
   readFile(path.join(root, 'app/lib/nemoclawCli.ts'), 'utf8'),
   readFile(path.join(root, 'app/api/sandbox/[sandboxId]/shields/route.ts'), 'utf8'),
   readFile(path.join(root, 'app/components/ShieldsPanel.tsx'), 'utf8'),
-  readFile(path.join(root, 'app/components/SandboxList.tsx'), 'utf8'),
+  readFile(path.join(root, 'app/(shell)/sandboxes/[name]/page.tsx'), 'utf8'),
 ])
 
 // Library: shields helpers must go through the shared runNemoClaw invocation
@@ -46,10 +46,11 @@ assert.match(panelSource, /api\/auth\/me/, 'panel must resolve the operator iden
 assert.match(panelSource, /Only the operator \(admin\) can raise or lower shields/, 'panel must show a read-only note to non-admin users')
 
 // Mounting: OpenClaw only. Hermes `shields up` is broken in NemoClaw v0.0.73
-// (config-lock parent-dir perm mismatch), so the panel is not offered for
-// Hermes until upstream fixes it.
-assert.match(sandboxListSource, /selectedSandboxIsOpenClaw && \(\s*<DrawerSection\s*title="Shields"/, 'SandboxList must mount ShieldsPanel for openclaw sandboxes only')
-assert.doesNotMatch(sandboxListSource, /selectedSandboxIsHermes\) && \(\s*<DrawerSection\s*title="Shields"/, 'ShieldsPanel must NOT be mounted for hermes (shields up broken on v0.0.73)')
-assert.match(sandboxListSource, /shields: false,/, 'shields drawer must default closed')
+// (config-lock parent-dir perm mismatch), so the Shields tab is not offered
+// for Hermes until upstream fixes it. The gating + exclusion comment moved
+// from SandboxList to the sandbox detail page (Phase 4).
+assert.match(detailSource, /isOpenClaw && can\("manageShields"\) && \(/, 'detail page must gate the Shields tab to openclaw + manageShields')
+assert.match(detailSource, /<ShieldsPanel sandboxName=\{sandbox\.name\} \/>/, 'detail page must mount ShieldsPanel with the sandbox name')
+assert.match(detailSource, /config-lock step reverts/, 'the Hermes shields exclusion comment must be preserved verbatim')
 
 console.log('shields-panel-check: PASS shields lib/route/panel assertions')

@@ -3,13 +3,16 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const root = process.cwd()
-const pagePath = path.join(root, 'app/page.tsx')
+const dashboardPagePath = path.join(root, 'app/(shell)/page.tsx')
+const helpPagePath = path.join(root, 'app/(shell)/help/page.tsx')
 const helpPanelPath = path.join(root, 'app/components/HelpPanel.tsx')
 
-const [pageSource, helpPanelSource] = await Promise.all([
-  readFile(pagePath, 'utf8'),
+const [dashboardPageSource, helpPageSource, helpPanelSource] = await Promise.all([
+  readFile(dashboardPagePath, 'utf8'),
+  readFile(helpPagePath, 'utf8'),
   readFile(helpPanelPath, 'utf8'),
 ])
+const pageSource = dashboardPageSource + '\n' + helpPageSource
 
 assert.match(pageSource, /useState\(false\)/, 'telemetry bar must be disabled by default')
 assert.match(pageSource, /TELEMETRY_BAR_ENABLED_KEY/, 'telemetry bar preference must have a persistent storage key')

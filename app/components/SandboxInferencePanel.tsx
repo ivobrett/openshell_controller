@@ -1,7 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { SandboxInventoryItem } from "../hooks/useSandboxInventory"
+import { Button } from "@/app/components/ui/button"
+import { Input } from "@/app/components/ui/input"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
+import { Card } from "@/app/components/ui/card"
+import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 type ProviderSummary = {
   id: string | null
@@ -62,7 +66,7 @@ type SandboxInferenceConfig = {
 
 function OllamaHostBadge({ label }: { label?: string | null }) {
   if (!label) return null
-  return <span className="shrink-0 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-[var(--foreground-dim)]">[{label}]</span>
+  return <span className="shrink-0 rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[9px] font-mono uppercase tracking-wider text-muted-foreground">[{label}]</span>
 }
 
 function ollamaModelKey(item: OllamaModel) {
@@ -70,13 +74,7 @@ function ollamaModelKey(item: OllamaModel) {
 }
 
 function makeRoute(provider: string, model: string, label = ""): SandboxInferenceRoute {
-  return {
-    id: `${provider}::${model}`,
-    provider,
-    model,
-    enabled: true,
-    label,
-  }
+  return { id: `${provider}::${model}`, provider, model, enabled: true, label }
 }
 
 function routeKey(route: Pick<SandboxInferenceRoute, "provider" | "model">) {
@@ -94,25 +92,16 @@ function dedupeRoutes(routes: SandboxInferenceRoute[]) {
 
 function sourceScope(source: string | null | undefined) {
   switch (source) {
-    case "gateway":
-      return "Sandbox"
-    case "system":
-      return "System"
-    case "sandbox":
-      return "Sandbox Config"
-    default:
-      return "Verified"
+    case "gateway": return "Sandbox"
+    case "system": return "System"
+    case "sandbox": return "Sandbox Config"
+    default: return "Verified"
   }
 }
 
 function verifiedRouteFromStatus(route: InferenceRouteStatus | undefined, label: string, source: "gateway" | "system") {
   return route?.configured && route.provider && route.model
-    ? {
-        ...makeRoute(route.provider, route.model, label),
-        scope: sourceScope(source),
-        source,
-        lastVerifiedAt: null,
-      }
+    ? { ...makeRoute(route.provider, route.model, label), scope: sourceScope(source), source, lastVerifiedAt: null }
     : null
 }
 
@@ -121,12 +110,7 @@ function normalizeVerifiedRoute(route: VerifiedInferenceRoute): VerifiedSandboxI
   const model = typeof route.model === "string" ? route.model.trim() : ""
   if (!provider || !model) return null
   const source = typeof route.source === "string" && route.source.trim() ? route.source.trim() : "saved"
-  return {
-    ...makeRoute(provider, model, typeof route.label === "string" ? route.label.trim() : ""),
-    scope: sourceScope(source),
-    source,
-    lastVerifiedAt: typeof route.lastVerifiedAt === "string" && route.lastVerifiedAt.trim() ? route.lastVerifiedAt : null,
-  }
+  return { ...makeRoute(provider, model, typeof route.label === "string" ? route.label.trim() : ""), scope: sourceScope(source), source, lastVerifiedAt: typeof route.lastVerifiedAt === "string" && route.lastVerifiedAt.trim() ? route.lastVerifiedAt : null }
 }
 
 function dedupeVerifiedRoutes(routes: Array<VerifiedSandboxInferenceRoute | null>) {
@@ -134,6 +118,8 @@ function dedupeVerifiedRoutes(routes: Array<VerifiedSandboxInferenceRoute | null
     .filter((route): route is VerifiedSandboxInferenceRoute => Boolean(route))
     .map((route) => [route.id, route])).values())
 }
+
+const inputCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
 
 export default function SandboxInferencePanel({
   sandbox,
@@ -148,6 +134,7 @@ export default function SandboxInferencePanel({
   const [saving, setSaving] = useState(false)
   const [applying, setApplying] = useState(false)
   const [message, setMessage] = useState("")
+  const [isError, setIsError] = useState(false)
   const [providers, setProviders] = useState<ProviderSummary[]>([])
   const [verifiedRoutes, setVerifiedRoutes] = useState<VerifiedSandboxInferenceRoute[]>([])
   const [routes, setRoutes] = useState<SandboxInferenceRoute[]>([])
@@ -162,6 +149,8 @@ export default function SandboxInferencePanel({
   const draftProviderIsOllama = draftProvider.toLowerCase().includes("ollama")
   const anyOllamaRoute = routes.some((route) => route.provider.toLowerCase().includes("ollama"))
   const shouldPollOllama = draftProviderIsOllama || anyOllamaRoute
+
+  function setMsg(text: string, error = false) { setIsError(error); setMessage(text) }
 
   const loadOllamaModels = useCallback(async () => {
     try {
@@ -221,15 +210,13 @@ export default function SandboxInferencePanel({
       setDraftLabel("")
       setUpdatedAt(config?.updatedAt || null)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to load sandbox inference config")
+      setMsg(error instanceof Error ? error.message : "Failed to load sandbox inference config", true)
     } finally {
       setLoading(false)
     }
   }, [sandbox.id])
 
-  useEffect(() => {
-    load()
-  }, [load])
+  useEffect(() => { load() }, [load])
 
   useEffect(() => {
     if (!shouldPollOllama) return
@@ -241,19 +228,14 @@ export default function SandboxInferencePanel({
   function addRoute(provider = draftProvider, model = draftModel, label = draftLabel) {
     const cleanProvider = provider.trim()
     const cleanModel = model.trim()
-    if (!cleanProvider || !cleanModel) {
-      setMessage("Choose a provider and model before adding a route.")
-      return
-    }
+    if (!cleanProvider || !cleanModel) { setMsg("Choose a provider and model before adding a route.", true); return }
     const nextRoute = makeRoute(cleanProvider, cleanModel, label.trim())
     setRoutes((current) => {
       const next = dedupeRoutes([...current, nextRoute])
       if (!primaryRouteId) setPrimaryRouteId(nextRoute.id)
       return next
     })
-    setDraftModel("")
-    setDraftLabel("")
-    setMessage("")
+    setDraftModel(""); setDraftLabel(""); setMessage("")
   }
 
   function updateRoute(id: string, updates: Partial<SandboxInferenceRoute>) {
@@ -280,8 +262,7 @@ export default function SandboxInferencePanel({
 
   async function save() {
     try {
-      setSaving(true)
-      setMessage("")
+      setSaving(true); setMessage("")
       const cleanRoutes = dedupeRoutes(routes)
       if (cleanRoutes.length === 0) throw new Error("Add at least one provider/model route.")
       const primary = cleanRoutes.find((route) => route.id === primaryRouteId) || cleanRoutes[0]
@@ -302,9 +283,9 @@ export default function SandboxInferencePanel({
       setRoutes(config.routes)
       setPrimaryRouteId(config.primaryRouteId)
       setUpdatedAt(config.updatedAt)
-      setMessage(`Saved ${config.routes.length} inference route${config.routes.length === 1 ? "" : "s"} for ${sandbox.name}.`)
+      setMsg(`Saved ${config.routes.length} inference route${config.routes.length === 1 ? "" : "s"} for ${sandbox.name}.`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save sandbox inference config")
+      setMsg(error instanceof Error ? error.message : "Failed to save sandbox inference config", true)
     } finally {
       setSaving(false)
     }
@@ -312,8 +293,7 @@ export default function SandboxInferencePanel({
 
   async function applyToContainer() {
     try {
-      setApplying(true)
-      setMessage("")
+      setApplying(true); setMessage("")
       const cleanRoutes = dedupeRoutes(routes)
       if (cleanRoutes.length === 0) throw new Error("Add at least one provider/model route before applying.")
       await save()
@@ -324,58 +304,46 @@ export default function SandboxInferencePanel({
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.note ? `${data.error}\n\n${data.note}` : data.error || "Failed to apply routes")
-      setMessage(`${data.routesApplied} route${data.routesApplied === 1 ? "" : "s"} applied to ${sandbox.name}. ${data.note}`)
+      setMsg(`${data.routesApplied} route${data.routesApplied === 1 ? "" : "s"} applied to ${sandbox.name}. ${data.note}`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to apply routes")
+      setMsg(error instanceof Error ? error.message : "Failed to apply routes", true)
     } finally {
       setApplying(false)
     }
   }
 
   return (
-    <div className={embedded ? "" : "panel p-6"}>
+    <div className={embedded ? "" : "space-y-0"}>
       {showHeader && (
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
+        <div className="flex items-center justify-between gap-4 border-b border-border pb-4 mb-5">
           <div>
-            <h4 className="text-sm font-semibold text-[var(--foreground)] uppercase tracking-wider">
-              {sandbox.name} - INFERENCE ROUTES
+            <h4 className="text-sm font-semibold uppercase tracking-wider">
+              {sandbox.name} — Inference Routes
             </h4>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">
+            <p className="mt-1 text-xs text-muted-foreground">
               Enable multiple endpoint/model routes for this sandbox.
             </p>
           </div>
-          <button
-            onClick={load}
-            disabled={loading || saving}
-            className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50"
-          >
-            Refresh
-          </button>
+          <Button onClick={load} disabled={loading || saving} variant="outline" size="sm">Refresh</Button>
         </div>
       )}
 
       {loading ? (
-        <div className="py-8 text-xs uppercase tracking-wider text-[var(--foreground-dim)]">Loading inference routes...</div>
+        <p className="py-8 text-xs uppercase tracking-wider text-muted-foreground">Loading inference routes…</p>
       ) : (
-        <div className={`${showHeader ? "mt-5" : ""} space-y-5`}>
+        <div className={`${showHeader ? "" : ""} space-y-5`}>
           {!showHeader && (
             <div className="flex justify-end">
-              <button
-                onClick={load}
-                disabled={loading || saving}
-                className="px-3 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50"
-              >
-                Refresh
-              </button>
+              <Button onClick={load} disabled={loading || saving} variant="outline" size="sm">Refresh</Button>
             </div>
           )}
-          <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
+          <Card className="p-4">
             <div className="flex items-center justify-between gap-4">
-              <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Verified Working Routes</h5>
-              <span className="text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">{verifiedRoutes.length} Available</span>
+              <h5 className="text-xs uppercase tracking-wider font-semibold">Verified Working Routes</h5>
+              <span className="text-[10px] uppercase tracking-wider text-primary">{verifiedRoutes.length} Available</span>
             </div>
             {verifiedRoutes.length === 0 ? (
-              <p className="mt-3 text-xs text-[var(--foreground-dim)]">No verified routes reported by the main inference config.</p>
+              <p className="mt-3 text-xs text-muted-foreground">No verified routes reported by the main inference config.</p>
             ) : (
               <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                 {verifiedRoutes.map((route) => (
@@ -383,90 +351,88 @@ export default function SandboxInferencePanel({
                     key={`${route.source}-${route.id}`}
                     type="button"
                     onClick={() => addRoute(route.provider, route.model, route.label)}
-                    className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-left hover:border-[var(--nvidia-green)]"
+                    className="rounded-md border border-border bg-background p-3 text-left hover:border-primary transition-colors"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{route.scope}</span>
-                      <span className="text-[10px] uppercase tracking-wider text-[var(--nvidia-green)]">Add</span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{route.scope}</span>
+                      <span className="text-[10px] uppercase tracking-wider text-primary">Add</span>
                     </div>
-                    <div className="mt-2 text-xs font-mono text-[var(--foreground)]">{route.provider}</div>
-                    <div className="mt-1 break-all text-[11px] font-mono text-[var(--foreground-dim)]">{route.model}</div>
-                    {route.label && <div className="mt-2 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">{route.label}</div>}
+                    <div className="mt-2 text-xs font-mono">{route.provider}</div>
+                    <div className="mt-1 break-all text-[11px] font-mono text-muted-foreground">{route.model}</div>
+                    {route.label && <div className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground">{route.label}</div>}
                   </button>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)_minmax(160px,220px)_auto] gap-3 items-end">
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Endpoint</label>
-              <select value={draftProvider} onChange={(event) => setDraftProvider(event.target.value)} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]">
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Endpoint</label>
+              <select value={draftProvider} onChange={(event) => setDraftProvider(event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
                 <option value="">Select provider</option>
                 {providers.map((item) => item.name ? <option key={item.name} value={item.name}>{item.name}</option> : null)}
               </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Model</label>
-              <input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="model id" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Model</label>
+              <Input value={draftModel} onChange={(event) => setDraftModel(event.target.value)} placeholder="model id" className="font-mono" />
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Label</label>
-              <input value={draftLabel} onChange={(event) => setDraftLabel(event.target.value)} placeholder="optional" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-sm font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Label</label>
+              <Input value={draftLabel} onChange={(event) => setDraftLabel(event.target.value)} placeholder="optional" className="font-mono" />
             </div>
-            <button onClick={() => addRoute()} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)]">
-              Add Route
-            </button>
+            <Button onClick={() => addRoute()} variant="outline" size="sm">Add Route</Button>
           </div>
 
           {draftProviderIsOllama && (
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4">
+            <Card className="p-4">
               <div className="flex items-center justify-between gap-4">
-                <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Ollama Models</h5>
-                <button type="button" onClick={loadOllamaModels} disabled={ollamaLoading} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:bg-[var(--background-panel)] disabled:opacity-50">
-                  {ollamaLoading ? "Polling..." : "Poll"}
-                </button>
+                <h5 className="text-xs uppercase tracking-wider font-semibold">Ollama Models</h5>
+                <Button type="button" variant="outline" size="sm" onClick={loadOllamaModels} disabled={ollamaLoading}>
+                  {ollamaLoading ? "Polling…" : "Poll"}
+                </Button>
               </div>
               {ollamaModels.length === 0 ? (
-                <p className="mt-3 text-xs text-[var(--foreground-dim)]">No local Ollama models reported.</p>
+                <p className="mt-3 text-xs text-muted-foreground">No local Ollama models reported.</p>
               ) : (
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {ollamaModels.map((item) => (
-                    <button key={ollamaModelKey(item)} type="button" onClick={() => addRoute(draftProvider, item.name, "Ollama")} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-left hover:border-[var(--nvidia-green)]">
-                      <div className="flex min-w-0 items-center gap-2 text-xs font-mono text-[var(--foreground)]"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
-                      <div className="mt-1 text-[11px] text-[var(--foreground-dim)]">
+                    <button key={ollamaModelKey(item)} type="button" onClick={() => addRoute(draftProvider, item.name, "Ollama")} className="rounded-md border border-border bg-background p-3 text-left hover:border-primary transition-colors">
+                      <div className="flex min-w-0 items-center gap-2 text-xs font-mono"><span className="truncate">{item.name}</span><OllamaHostBadge label={item.hostLabel} /></div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
                         {[item.parameterSize, item.quantization, item.sizeLabel].filter(Boolean).join(" · ") || "local model"}
                       </div>
                     </button>
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
           <div className="space-y-2">
-            <h5 className="text-xs uppercase tracking-wider text-[var(--foreground)]">Enabled Routes</h5>
+            <h5 className="text-xs uppercase tracking-wider font-semibold">Enabled Routes</h5>
             {routes.length === 0 ? (
-              <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-xs text-[var(--foreground-dim)]">No routes enabled for this sandbox.</div>
+              <Card className="p-4">
+                <p className="text-xs text-muted-foreground">No routes enabled for this sandbox.</p>
+              </Card>
             ) : (
               <div className="space-y-2">
                 {routes.map((route) => (
-                  <div key={route.id} className="grid grid-cols-1 lg:grid-cols-[auto_minmax(160px,220px)_minmax(0,1fr)_minmax(140px,200px)_auto] gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 items-center">
-                    <label className="flex items-center gap-2 text-xs text-[var(--foreground-dim)]">
+                  <div key={route.id} className="grid grid-cols-1 lg:grid-cols-[auto_minmax(160px,220px)_minmax(0,1fr)_minmax(140px,200px)_auto] gap-3 rounded-md border border-border bg-muted/20 p-3 items-center">
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
                       <input type="radio" checked={primaryRouteId === route.id} onChange={() => setPrimaryRouteId(route.id)} />
                       Default
                     </label>
-                    <span className="text-xs font-mono text-[var(--foreground)]">{route.provider}</span>
-                    <input value={route.model} onChange={(event) => updateRoute(route.id, { model: event.target.value })} className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
-                    <input value={route.label} onChange={(event) => updateRoute(route.id, { label: event.target.value })} placeholder="label" className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]" />
+                    <span className="text-xs font-mono">{route.provider}</span>
+                    <input value={route.model} onChange={(event) => updateRoute(route.id, { model: event.target.value })} className={inputCls + " text-xs"} />
+                    <input value={route.label} onChange={(event) => updateRoute(route.id, { label: event.target.value })} placeholder="label" className={inputCls + " text-xs"} />
                     <div className="flex items-center justify-end gap-3">
-                      <label className="flex items-center gap-2 text-xs text-[var(--foreground-dim)]">
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground">
                         <input type="checkbox" checked={route.enabled} onChange={(event) => updateRoute(route.id, { enabled: event.target.checked })} />
                         Enabled
                       </label>
-                      <button onClick={() => removeRoute(route.id)} className="px-3 py-2 rounded-sm bg-[var(--background)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--status-stopped)] border border-[var(--border-subtle)]">
-                        Remove
-                      </button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => removeRoute(route.id)}>Remove</Button>
                     </div>
                   </div>
                 ))}
@@ -475,15 +441,20 @@ export default function SandboxInferencePanel({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={save} disabled={saving} className="px-4 py-2 rounded-sm bg-[var(--nvidia-green)] text-white text-xs font-mono uppercase tracking-wider disabled:opacity-50">
-              {saving ? "Saving..." : "Save Sandbox Routes"}
-            </button>
-            <button onClick={applyToContainer} disabled={saving || applying} className="px-4 py-2 rounded-sm bg-[var(--background-tertiary)] text-[var(--foreground)] text-xs font-mono uppercase tracking-wider hover:border-[var(--nvidia-green)] border border-[var(--border-subtle)] disabled:opacity-50">
-              {applying ? "Applying..." : "Apply to Running Container"}
-            </button>
-            {updatedAt && <span className="text-[11px] text-[var(--foreground-dim)]">Updated {new Date(updatedAt).toLocaleString()}</span>}
-            {message && <span className="text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">{message}</span>}
+            <Button onClick={save} disabled={saving} size="sm">
+              {saving ? "Saving…" : "Save Sandbox Routes"}
+            </Button>
+            <Button onClick={applyToContainer} disabled={saving || applying} variant="outline" size="sm">
+              {applying ? "Applying…" : "Apply to Running Container"}
+            </Button>
+            {updatedAt && <span className="text-[11px] text-muted-foreground">Updated {new Date(updatedAt).toLocaleString()}</span>}
           </div>
+
+          {message && (
+            <Alert variant={isError ? "destructive" : "default"}>
+              <AlertDescription className="text-xs whitespace-pre-wrap">{message}</AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
     </div>

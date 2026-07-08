@@ -8,7 +8,7 @@ const [specSource, routeSource, pageSource, sidebarSource, helpSource] = await P
   readFile(path.join(root, 'app/lib/openapiSpec.ts'), 'utf8'),
   readFile(path.join(root, 'app/api/openapi/route.ts'), 'utf8'),
   readFile(path.join(root, 'app/swagger/page.tsx'), 'utf8'),
-  readFile(path.join(root, 'app/components/Sidebar.tsx'), 'utf8'),
+  readFile(path.join(root, 'app/components/shell/AppSidebar.tsx'), 'utf8'),
   readFile(path.join(root, 'app/components/HelpPanel.tsx'), 'utf8'),
 ])
 

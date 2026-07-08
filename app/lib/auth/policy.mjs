@@ -225,6 +225,12 @@ export function extractSandboxIdFromUrl(pathname, searchParams) {
     const id = parts[3]
     if (id) return decodeURIComponent(id)
   }
+  // UI detail pages: /sandboxes/<name>[/...]. `new` is the create page, not a
+  // sandbox name.
+  if (typeof pathname === 'string' && pathname.startsWith('/sandboxes/')) {
+    const id = pathname.split('/')[2]
+    if (id && id !== 'new') return decodeURIComponent(id)
+  }
   if (searchParams && typeof searchParams.get === 'function') {
     const v = searchParams.get('sandboxId')
     if (v) return v

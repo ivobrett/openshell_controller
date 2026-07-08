@@ -102,20 +102,30 @@ export async function POST(
     }
 
     const nemoclawRecover = await recoverSandboxWithNemoClaw(sandboxName)
-    if (nemoclawRecover.attempted && nemoclawRecover.ok) {
+    if (nemoclawRecover.attempted) {
+      // `nemoclaw <sandbox> recover` IS the recovery path on modern NemoClaw.
+      // Do NOT fall through to the in-sandbox exec relaunch below: current
+      // `openshell sandbox exec` builds wait for backgrounded child processes,
+      // so relaunching the long-running gateway through it hangs until timeout
+      // and surfaces the script source as a scary "Command failed" error. When
+      // recover ran but its probe didn't fully verify, treat it as
+      // fire-and-forget rather than blocking.
       return NextResponse.json({
         ok: true,
-        restarted: true,
+        restarted: nemoclawRecover.ok,
         restartMode: "nemoclaw-recover",
         sandboxId: resolved.id,
         sandboxName,
         readiness,
         nemoclawRecover,
         elapsedMs: Date.now() - startedAt,
-        note: "NemoClaw recover completed. The sandbox runtime and dashboard forward were checked without deleting the sandbox.",
+        note: nemoclawRecover.ok
+          ? "NemoClaw recover completed. The sandbox runtime and dashboard forward were checked without deleting the sandbox."
+          : "NemoClaw recover dispatched (fire-and-forget). It reported the gateway is running but could not fully verify the dashboard forward; give it a moment to settle.",
       })
     }
 
+    // Legacy path only: NemoClaw too old to expose `recover`.
     const runtime = await runSandboxShell(sandboxName, restartOpenClawGatewayScript(), 45000)
 
     return NextResponse.json({
@@ -129,8 +139,8 @@ export async function POST(
       runtime,
       elapsedMs: Date.now() - startedAt,
       note: nemoclawRecover.attempted
-        ? "NemoClaw recover did not complete, so the dashboard fell back to restarting the in-sandbox OpenClaw runtime. The sandbox pod was not deleted."
-        : "OpenClaw runtime restarted inside the sandbox. The sandbox pod was not deleted.",
+        ? "NemoClaw recover did not complete, so the dashboard fell back to relaunching the in-sandbox OpenClaw runtime (fire-and-forget — it may take a moment to warm up). The sandbox pod was not deleted."
+        : "OpenClaw runtime relaunch dispatched (fire-and-forget — it may take a moment to warm up). The sandbox pod was not deleted.",
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to restart sandbox runtime"

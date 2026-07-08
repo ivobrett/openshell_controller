@@ -16,6 +16,9 @@ const PUBLIC_PATHS = [
   "/favicon.ico",
   "/favicon.svg",
   "/favicon-32.png",
+  "/manifest.webmanifest",
+  "/icon-192.png",
+  "/icon-512.png",
 ]
 const BROKER_PATHS = [
   "/api/mcp/broker",
@@ -171,7 +174,11 @@ export async function middleware(request: NextRequest) {
         if (pathname.startsWith("/api/")) {
           return withSecurityHeaders(NextResponse.json({ ok: false, error: `Forbidden: No access to sandbox ${sandboxId}` }, { status: 403 }))
         }
-        return new NextResponse("Forbidden: Access denied to this sandbox", { status: 403 })
+        // Page routes (e.g. /sandboxes/<name>) redirect to the dashboard with a
+        // ?denied= flash instead of a bare 403 body, so the SPA can toast it.
+        const deniedUrl = new URL("/", baseUrl)
+        deniedUrl.searchParams.set("denied", sandboxId)
+        return withSecurityHeaders(NextResponse.redirect(deniedUrl))
       }
 
       return withSecurityHeaders(NextResponse.next({ request: { headers: withForwardedUser(request, ctx.email) } }))

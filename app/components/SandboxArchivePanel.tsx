@@ -1,7 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { SandboxInventoryItem } from "../hooks/useSandboxInventory"
+import { Button } from "@/app/components/ui/button"
+import { Input } from "@/app/components/ui/input"
+import { Badge } from "@/app/components/ui/badge"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
+import { Card } from "@/app/components/ui/card"
+import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 interface SandboxArchivePanelProps {
   sandbox: SandboxInventoryItem
@@ -31,6 +36,7 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
   const [catalogBackups, setCatalogBackups] = useState<BackupCatalogEntry[]>([])
   const [busy, setBusy] = useState<"backup" | "catalog" | "restore" | `restore-${string}` | `delete-${string}` | null>(null)
   const [message, setMessage] = useState("")
+  const [isError, setIsError] = useState(false)
 
   async function loadCatalog() {
     const response = await fetch("/api/backups", { cache: "no-store" })
@@ -42,6 +48,11 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
   useEffect(() => {
     loadCatalog().catch(() => undefined)
   }, [sandbox.id])
+
+  function setMsg(text: string, error = false) {
+    setIsError(error)
+    setMessage(text)
+  }
 
   async function backupSandbox() {
     if (!backupPath.trim() || busy) return
@@ -68,9 +79,9 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       anchor.click()
       anchor.remove()
       window.URL.revokeObjectURL(url)
-      setMessage(`Created backup for ${pathToBackup}: ${fileName}.`)
+      setMsg(`Created backup for ${pathToBackup}: ${fileName}.`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to create sandbox backup")
+      setMsg(error instanceof Error ? error.message : "Failed to create sandbox backup", true)
     } finally {
       setBusy(null)
     }
@@ -88,10 +99,10 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to save backup to catalog")
-      setMessage(`Saved ${data.backup.fileName} to the local backup catalog.`)
+      setMsg(`Saved ${data.backup.fileName} to the local backup catalog.`)
       await loadCatalog()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save backup to catalog")
+      setMsg(error instanceof Error ? error.message : "Failed to save backup to catalog", true)
     } finally {
       setBusy(null)
     }
@@ -112,10 +123,10 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to restore sandbox backup")
-      setMessage(data.note || `Restored ${selectedArchive.name} into ${restorePath.trim()}.`)
+      setMsg(data.note || `Restored ${selectedArchive.name} into ${restorePath.trim()}.`)
       await onRestoreComplete?.()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to restore sandbox backup")
+      setMsg(error instanceof Error ? error.message : "Failed to restore sandbox backup", true)
     } finally {
       setBusy(null)
     }
@@ -133,10 +144,10 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to restore catalog backup")
-      setMessage(data.note || `Restored catalog backup into ${restorePath.trim()}.`)
+      setMsg(data.note || `Restored catalog backup into ${restorePath.trim()}.`)
       await onRestoreComplete?.()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to restore catalog backup")
+      setMsg(error instanceof Error ? error.message : "Failed to restore catalog backup", true)
     } finally {
       setBusy(null)
     }
@@ -150,10 +161,10 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       const response = await fetch(`/api/backups/${encodeURIComponent(backupId)}`, { method: "DELETE" })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to delete catalog backup")
-      setMessage("Deleted catalog backup.")
+      setMsg("Deleted catalog backup.")
       await loadCatalog()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to delete catalog backup")
+      setMsg(error instanceof Error ? error.message : "Failed to delete catalog backup", true)
     } finally {
       setBusy(null)
     }
@@ -163,151 +174,155 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 max-lg:flex-col">
         <div>
-          <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground)]">Backup / Restore</h5>
-          <p className="mt-1 text-xs text-[var(--foreground-dim)]">
+          <h5 className="text-xs font-semibold uppercase tracking-wider">Backup / Restore</h5>
+          <p className="mt-1 text-xs text-muted-foreground">
             Export sandbox contents as a compressed archive, or restore an archive into this sandbox.
           </p>
         </div>
-        <span className="status-chip border border-[var(--border-subtle)] bg-[var(--background)] px-2.5 py-1 text-[var(--foreground-dim)]">
-          tar.gz
-        </span>
+        <Badge variant="outline" className="font-mono text-[10px] tracking-wider">tar.gz</Badge>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-3">
+        <Card className="p-4 space-y-3">
           <div>
-            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">Backup</h6>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">Archive a directory for cold storage or cloning.</p>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wider">Backup</h6>
+            <p className="mt-1 text-xs text-muted-foreground">Archive a directory for cold storage or cloning.</p>
           </div>
-          <label className="block space-y-2">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Source Directory</span>
-            <input
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Source Directory</label>
+            <Input
               value={backupPath}
               onChange={(event) => setBackupPath(event.target.value)}
               placeholder="/sandbox"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="font-mono text-xs"
             />
-          </label>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
               type="button"
               onClick={backupSandbox}
               disabled={!backupPath.trim() || busy !== null}
-              className="rounded-sm bg-[var(--nvidia-green)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-black disabled:opacity-50"
+              size="sm"
             >
-              {busy === "backup" ? "Creating Backup..." : "Download Backup"}
-            </button>
-            <button
+              {busy === "backup" ? "Creating Backup…" : "Download Backup"}
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={saveCatalogBackup}
               disabled={!backupPath.trim() || busy !== null}
-              className="action-button px-4 py-2"
             >
-              {busy === "catalog" ? "Saving..." : "Save To Catalog"}
-            </button>
+              {busy === "catalog" ? "Saving…" : "Save To Catalog"}
+            </Button>
           </div>
-        </div>
+        </Card>
 
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-3">
+        <Card className="p-4 space-y-3">
           <div>
-            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">Restore</h6>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">Merge into the target directory, or replace it first.</p>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wider">Restore</h6>
+            <p className="mt-1 text-xs text-muted-foreground">Merge into the target directory, or replace it first.</p>
           </div>
           <input
             type="file"
             accept=".tar.gz,.tgz,application/gzip,application/x-gzip"
             onChange={(event) => setSelectedArchive(event.target.files?.[0] || null)}
-            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-tertiary)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground)]"
+            className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-xs file:font-mono file:uppercase file:text-foreground"
           />
-          <label className="block space-y-2">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Target Directory</span>
-            <input
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Target Directory</label>
+            <Input
               value={restorePath}
               onChange={(event) => setRestorePath(event.target.value)}
               placeholder="/sandbox"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="font-mono text-xs"
             />
-          </label>
-          <label className="flex items-start gap-3 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
+          </div>
+          <label className="flex items-start gap-3 rounded-md border border-border bg-muted/40 p-3">
             <input
               type="checkbox"
               checked={restoreReplace}
               onChange={(event) => setRestoreReplace(event.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]"
+              className="mt-0.5 h-4 w-4"
             />
             <span>
-              <span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">Replace target contents</span>
-              <span className="mt-1 block text-[11px] text-[var(--foreground-dim)]">Deletes existing files in the target directory before extracting.</span>
+              <span className="block text-xs font-mono uppercase tracking-wider">Replace target contents</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">Deletes existing files in the target directory before extracting.</span>
             </span>
           </label>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={restoreSandbox}
             disabled={!selectedArchive || !restorePath.trim() || busy !== null}
-            className="action-button px-4 py-2"
           >
-            {busy === "restore" ? "Restoring..." : "Restore Archive"}
-          </button>
-        </div>
+            {busy === "restore" ? "Restoring…" : "Restore Archive"}
+          </Button>
+        </Card>
       </div>
 
-      <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-4 space-y-3">
+      <Card className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-4 max-md:flex-col">
           <div>
-            <h6 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground)]">Backup Catalog</h6>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">Host-side cold storage for cloning and redeploying sandboxes later.</p>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wider">Backup Catalog</h6>
+            <p className="mt-1 text-xs text-muted-foreground">Host-side cold storage for cloning and redeploying sandboxes later.</p>
           </div>
-          <button type="button" onClick={() => loadCatalog().catch((error) => setMessage(error.message))} className="action-button px-3 py-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => loadCatalog().catch((error) => setMsg(error.message, true))}
+          >
             Refresh Catalog
-          </button>
+          </Button>
         </div>
 
         <div className="space-y-2">
           {catalogBackups.map((backup) => (
-            <div key={backup.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3">
+            <div key={backup.id} className="rounded-md border border-border bg-muted/30 p-3">
               <div className="flex items-start justify-between gap-4 max-lg:flex-col">
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-mono text-[var(--foreground)]">{backup.fileName}</p>
-                  <p className="mt-1 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">
+                  <p className="truncate text-xs font-mono">{backup.fileName}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                     {backup.sandboxName} / {backup.sourcePath} / {formatBytes(backup.size)} / {new Date(backup.createdAt).toLocaleString()}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <a href={`/api/backups/${encodeURIComponent(backup.id)}/download`} className="action-button px-3 py-2">
-                    Download
-                  </a>
-                  <button
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`/api/backups/${encodeURIComponent(backup.id)}/download`}>Download</a>
+                  </Button>
+                  <Button
                     type="button"
+                    size="sm"
                     onClick={() => restoreCatalogBackup(backup.id)}
                     disabled={busy !== null || !restorePath.trim()}
-                    className="rounded-sm border border-[var(--nvidia-green)] bg-[var(--nvidia-green)] px-3 py-2 text-xs font-mono uppercase tracking-wider text-black disabled:opacity-50"
                   >
-                    {busy === `restore-${backup.id}` ? "Restoring..." : "Restore Here"}
-                  </button>
-                  <button
+                    {busy === `restore-${backup.id}` ? "Restoring…" : "Restore Here"}
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => deleteCatalogBackup(backup.id)}
                     disabled={busy !== null}
-                    className="action-button px-3 py-2"
                   >
-                    {busy === `delete-${backup.id}` ? "Deleting..." : "Delete"}
-                  </button>
+                    {busy === `delete-${backup.id}` ? "Deleting…" : "Delete"}
+                  </Button>
                 </div>
               </div>
             </div>
           ))}
           {catalogBackups.length === 0 && (
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 text-sm text-[var(--foreground-dim)]">
-              No catalog backups saved yet.
-            </div>
+            <p className="text-sm text-muted-foreground p-2">No catalog backups saved yet.</p>
           )}
         </div>
-      </div>
+      </Card>
 
       {message && (
-        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background)] p-3 text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">
-          {message}
-        </div>
+        <Alert variant={isError ? "destructive" : "default"}>
+          <AlertDescription className="text-xs whitespace-pre-wrap">{message}</AlertDescription>
+        </Alert>
       )}
     </div>
   )

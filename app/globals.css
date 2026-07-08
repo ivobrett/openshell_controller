@@ -2,35 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    color-scheme: dark;
+    /* shadcn tokens — NVIDIA industrial dark (default) */
+    --background: 0 0% 4%;            /* #0a0a0a */
+    --foreground: 0 0% 90%;           /* #e5e5e5 */
+    --card: 0 0% 8%;                  /* #141414 */
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 9%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 82 100% 36%;           /* #76B900 NVIDIA green */
+    --primary-foreground: 0 0% 4%;    /* black text on green */
+    --secondary: 0 0% 12%;            /* #1e1e1e */
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 10%;                /* #1a1a1a */
+    --muted-foreground: 220 9% 65%;   /* #9ca3af */
+    --accent: 82 40% 12%;             /* deep green-tinted hover surface */
+    --accent-foreground: 82 100% 60%;
+    --destructive: 0 72% 51%;         /* #dc2626 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 16%;               /* #2a2a2a */
+    --input: 0 0% 16%;
+    --ring: 82 100% 36%;
+    --radius: 0.375rem;
+    --success: 82 100% 36%;
+    --warning: 43 96% 56%;            /* amber-400 */
+    --info: 217 91% 60%;
+    --sidebar: 0 0% 7%;               /* #121212 */
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 16%;
+  }
+
+  html[data-theme="light"] {
+    color-scheme: light;
+    --background: 0 0% 96%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 82 100% 28%;           /* #5A8D00 darker green for contrast */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 90%;
+    --muted-foreground: 0 0% 32%;
+    --accent: 82 40% 90%;
+    --accent-foreground: 82 100% 22%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 83%;
+    --input: 0 0% 83%;
+    --ring: 82 100% 28%;
+    --sidebar: 0 0% 93%;
+    --sidebar-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 83%;
+  }
+}
+
+/* Legacy bridge — values identical to original; keeps old classes rendering */
 :root {
-  color-scheme: dark;
-  /* NVIDIA Industrial Design System */
   --nvidia-green: #76B900;
   --nvidia-green-hover: #5d9600;
   --nvidia-green-dark: #5A8D00;
   --nvidia-green-dim: rgba(118, 185, 0, 0.2);
-  
-  /* Deep dark backgrounds - industrial grade */
-  --background: #0a0a0a;
   --background-secondary: #121212;
   --background-tertiary: #1a1a1a;
   --background-panel: #1e1e1e;
-  
-  /* Technical grays */
-  --foreground: #e5e5e5;
   --foreground-dim: #9ca3af;
   --border-subtle: #2a2a2a;
   --border-medium: #3a3a3a;
-  
-  /* Status colors - professional */
   --status-running: #76B900;
   --status-running-bg: rgba(118, 185, 0, 0.15);
   --status-pending: #9ca3af;
   --status-pending-bg: rgba(156, 163, 175, 0.15);
   --status-stopped: #dc2626;
   --status-stopped-bg: rgba(220, 38, 38, 0.15);
-  
-  /* Data visualization */
   --metric-bg: #161616;
   --metric-border: #2a2a2a;
   --surface-raised: rgba(30, 30, 30, 0.86);
@@ -38,14 +86,10 @@
   --shadow-soft: 0 18px 60px rgba(0, 0, 0, 0.34);
   --shadow-glow: 0 0 0 1px rgba(118, 185, 0, 0.22), 0 18px 60px rgba(118, 185, 0, 0.12);
 }
-
 html[data-theme="light"] {
-  color-scheme: light;
-  --background: #f5f5f5;
   --background-secondary: #eeeeee;
   --background-tertiary: #e5e5e5;
   --background-panel: #ffffff;
-  --foreground: #171717;
   --foreground-dim: #525252;
   --border-subtle: #d4d4d4;
   --border-medium: #a3a3a3;
@@ -55,17 +99,32 @@ html[data-theme="light"] {
   --surface-hover: rgba(93, 150, 0, 0.08);
   --shadow-soft: 0 18px 46px rgba(23, 23, 23, 0.08);
   --shadow-glow: 0 0 0 1px rgba(93, 150, 0, 0.22), 0 18px 46px rgba(93, 150, 0, 0.12);
+  --nvidia-green: #5A8D00;
+  --nvidia-green-dim: rgba(90, 141, 0, 0.2);
+  --status-running: #5A8D00;
+  --status-running-bg: rgba(90, 141, 0, 0.15);
+}
+
+/* Hex fallbacks for legacy var(--background)/var(--foreground) usages */
+body {
+  --background-hex: #0a0a0a;
+  --foreground-hex: #e5e5e5;
+}
+html[data-theme="light"] body {
+  --background-hex: #f5f5f5;
+  --foreground-hex: #171717;
 }
 
 body {
   margin: 0;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   background:
     linear-gradient(rgba(118, 185, 0, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(118, 185, 0, 0.035) 1px, transparent 1px),
-    linear-gradient(180deg, var(--background-secondary), var(--background) 20rem);
+    linear-gradient(180deg, var(--background-secondary), var(--background-hex) 20rem);
   background-size: 56px 56px, 56px 56px, auto;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -85,46 +144,43 @@ input {
   .text-balance {
     text-wrap: balance;
   }
-  
-  /* NVIDIA Green accent */
+
   .nvidia-text {
     color: var(--nvidia-green);
   }
-  
+
   .nvidia-border {
     border-color: var(--nvidia-green);
   }
-  
+
   .nvidia-bg {
     background-color: var(--nvidia-green);
   }
-  
-  /* Status indicators - professional LEDs */
+
   .status-running {
     color: var(--status-running);
   }
-  
+
   .status-running-bg {
     background-color: var(--status-running-bg);
   }
-  
+
   .status-pending {
     color: var(--status-pending);
   }
-  
+
   .status-pending-bg {
     background-color: var(--status-pending-bg);
   }
-  
+
   .status-stopped {
     color: var(--status-stopped);
   }
-  
+
   .status-stopped-bg {
     background-color: var(--status-stopped-bg);
   }
-  
-  /* Panel styling - technical data panels */
+
   .panel {
     background: var(--surface-raised);
     border: 1px solid var(--border-subtle);
@@ -139,8 +195,7 @@ input {
       linear-gradient(90deg, rgba(118, 185, 0, 0.1), transparent 55%),
       var(--surface-raised);
   }
-  
-  /* Metric display - data-dense */
+
   .metric {
     background: var(--metric-bg);
     border: 1px solid var(--metric-border);
@@ -151,7 +206,7 @@ input {
     border: 1px solid var(--border-subtle);
     border-radius: 3px;
     background: var(--background-tertiary);
-    color: var(--foreground);
+    color: var(--foreground-hex);
     transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
   }
 
@@ -165,12 +220,12 @@ input {
     border: 1px solid var(--border-subtle);
     border-radius: 4px;
     background: var(--background-tertiary);
-    color: var(--foreground);
+    color: var(--foreground-hex);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.75rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
-    transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, transform 150ms ease;
+    transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
   }
 
   .action-button:focus-visible {
@@ -181,7 +236,6 @@ input {
   .action-button:hover:not(:disabled) {
     border-color: var(--nvidia-green);
     background: var(--surface-hover);
-    transform: translateY(-1px);
   }
 
   .action-button:disabled {

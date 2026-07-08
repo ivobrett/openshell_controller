@@ -5,7 +5,12 @@ import path from 'node:path'
 const root = process.cwd()
 const instancesPath = path.join(root, 'app/lib/openclawInstances.ts')
 const routePath = path.join(root, 'app/api/openshell/dashboard/open/route.ts')
-const sandboxListPath = path.join(root, 'app/components/SandboxList.tsx')
+// §5.6 (Phase 4): the dashboard-open flow moved out of SandboxList. The "Open
+// dashboard" control now synchronously opens /launch/dashboard in a new tab
+// (app/lib/launchDashboard.ts), and that page performs the sandbox-aware fetch
+// to /api/openshell/dashboard/open (app/launch/dashboard/page.tsx).
+const launchPagePath = path.join(root, 'app/launch/dashboard/page.tsx')
+const launchHelperPath = path.join(root, 'app/lib/launchDashboard.ts')
 
 const instancesSource = await readFile(instancesPath, 'utf8')
 assert.match(
@@ -71,21 +76,27 @@ assert.match(
   'dashboard open route should expose whether the bootstrap contract is tokenized'
 )
 
-const sandboxListSource = await readFile(sandboxListPath, 'utf8')
+const launchPageSource = await readFile(launchPagePath, 'utf8')
+const launchHelperSource = await readFile(launchHelperPath, 'utf8')
 assert.match(
-  sandboxListSource,
-  /searchParams\.set\('sandboxId', selectedSandbox\.name\)/,
-  'sandbox list must pass the selected sandbox name when opening the dashboard'
+  launchPageSource,
+  /query\.set\("sandboxId", sandboxId\)/,
+  'launch page must pass the sandbox name when opening the dashboard'
 )
 assert.match(
-  sandboxListSource,
-  /fetch\(`\/api\/openshell\/dashboard\/open\?\$\{searchParams\.toString\(\)\}`\)/,
-  'sandbox list should call the sandbox-aware dashboard open route'
+  launchPageSource,
+  /fetch\(`\/api\/openshell\/dashboard\/open\?\$\{query\.toString\(\)\}`/,
+  'launch page should call the sandbox-aware dashboard open route'
 )
 assert.match(
-  sandboxListSource,
-  /OpenClaw dashboard opened in a new tab/,
-  'sandbox list should surface concise dashboard launch feedback'
+  launchHelperSource,
+  /\/launch\/dashboard\?sandboxId=/,
+  'open-dashboard control should open the launch page synchronously in a new tab'
+)
+assert.match(
+  launchHelperSource,
+  /"_blank"/,
+  'open-dashboard control should open in a new tab so the click is never popup-blocked'
 )
 
 console.log('openclaw-dashboard-instance-resolution-check: PASS sandbox-aware dashboard resolution assertions')

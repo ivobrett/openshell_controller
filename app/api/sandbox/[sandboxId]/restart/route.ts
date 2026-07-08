@@ -30,7 +30,14 @@ async function runOpenShell(args: string[], timeout = 30000) {
 }
 
 async function runSandboxShell(sandboxName: string, script: string, timeout = 30000) {
-  return runOpenShell(["sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", script], timeout)
+  // `openshell sandbox exec` rejects arguments containing newlines, so pass the
+  // multi-line script base64-encoded and decode it inside the sandbox (same
+  // pattern used elsewhere for newline-bearing exec payloads).
+  const encoded = Buffer.from(script, "utf8").toString("base64")
+  return runOpenShell(
+    ["sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", `echo ${encoded} | base64 -d | sh`],
+    timeout,
+  )
 }
 
 async function waitForSandboxReady(sandboxName: string, timeoutMs: number, intervalMs: number) {

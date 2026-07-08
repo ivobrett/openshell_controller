@@ -266,6 +266,12 @@ export function useTerminalConnection({
         theme: { background: "#000000", foreground: "#f5f5f5", cursor: "#76b900" },
         scrollback: 5000,
         allowTransparency: false,
+        // Treat bare LF as CRLF. The terminal server can fall back to a stream
+        // transport (no PTY line discipline), so shell output that uses '\n'
+        // without '\r' — e.g. the OpenClaw policy banner printed on login —
+        // would otherwise staircase across the screen. Safe for PTY sessions
+        // too (their output already carries '\r').
+        convertEol: true,
       })
       const fitAddon = new FitAddon()
       term.loadAddon(fitAddon)

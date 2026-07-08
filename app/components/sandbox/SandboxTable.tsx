@@ -374,7 +374,7 @@ export function SandboxTable({
             return (
               <div
                 key={sandbox.id}
-                className="group relative rounded-lg border border-border bg-card p-4 cursor-pointer hover:bg-accent/30 hover:border-primary/40 transition-colors"
+                className="group relative flex h-full flex-col rounded-lg border border-border bg-card p-4 cursor-pointer hover:bg-accent/30 hover:border-primary/40 transition-colors"
                 onClick={() => router.push(`/sandboxes/${encodeURIComponent(sandbox.name)}`)}
               >
                 <div className="absolute right-2 top-2" onClick={(e) => e.stopPropagation()}>
@@ -407,7 +407,7 @@ export function SandboxTable({
                   )}
                 </div>
                 <div
-                  className="mt-3 pt-3 border-t border-border flex items-center justify-center gap-1"
+                  className="mt-auto pt-3 border-t border-border flex items-center justify-center gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {renderActionIcons(sandbox)}

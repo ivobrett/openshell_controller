@@ -1,6 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { Button } from "@/app/components/ui/button"
+import { Badge } from "@/app/components/ui/badge"
+import { Card } from "@/app/components/ui/card"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
 import ActivityPanel from "./ActivityPanel"
 import SandboxHealthPanel from "./SandboxHealthPanel"
 import type { SandboxInventoryItem } from "../hooks/inventoryModel"
@@ -73,7 +77,7 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
   }, [sandboxes, selectedSandboxId])
 
   return (
-    <section className="panel overflow-hidden">
+    <Card className="overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -81,12 +85,12 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
         className="flex w-full items-center justify-between gap-4 p-5 text-left"
       >
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">Operator Checks</p>
-          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Sandbox Health</h2>
-          <p className="mt-1 text-xs text-[var(--foreground-dim)]">OpenShell reachability, runtime state, SSH config, and backup coverage.</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-primary">Operator Checks</p>
+          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider">Sandbox Health</h2>
+          <p className="mt-1 text-xs text-muted-foreground">OpenShell reachability, runtime state, SSH config, and backup coverage.</p>
         </div>
         <svg
-          className={`h-4 w-4 shrink-0 text-[var(--foreground-dim)] transition-transform ${open ? "rotate-90" : ""}`}
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -97,14 +101,14 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
       </button>
 
       {open && (
-        <div className="space-y-4 border-t border-[var(--border-subtle)] p-5">
+        <div className="space-y-4 border-t border-border p-5">
           {sandboxes.length > 1 && (
-            <label className="block max-w-lg space-y-2">
-              <span className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Sandbox</span>
+            <label className="block max-w-lg space-y-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Sandbox</span>
               <select
                 value={selectedSandbox?.id || ""}
                 onChange={(event) => setSelectedSandboxId(event.target.value)}
-                className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:border-[var(--nvidia-green)] focus:outline-none"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               >
                 {sandboxes.map((sandbox) => (
                   <option key={sandbox.id} value={sandbox.id}>
@@ -118,13 +122,11 @@ function HealthAccordion({ sandboxes }: { sandboxes: SandboxInventoryItem[] }) {
           {selectedSandbox ? (
             <SandboxHealthPanel sandbox={selectedSandbox} />
           ) : (
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 text-sm text-[var(--foreground-dim)]">
-              No sandboxes are available for health checks yet.
-            </div>
+            <p className="text-sm text-muted-foreground">No sandboxes are available for health checks yet.</p>
           )}
         </div>
       )}
-    </section>
+    </Card>
   )
 }
 
@@ -179,7 +181,7 @@ function McpHealthAccordion() {
   const checks = health?.checks || []
 
   return (
-    <section className="panel overflow-hidden">
+    <Card className="overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -187,12 +189,12 @@ function McpHealthAccordion() {
         className="flex w-full items-center justify-between gap-4 p-5 text-left"
       >
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">Operator Checks</p>
-          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">MCP Server Health</h2>
-          <p className="mt-1 text-xs text-[var(--foreground-dim)]">Starts each enabled MCP server from the control host and lists its tools.</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-primary">Operator Checks</p>
+          <h2 className="mt-1 text-sm font-semibold uppercase tracking-wider">MCP Server Health</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Starts each enabled MCP server from the control host and lists its tools.</p>
         </div>
         <svg
-          className={`h-4 w-4 shrink-0 text-[var(--foreground-dim)] transition-transform ${open ? "rotate-90" : ""}`}
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -203,56 +205,63 @@ function McpHealthAccordion() {
       </button>
 
       {open && (
-        <div className="space-y-4 border-t border-[var(--border-subtle)] p-5">
+        <div className="space-y-4 border-t border-border p-5">
           <div className="flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-start">
-            <div className="text-xs text-[var(--foreground-dim)]">
+            <p className="text-xs text-muted-foreground">
               {health ? `${health.enabledCount} enabled / ${health.installedCount} installed / ${health.ok ? "healthy" : "attention needed"}` : "No health check has run yet."}
-            </div>
-            <button type="button" onClick={loadHealth} disabled={loading} className="action-button px-3 py-2">
-              {loading ? "Checking..." : "Refresh MCP Health"}
-            </button>
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={loadHealth} disabled={loading}>
+              {loading ? "Checking…" : "Refresh MCP Health"}
+            </Button>
           </div>
 
-          {message && <div className="rounded-sm border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">{message}</div>}
+          {message && (
+            <Alert variant="destructive">
+              <AlertDescription className="text-xs">{message}</AlertDescription>
+            </Alert>
+          )}
 
           {checks.length === 0 ? (
-            <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4 text-sm text-[var(--foreground-dim)]">
-              {loading ? "Checking enabled MCP servers..." : "No enabled MCP servers to check."}
-            </div>
+            <p className="text-sm text-muted-foreground">
+              {loading ? "Checking enabled MCP servers…" : "No enabled MCP servers to check."}
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {checks.map((check) => (
-                <div key={check.id} className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] p-4">
+                <Card key={check.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="truncate text-sm font-mono font-semibold text-[var(--foreground-hex)]">{check.name}</h3>
-                      <p className="mt-1 break-all text-[11px] font-mono text-[var(--foreground-dim)]">{check.command} {check.args.join(" ")}</p>
+                      <h3 className="truncate text-sm font-mono font-semibold">{check.name}</h3>
+                      <p className="mt-1 break-all text-[11px] font-mono text-muted-foreground">{check.command} {check.args.join(" ")}</p>
                     </div>
-                    <span className={`status-chip px-2 py-1 ${check.ok ? "bg-[var(--status-running-bg)] text-[var(--status-running)]" : "bg-[var(--status-error-bg)] text-[var(--status-error)]"}`}>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-mono uppercase tracking-wider ${check.ok ? "text-primary border-primary" : "text-destructive border-destructive"}`}
+                    >
                       {check.ok ? "healthy" : "failed"}
-                    </span>
+                    </Badge>
                   </div>
-                  <p className="mt-3 text-xs text-[var(--foreground-dim)]">
+                  <p className="mt-3 text-xs text-muted-foreground">
                     {check.ok ? `${check.toolCount} tool${check.toolCount === 1 ? "" : "s"} discovered in ${check.durationMs} ms.` : check.error || "Server did not respond."}
                   </p>
                   {check.tools.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {check.tools.map((tool) => (
-                        <span key={tool} className="rounded-sm border border-[var(--border-subtle)] px-2 py-1 text-[10px] font-mono text-[var(--foreground-dim)]">{tool}</span>
+                        <Badge key={tool} variant="outline" className="font-mono text-[10px] text-muted-foreground">{tool}</Badge>
                       ))}
                     </div>
                   )}
-                </div>
+                </Card>
               ))}
             </div>
           )}
 
           {health && (
-            <p className="text-[11px] text-[var(--foreground-dim)]">Checked {new Date(health.checkedAt).toLocaleString()}</p>
+            <p className="text-[11px] text-muted-foreground">Checked {new Date(health.checkedAt).toLocaleString()}</p>
           )}
         </div>
       )}
-    </section>
+    </Card>
   )
 }
 
@@ -272,92 +281,92 @@ export default function HelpPanel({
       <HealthAccordion sandboxes={sandboxes} />
       <McpHealthAccordion />
 
-      <section className="panel p-8">
+      <Card className="p-8">
         <div className="flex items-start justify-between gap-4 max-md:flex-col">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--nvidia-green)]">Operator Guide</p>
-            <h1 className="mt-2 text-xl font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Help</h1>
-            <p className="mt-2 max-w-3xl text-sm text-[var(--foreground-dim)]">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-primary">Operator Guide</p>
+            <h1 className="mt-2 text-xl font-semibold uppercase tracking-wider">Help</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
               Quick reference for running sandboxes, moving files, preserving work, and cloning a prepared environment.
             </p>
           </div>
-          <a href="/swagger" target="_blank" rel="noreferrer" className="rounded-sm bg-[var(--nvidia-green)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-black">
-            Open Swagger
-          </a>
+          <Button asChild>
+            <a href="/swagger" target="_blank" rel="noreferrer">Open Swagger</a>
+          </Button>
         </div>
-      </section>
+      </Card>
 
-      <section className="panel p-5">
+      <Card className="p-5">
         <div className="flex items-start justify-between gap-4 max-md:flex-col">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">API Reference</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--foreground-dim)]">
+            <h2 className="text-sm font-semibold uppercase tracking-wider">API Reference</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
               Swagger opens the controller-node API reference in a separate page, including OpenAPI JSON, endpoint details, schemas, and example payloads.
             </p>
           </div>
           <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:flex-col">
-            <a href="/swagger" target="_blank" rel="noreferrer" className="action-button px-3 py-2 text-center">
-              Swagger Page
-            </a>
-            <a href="/api/openapi" target="_blank" rel="noreferrer" className="action-button px-3 py-2 text-center">
-              OpenAPI JSON
-            </a>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/swagger" target="_blank" rel="noreferrer">Swagger Page</a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/api/openapi" target="_blank" rel="noreferrer">OpenAPI JSON</a>
+            </Button>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {helpSections.map((section) => (
-          <article key={section.title} className="panel p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">{section.title}</h2>
+          <Card key={section.title} className="p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wider">{section.title}</h2>
             <ul className="mt-4 space-y-3">
               {section.items.map((item) => (
-                <li key={item} className="flex gap-3 text-sm leading-6 text-[var(--foreground-dim)]">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nvidia-green)]" />
+                <li key={item} className="flex gap-3 text-sm leading-6 text-muted-foreground">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
-          </article>
+          </Card>
         ))}
-      </section>
+      </div>
 
-      <section className="panel p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Common Paths</h2>
+      <Card className="p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wider">Common Paths</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           {[
             ["/sandbox", "Primary writable workspace for persisted sandbox contents."],
             ["/tmp", "Scratch space for short-lived files and transfer staging."],
             ["Backup .tar.gz", "Portable archive for cold storage, cloning, and redeploying."],
           ].map(([label, body]) => (
-            <div key={label} className="metric p-4">
-              <p className="font-mono text-xs text-[var(--nvidia-green)]">{label}</p>
-              <p className="mt-2 text-xs leading-5 text-[var(--foreground-dim)]">{body}</p>
+            <div key={label} className="rounded-md border border-border bg-muted/30 p-4">
+              <p className="font-mono text-xs text-primary">{label}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{body}</p>
             </div>
           ))}
         </div>
-      </section>
+      </Card>
 
       <ActivityPanel />
 
-      <section className="panel p-5">
+      <Card className="p-5">
         <label className="flex items-start gap-3">
           <input
             type="checkbox"
             checked={telemetryBarEnabled}
             onChange={(event) => onTelemetryBarEnabledChange(event.target.checked)}
-            className="mt-0.5 h-4 w-4 accent-[var(--nvidia-green)]"
+            className="mt-0.5 h-4 w-4"
           />
           <span>
-            <span className="block text-xs font-mono uppercase tracking-wider text-[var(--foreground-hex)]">
+            <span className="block text-xs font-mono uppercase tracking-wider">
               Enable Telemetry Bar - EXPERIMENTAL
             </span>
-            <span className="mt-1 block text-xs leading-5 text-[var(--foreground-dim)]">
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
               The telemetry bar is setup for vLLM tokens per second and does not currently work with other endpoints.
             </span>
           </span>
         </label>
-      </section>
+      </Card>
     </div>
   )
 }

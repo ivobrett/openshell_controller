@@ -1,6 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { Button } from "@/app/components/ui/button"
+import { Input } from "@/app/components/ui/input"
+import { Alert, AlertDescription } from "@/app/components/ui/alert"
 import type { SandboxInventoryItem } from "../hooks/inventoryModel"
 
 type SandboxFileEntry = {
@@ -56,6 +59,7 @@ export default function SandboxFilesPanel({
   const [listing, setListing] = useState<SandboxFileListing | null>(null)
   const [listingBusy, setListingBusy] = useState(false)
   const [message, setMessage] = useState("")
+  const [isError, setIsError] = useState(false)
 
   const suggestedUploadPath = useMemo(() => {
     if (!selectedFile) return uploadPath
@@ -71,6 +75,11 @@ export default function SandboxFilesPanel({
     })
   }, [listing])
 
+  function setMsg(text: string, error = false) {
+    setIsError(error)
+    setMessage(text)
+  }
+
   async function loadFileList(nextPath = listPath) {
     if (listingBusy) return
     try {
@@ -84,7 +93,7 @@ export default function SandboxFilesPanel({
       setListing(data.listing)
       setListPath(data.listing.path)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to list sandbox files")
+      setMsg(error instanceof Error ? error.message : "Failed to list sandbox files", true)
     } finally {
       setListingBusy(false)
     }
@@ -122,7 +131,7 @@ export default function SandboxFilesPanel({
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to upload file")
-      setMessage(data.note || "Upload complete.")
+      setMsg(data.note || "Upload complete.")
       if (uploadMode === "directory") {
         setDownloadPath(uploadPath)
       } else {
@@ -130,7 +139,7 @@ export default function SandboxFilesPanel({
       }
       await loadFileList(listPath)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to upload file")
+      setMsg(error instanceof Error ? error.message : "Failed to upload file", true)
     } finally {
       setBusy(null)
     }
@@ -162,9 +171,9 @@ export default function SandboxFilesPanel({
       anchor.click()
       anchor.remove()
       window.URL.revokeObjectURL(url)
-      setMessage(`Downloaded ${pathToDownload}.`)
+      setMsg(`Downloaded ${pathToDownload}.`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to download file")
+      setMsg(error instanceof Error ? error.message : "Failed to download file", true)
     } finally {
       setBusy(null)
     }
@@ -180,25 +189,25 @@ export default function SandboxFilesPanel({
   }
 
   return (
-    <div className={embedded ? "" : "panel p-6"}>
+    <div className={embedded ? "" : "space-y-0"}>
       {showHeader && (
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
+        <div className="flex items-center justify-between gap-4 border-b border-border pb-4 mb-5">
           <div>
-            <h4 className="text-sm font-semibold text-[var(--foreground-hex)] uppercase tracking-wider">
-              {sandbox.name} - FILE TRANSFER
+            <h4 className="text-sm font-semibold uppercase tracking-wider">
+              {sandbox.name} — File Transfer
             </h4>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">
+            <p className="mt-1 text-xs text-muted-foreground">
               Move files through scoped sandbox paths.
             </p>
           </div>
         </div>
       )}
 
-      <div className={`${showHeader ? "mt-5" : ""} grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)] gap-5`}>
-        <section className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-4">
+      <div className={`${showHeader ? "" : ""} grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)] gap-5`}>
+        <section className="rounded-md border border-border bg-muted/30 p-4 space-y-4">
           <div>
-            <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Upload</h5>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">Destination must be under /sandbox or /tmp.</p>
+            <h5 className="text-xs font-semibold uppercase tracking-wider">Upload</h5>
+            <p className="mt-1 text-xs text-muted-foreground">Destination must be under /sandbox or /tmp.</p>
           </div>
           <input
             type="file"
@@ -207,7 +216,7 @@ export default function SandboxFilesPanel({
               setSelectedFile(event.target.files?.[0] || null)
               setSelectedDirectoryFiles([])
             }}
-            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-hex)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground-hex)]"
+            className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-xs file:font-mono file:uppercase file:text-foreground"
           />
           <input
             type="file"
@@ -218,65 +227,67 @@ export default function SandboxFilesPanel({
               setSelectedDirectoryFiles(Array.from(event.target.files || []))
               setSelectedFile(null)
             }}
-            className="block w-full text-xs text-[var(--foreground-dim)] file:mr-3 file:rounded-sm file:border file:border-[var(--border-subtle)] file:bg-[var(--background-hex)] file:px-3 file:py-2 file:text-xs file:font-mono file:uppercase file:text-[var(--foreground-hex)]"
+            className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-xs file:font-mono file:uppercase file:text-foreground"
           />
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Destination Path</label>
-            <input
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Destination Path</label>
+            <Input
               value={uploadPath}
               onChange={(event) => setUploadPath(event.target.value)}
               placeholder="/sandbox/file.txt"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="font-mono text-xs"
             />
             {selectedFile && (
-              <p className="text-[11px] font-mono text-[var(--foreground-dim)]">Target: {suggestedUploadPath}</p>
+              <p className="text-[11px] font-mono text-muted-foreground">Target: {suggestedUploadPath}</p>
             )}
             {uploadMode === "directory" && selectedDirectoryFiles.length > 0 && (
-              <p className="text-[11px] font-mono text-[var(--foreground-dim)]">
+              <p className="text-[11px] font-mono text-muted-foreground">
                 Directory upload: {selectedDirectoryFiles.length} file{selectedDirectoryFiles.length === 1 ? "" : "s"} into {uploadPath}
               </p>
             )}
           </div>
-          <button
+          <Button
             onClick={uploadFile}
             disabled={uploadCount === 0 || busy !== null}
-            className="rounded-sm bg-[var(--nvidia-green)] px-4 py-2 text-xs font-mono uppercase tracking-wider text-black disabled:opacity-50"
+            size="sm"
           >
-            {busy === "upload" ? "Uploading..." : uploadMode === "directory" ? "Upload Directory" : "Upload File"}
-          </button>
+            {busy === "upload" ? "Uploading…" : uploadMode === "directory" ? "Upload Directory" : "Upload File"}
+          </Button>
         </section>
 
-        <section className="rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-4 space-y-4">
+        <section className="rounded-md border border-border bg-muted/30 p-4 space-y-4">
           <div>
-            <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--foreground-hex)]">Download</h5>
-            <p className="mt-1 text-xs text-[var(--foreground-dim)]">Browse sandbox files or enter a file or directory path under /sandbox or /tmp.</p>
+            <h5 className="text-xs font-semibold uppercase tracking-wider">Download</h5>
+            <p className="mt-1 text-xs text-muted-foreground">Browse sandbox files or enter a file or directory path under /sandbox or /tmp.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
-            <input
+            <Input
               value={listPath}
               onChange={(event) => setListPath(event.target.value)}
               placeholder="/sandbox"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="font-mono text-xs"
             />
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => loadFileList(listPath)}
               disabled={listingBusy}
-              className="action-button px-3 py-2"
             >
-              {listingBusy ? "Loading..." : "List"}
-            </button>
-            <button
+              {listingBusy ? "Loading…" : "List"}
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => loadFileList(parentPath(listPath))}
               disabled={listingBusy || listPath === "/sandbox" || listPath === "/tmp"}
-              className="action-button px-3 py-2"
             >
               Up
-            </button>
+            </Button>
           </div>
-          <div className="overflow-hidden rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)]">
-            <div className="grid grid-cols-[1fr_84px_116px_76px] gap-3 border-b border-[var(--border-subtle)] px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--foreground-dim)] max-md:grid-cols-[1fr_72px]">
+          <div className="overflow-hidden rounded-md border border-border bg-background">
+            <div className="grid grid-cols-[1fr_84px_116px_76px] gap-3 border-b border-border px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground max-md:grid-cols-[1fr_72px]">
               <span>Name</span>
               <span className="max-md:hidden">Size</span>
               <span className="max-md:hidden">Modified</span>
@@ -284,18 +295,18 @@ export default function SandboxFilesPanel({
             </div>
             <div className="max-h-72 overflow-auto">
               {listingBusy ? (
-                <div className="px-3 py-8 text-center text-xs font-mono uppercase tracking-wider text-[var(--foreground-dim)]">
-                  Reading sandbox directory...
+                <div className="px-3 py-8 text-center text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                  Reading sandbox directory…
                 </div>
               ) : sortedEntries.length === 0 ? (
-                <div className="px-3 py-8 text-center text-xs text-[var(--foreground-dim)]">
+                <div className="px-3 py-8 text-center text-xs text-muted-foreground">
                   {listing ? "No files found in this directory." : "File list has not loaded yet."}
                 </div>
               ) : (
                 sortedEntries.map((entry) => (
                   <div
                     key={entry.path}
-                    className="grid grid-cols-[1fr_84px_116px_76px] items-center gap-3 border-b border-[var(--border-subtle)] px-3 py-2 last:border-b-0 hover:bg-[var(--surface-hover)] max-md:grid-cols-[1fr_72px]"
+                    className="grid grid-cols-[1fr_84px_116px_76px] items-center gap-3 border-b border-border px-3 py-2 last:border-b-0 hover:bg-muted/40 max-md:grid-cols-[1fr_72px]"
                   >
                     <button
                       type="button"
@@ -304,58 +315,61 @@ export default function SandboxFilesPanel({
                       title={entry.path}
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${entry.type === "directory" ? "bg-[var(--nvidia-green)]" : "bg-[var(--foreground-dim)]"}`} />
-                        <span className="truncate text-xs font-mono text-[var(--foreground-hex)]">{entry.name}</span>
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${entry.type === "directory" ? "bg-primary" : "bg-muted-foreground"}`} />
+                        <span className="truncate text-xs font-mono">{entry.name}</span>
                       </span>
                     </button>
-                    <span className="text-xs font-mono text-[var(--foreground-dim)] max-md:hidden">{entry.type === "directory" ? "dir" : formatBytes(entry.size)}</span>
-                    <span className="text-xs font-mono text-[var(--foreground-dim)] max-md:hidden">
+                    <span className="text-xs font-mono text-muted-foreground max-md:hidden">{entry.type === "directory" ? "dir" : formatBytes(entry.size)}</span>
+                    <span className="text-xs font-mono text-muted-foreground max-md:hidden">
                       {entry.modifiedAt ? new Date(entry.modifiedAt).toLocaleDateString() : "-"}
                     </span>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => {
                         setDownloadPath(entry.path)
                         downloadFile(entry.path)
                       }}
                       disabled={(entry.type !== "file" && entry.type !== "directory") || busy !== null}
-                      className="action-button px-2 py-1 text-right disabled:opacity-30"
+                      className="h-7 px-2 justify-end"
                     >
                       Get
-                    </button>
+                    </Button>
                   </div>
                 ))
               )}
             </div>
           </div>
           {listing?.truncated && (
-            <p className="text-[11px] text-[var(--foreground-dim)]">
+            <p className="text-[11px] text-muted-foreground">
               Showing the first 200 entries. Narrow the path to see more.
             </p>
           )}
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-[var(--foreground-dim)]">Source Path</label>
-            <input
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Source Path</label>
+            <Input
               value={downloadPath}
               onChange={(event) => setDownloadPath(event.target.value)}
               placeholder="/sandbox/file.txt"
-              className="w-full rounded-sm border border-[var(--border-subtle)] bg-[var(--background-hex)] px-3 py-2 text-xs font-mono text-[var(--foreground-hex)] focus:outline-none focus:border-[var(--nvidia-green)]"
+              className="font-mono text-xs"
             />
           </div>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => downloadFile()}
             disabled={!downloadPath.trim() || busy !== null}
-            className="action-button px-4 py-2"
           >
-            {busy === "download" ? "Downloading..." : "Download Path"}
-          </button>
+            {busy === "download" ? "Downloading…" : "Download Path"}
+          </Button>
         </section>
       </div>
 
       {message && (
-        <div className="mt-4 rounded-sm border border-[var(--border-subtle)] bg-[var(--background-tertiary)] p-3 text-xs text-[var(--foreground-dim)] whitespace-pre-wrap">
-          {message}
-        </div>
+        <Alert variant={isError ? "destructive" : "default"} className="mt-4">
+          <AlertDescription className="text-xs whitespace-pre-wrap">{message}</AlertDescription>
+        </Alert>
       )}
     </div>
   )

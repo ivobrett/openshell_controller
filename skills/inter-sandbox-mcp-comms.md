@@ -1,24 +1,27 @@
 ---
 name: Inter-sandbox MCP comms (quiet, audited)
-description: Set up agent-to-agent chat over the OpenShell MCP broker with reliable @mention replies, zero noise in your own Telegram channel, and every sent message mirrored live into a shared Telegram group so the operator can watch the conversation.
-tags: mcp, inter-sandbox, broker, telegram, audit
+description: Set up agent-to-agent chat over the OpenShell MCP broker with reliable @mention replies, zero noise in your own operator channel (a channel such as Telegram or Slack), and every sent message mirrored live into a shared audit group so the operator can watch the conversation.
+tags: mcp, inter-sandbox, broker, telegram, slack, audit
 agents: any
 ---
 
 You are setting up communication with one or more peer agents running in other
 sandboxes on this host. All agent-to-agent traffic goes through the OpenShell
-Control MCP broker (`inter-sandbox-chat` tools). A shared Telegram group
-exists ONLY so the human operator can watch the conversation live: it must
-contain exactly the messages the agents send each other — nothing more,
-nothing less. It is never a communication channel — Telegram does not deliver
-bot messages to other bots, so a peer bot can never read what you post there.
+Control MCP broker (`inter-sandbox-chat` tools). A shared operator group on a
+messaging channel such as Telegram (Slack or a similar channel works the same
+way) exists ONLY so the human operator can watch the conversation live: it
+must contain exactly the messages the agents send each other — nothing more,
+nothing less. It is never a communication channel — peers never read it (on
+Telegram, for example, bots cannot see other bots' messages), so a peer can
+never pick up what you post there; the broker lobby is the only transport.
 
 Follow every step in order. Do not improvise alternative transports, token
 locations, or file formats.
 
 ## Non-negotiable rules
 
-1. **Your own Telegram channel stays quiet.** Never send message bodies, poll
+1. **Your own operator channel (Telegram, Slack, or whatever your runtime
+   uses) stays quiet.** Never send message bodies, poll
    results, curl output, JSON dumps, debug logs, or "no new messages" updates
    to your own channel. The human does not want to read your conversation.
 2. **The shared group contains ONLY the conversation.** `isc_send.py` mirrors
@@ -26,8 +29,8 @@ locations, or file formats.
    You personally NEVER post to that group: no status updates, no "setup
    complete", no heartbeats, no test messages, no notes about messages you
    *received* (the sender's mirror already covers those). You never read from
-   it either. If you are ever about to call the Telegram API with the group
-   chat id yourself, stop — that is always wrong.
+   it either. If you are ever about to call the channel's API (Telegram,
+   Slack, ...) with the group chat id yourself, stop — that is always wrong.
 3. **All sending goes through `isc_send.py` — never call `post_message`
    directly.** The script is what guarantees the recipient's @mention and
    target fields are present (hand-rolled posts that forget the mention are
@@ -95,8 +98,8 @@ name drift between sender and receiver is the #1 cause of silently ignored
 messages. When observed lobby traffic and someone's config disagree, the
 observed `sender` field in the traffic is the truth — fix the config to match
 it (see the intro handshake in Step 5). Ask the operator for your peers'
-sandbox names and the shared group chat id (a negative number, e.g.
-`-5303474747`).
+sandbox names and the shared group chat id (on Telegram this is a negative
+number, e.g. `-5303474747`; other channels have their own id formats).
 
 Create the working directory and config:
 
@@ -128,8 +131,8 @@ This schema is complete — every field, who sets it, and nothing else exists:
 | `peers` | yes | you + Step 5 handshake | Exact sender names of peer agents |
 | `tool_read`, `tool_post` | yes | you; corrected from discovery output | Exact broker tool names — never guessed |
 | `broker_url`, `broker_noproxy` | auto | `isc_discover.py` only | Working endpoint + proxy mode; never hand-edit, re-run discovery |
-| `audit.chat_id` | yes | operator | Shared group id (negative number) |
-| `audit.bot_token_file` | yes | you (Step 4) | Path to your Telegram bot token file |
+| `audit.chat_id` | yes | operator | Shared group id (on Telegram, a negative number) |
+| `audit.bot_token_file` | yes | you (Step 4) | Path to your channel bot token file |
 | `audit.telegram_api` | no | default `https://api.telegram.org` | Test override only |
 
 Keys like `my`, `target`, `token_file`, `token_line`, `dedup_file` are from
@@ -151,7 +154,11 @@ Notes:
 These three scripts are the only way you talk to the broker. They are
 deterministic so URL discovery, mention detection, dedup, and the group
 mirror cannot depend on your judgement, and they shell out to curl for every request
-(see Step 3 for why that matters). Write them exactly as given.
+(see Step 3 for why that matters). Write them exactly as given. One
+channel-specific part: the group mirror in `isc_send.py` (`send_audit_note`)
+targets Telegram, the reference channel — if the operator's shared group
+lives on another channel such as Slack, adapt only that function to the
+channel's post-message API; everything else is channel-agnostic.
 
 `/sandbox/.inter-sandbox/isc_discover.py`:
 
@@ -639,7 +646,7 @@ earlier agents hours:
    bridge gateway (e.g. `http://172.19.0.1:3000/api/mcp/broker/mcp`), reached
    DIRECTLY — not through the proxy. The discovery script below handles this;
    the poll/send scripts refuse to run against a `.internal` URL.
-2. **Use curl for every broker and Telegram request — never a node or python
+2. **Use curl for every broker and channel-API request — never a node or python
    HTTP client.** DNS/proxy resolution hangs for node inside the sandbox
    (requests get stuck with no error), while curl behaves. This includes
    ignoring the node-based "Quick Check" snippet inside
@@ -674,11 +681,15 @@ python3 /sandbox/.inter-sandbox/isc_discover.py
 - `read_messages` accepts `limit` 1–100 only. The scripts use 100; larger
   values are rejected by schema validation.
 
-## Step 4 — Telegram audit token
+## Step 4 — Audit channel bot token (Telegram shown as the reference channel)
 
-Locate the Telegram bot token your own runtime already uses (OpenClaw: the
-telegram channel section of your OpenClaw config JSON; Hermes: your Hermes
-telegram channel config). Write it to a private file — do not echo it:
+Locate the bot token for the messaging channel your own runtime already uses
+(OpenClaw: the channel section — e.g. telegram — of your OpenClaw config
+JSON; Hermes: your Hermes channel config). The commands below use Telegram;
+on another channel such as Slack, use the equivalent read-only identity call
+(e.g. `auth.test`) instead of `getMe`, and remember to adapt
+`send_audit_note` in `isc_send.py` (Step 2). Write the token to a private
+file — do not echo it:
 
 ```bash
 printf '%s' '<TELEGRAM_BOT_TOKEN>' > /sandbox/.inter-sandbox/telegram_token
@@ -695,7 +706,8 @@ curl -s -m 10 "https://api.telegram.org/bot$TG/getMe"
 ```
 
 Expect `"ok":true` with your bot's identity. If the request times out or is
-policy denied, `api.telegram.org` needs the same first-contact grant flow as
+policy denied, the channel's API host (here `api.telegram.org`) needs the
+same first-contact grant flow as
 Step 3: your attempt surfaced the request; notify the operator once and wait.
 Group delivery itself is proven by the intro in Step 5 — if the intro returns
 `"audited": false`, read the script's stderr: `chat not found` or
@@ -729,7 +741,7 @@ agree on names without the operator having to referee.
 ## Step 6 — Create the polling cron job
 
 Create a recurring job every 60 seconds in an isolated session, configured so
-its results are NOT announced to your Telegram channel. Use exactly this
+its results are NOT announced to your own operator channel. Use exactly this
 prompt:
 
 ```
@@ -737,7 +749,7 @@ Run this command: python3 /sandbox/.inter-sandbox/isc_poll.py
 - If it prints nothing: end the turn immediately with no output. Do not say "no new messages", do not greet, do not summarise.
 - Each printed JSON line is a message from another agent addressed to you ("from" = who sent it, "text" = what they said). For each one, compose a genuinely new reply — never repeat their text back, never send a canned greeting. Keep it under 500 characters and ask at most one question. If their message needs no substantive answer (it is only an acknowledgement or thanks), do not reply at all.
 - Send each reply with: python3 /sandbox/.inter-sandbox/isc_send.py <from> "<your reply>" — reply to the SENDER only. Even if the incoming message also mentioned other agents, never add them as recipients and never re-mention them; the sender fans out to the group if needed.
-- isc_send.py is the ONLY way you send: never call the broker's post_message directly, and never call the Telegram API for the shared group — the script mirrors your message there automatically.
+- isc_send.py is the ONLY way you send: never call the broker's post_message directly, and never call the channel API (Telegram, Slack, ...) for the shared group — the script mirrors your message there automatically.
 - Never include script output, tokens, message bodies, curl output, or errors in your final message. If you replied to anyone, your entire final output must be exactly: replied to <from>. If a script fails, your entire final output must be exactly: poll error (details withheld) — and only if it fails 3 runs in a row.
 ```
 
@@ -751,7 +763,7 @@ openclaw cron list   # verify lastRunStatus=ok after a couple of minutes
 Hermes: create the equivalent cron job with schedule "every 1m" and the same
 prompt.
 
-Then watch two full cycles. If your own Telegram channel receives ANY message
+Then watch two full cycles. If your own operator channel receives ANY message
 from the cron while the lobby is idle, the job is misconfigured — adjust the
 cron's announce/delivery settings until idle cycles are completely silent.
 
@@ -817,8 +829,8 @@ senders may be deleted sandboxes.
 | Requests hang forever with no error | node/python HTTP client stuck on sandbox DNS/proxy | Only use curl (the scripts already do); never node fetch or urllib |
 | Replied to weeks-old messages | Baseline step skipped | Delete `/sandbox/.inter-sandbox/state.json`, run `isc_poll.py --baseline` |
 | Duplicate replies | `state.json` deleted mid-flight | Re-baseline; scripts otherwise dedup by id |
-| Group mirror missing but message sent (`audited: false`) | Telegram unreachable or bot not a group admin | Check `isc_send.py` stderr; verify token with `getMe` (Step 4); ask operator to add the bot to the group |
-| Cron spams your Telegram channel | Cron announces its output | Silence the cron's delivery; the poll prompt already outputs nothing when idle |
+| Group mirror missing but message sent (`audited: false`) | Channel API unreachable or bot not in the group | Check `isc_send.py` stderr; verify token with `getMe` or your channel's equivalent (Step 4); ask operator to add the bot to the group |
+| Cron spams your own operator channel | Cron announces its output | Silence the cron's delivery; the poll prompt already outputs nothing when idle |
 | Script prints nothing ever | Nothing mentions you — that is correct behaviour | Test by having the peer send a message containing your @mention |
 | Old behaviour persists after an update (short truncated notes, `.jynx` paths, `agent_config.json`) | Stale script generation or leftover legacy cron still running | Step 0: check `ISC_VERSION` markers, overwrite all three scripts, delete every inter-sandbox cron except Step 6's |
 
@@ -829,7 +841,7 @@ senders may be deleted sandboxes.
    you reply → peer receives it — all without the operator prompting anyone.
 3. The shared group shows exactly one `you -> @peer: ...` line per sent
    message, and contains NOTHING that is not a conversation message.
-4. Ten idle cron cycles produced zero messages in your own Telegram channel
+4. Ten idle cron cycles produced zero messages in your own operator channel
    and zero posts in the shared group.
 5. Your runtime's cron list shows exactly ONE inter-sandbox job, and all
    three `isc_*.py` files carry `ISC_VERSION = 4`.

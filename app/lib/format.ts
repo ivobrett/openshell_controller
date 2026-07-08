@@ -12,3 +12,21 @@ export function relativeTime(isoString: string): string {
   const days = Math.floor(hours / 24)
   return `${days}d ago`
 }
+
+/**
+ * Compact absolute timestamp, e.g. "Jul 6, 14:32:10". Second precision so the
+ * elapsed time between events that share a relative bucket ("2d ago") is
+ * still legible.
+ */
+export function absoluteTime(isoString: string): string {
+  const d = new Date(isoString)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+}

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useActivity } from "@/app/hooks/queries"
 import { useInventory } from "@/app/hooks/queries"
 import { useAuth } from "@/app/components/providers/AuthProvider"
-import { relativeTime } from "@/app/lib/format"
+import { relativeTime, absoluteTime } from "@/app/lib/format"
 import { Card } from "@/app/components/ui/card"
 
 const PAGE_SIZE = 10
@@ -85,8 +85,9 @@ export default function ActivityPage() {
                     <p className="text-[10px] font-mono text-muted-foreground">{entry.sandboxName}</p>
                   )}
                 </div>
-                <span className="shrink-0 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                  {relativeTime(entry.timestamp)}
+                <span className="shrink-0 text-right whitespace-nowrap" title={new Date(entry.timestamp).toISOString()}>
+                  <span className="block text-[10px] font-mono text-muted-foreground">{relativeTime(entry.timestamp)}</span>
+                  <span className="block text-[10px] font-mono text-muted-foreground/60">{absoluteTime(entry.timestamp)}</span>
                 </span>
               </li>
             ))}

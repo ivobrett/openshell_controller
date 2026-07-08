@@ -137,6 +137,22 @@ export default function DashboardPage() {
             </div>
           </Card>
         )}
+        {/* IdP users don't get the approvals/gateway cards (operator-only), so
+            fill their two slots with account/access info to keep the grid even. */}
+        {me.role === "user" && (
+          <>
+            <Card className="p-4 space-y-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Account</p>
+              <p className="text-sm font-mono truncate" title={me.email ?? undefined}>{me.email ?? "—"}</p>
+              <p className="text-[10px] text-muted-foreground">Signed in via IdP</p>
+            </Card>
+            <Card className="p-4 space-y-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Access</p>
+              <p className="text-sm">Terminal &amp; dashboard</p>
+              <p className="text-[10px] text-muted-foreground">On your granted sandboxes — ask your operator to grant more.</p>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Error state (no data ever loaded) */}

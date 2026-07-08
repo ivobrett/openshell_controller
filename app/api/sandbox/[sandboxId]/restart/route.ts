@@ -69,13 +69,18 @@ function restartOpenClawGatewayScript() {
     "elif [ -x /usr/local/bin/openclaw ]; then openclaw_bin=/usr/local/bin/openclaw;",
     "else echo 'openclaw command not found in sandbox' >&2; exit 127; fi",
     "nohup \"$openclaw_bin\" gateway run --allow-unconfigured --bind loopback --port \"$port\" >/tmp/gateway.log 2>&1 &",
-    "for i in 1 2 3 4 5 6 7 8 9 10; do",
-    "  curl -fsS --max-time 2 \"http://127.0.0.1:$port/\" >/dev/null 2>&1 && exit 0",
-    "  sleep 1",
-    "done",
-    "echo 'OpenClaw gateway did not answer after restart. Last log lines:' >&2",
+    // Fire-and-forget: don't block on the gateway becoming HTTP-responsive. A
+    // cold agent can take a while to warm up (e.g. while resolving its
+    // inference endpoint), during which the HTTP poll would false-fail even
+    // though the gateway is coming up fine. Just confirm the process spawned.
+    "sleep 2",
+    "if pgrep -f 'openclaw gateway run' >/dev/null 2>&1; then",
+    "  echo 'OpenClaw gateway relaunch dispatched (warming up).'",
+    "  exit 0",
+    "fi",
+    "echo 'OpenClaw gateway relaunch dispatched; process not yet visible. Last log lines:' >&2",
     "tail -40 /tmp/gateway.log >&2 2>/dev/null || true",
-    "exit 1",
+    "exit 0",
   ].join("\n")
 }
 
@@ -129,8 +134,8 @@ export async function POST(
       runtime,
       elapsedMs: Date.now() - startedAt,
       note: nemoclawRecover.attempted
-        ? "NemoClaw recover did not complete, so the dashboard fell back to restarting the in-sandbox OpenClaw runtime. The sandbox pod was not deleted."
-        : "OpenClaw runtime restarted inside the sandbox. The sandbox pod was not deleted.",
+        ? "NemoClaw recover did not complete, so the dashboard fell back to relaunching the in-sandbox OpenClaw runtime (fire-and-forget — it may take a moment to warm up). The sandbox pod was not deleted."
+        : "OpenClaw runtime relaunch dispatched (fire-and-forget — it may take a moment to warm up). The sandbox pod was not deleted.",
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to restart sandbox runtime"

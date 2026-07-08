@@ -412,7 +412,7 @@ function SandboxDetailInner({ name }: { name: string }) {
           {can("deleteSandbox") && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-8 w-8">
+                <Button size="icon" variant="ghost" className="h-10 w-10 md:h-8 md:w-8">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>

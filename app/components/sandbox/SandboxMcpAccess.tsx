@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { queryClient } from "@/app/lib/queryClient"
+import { apiFetch } from "@/app/lib/apiFetch"
 import { useMcpServers, useInventory } from "@/app/hooks/queries"
 import type { SandboxInventoryItem } from "@/app/hooks/inventoryModel"
 import type { McpServerAccess } from "@/app/hooks/models"
@@ -21,26 +22,22 @@ async function postMcpAccess(
   serverId: string,
   body: Partial<Pick<McpServerAccess, "enabled" | "accessMode" | "allowedSandboxIds">>,
 ): Promise<McpServerAccess[]> {
-  const response = await fetch("/api/mcp", {
+  const data = await apiFetch<{ servers?: McpServerAccess[] }>("/api/mcp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "update-access", serverId, ...body }),
   })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || "Failed to update MCP access")
   queryClient.invalidateQueries({ queryKey: ["mcp", "servers"] })
   return Array.isArray(data.servers) ? data.servers : []
 }
 
 /** Issue the broker config so the agent picks up the new server access. */
 export async function syncMcpManifest(sandbox: SandboxInventoryItem): Promise<string> {
-  const response = await fetch(`/api/sandbox/${encodeURIComponent(sandbox.id)}/mcp`, {
+  const data = await apiFetch<{ note?: string }>(`/api/sandbox/${encodeURIComponent(sandbox.id)}/mcp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sandboxName: sandbox.name }),
   })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || "Failed to issue MCP broker config")
   return data.note || "MCP broker config issued."
 }
 

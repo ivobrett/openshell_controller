@@ -477,6 +477,13 @@ version-check block in `launch.sh`.
 - `docker exec openshell-<name>-* /opt/hermes/.venv/bin/hermes --version`
   reporting ≥0.16 on a fresh sandbox without our shim having run.
 
+**Status 2026-07-09: removal condition VERIFIED.** A fresh Hermes
+sandbox created on NemoClaw v0.0.78 (BYOVPS) reports
+`Hermes Agent v0.17.0 (2026.6.19)` straight from the base image, no
+shim run. `upgrade-hermes.sh` + the version-check block in `launch.sh`
+are ready to delete per the file header's HOW TO REMOVE steps —
+pending a follow-up commit.
+
 **Files:** `scripts/hermes-remote/upgrade-hermes.sh` (103 LoC).
 
 ---

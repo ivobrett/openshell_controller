@@ -10,18 +10,16 @@ NC='\033[0m'
 
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.72}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw ref is pinned to COMMIT 1162e89b (= the v0.0.74 tag + exactly one
-# production commit: "chore(openclaw): upgrade to 2026.6.10 and harden runtime
-# integration", PR #5595). No NemoClaw TAG carries OpenClaw 2026.6.10 yet, and
-# 2026.6.10 is required for current OpenClaw mobile apps (>=2026.6.x) to pair —
-# older sandbox gateways reject their bootstrap tokens (bootstrap_token_invalid).
-# The commit pins npm SRI integrity hashes for the 2026.6.10 packages, so the
-# version strings and hashes must travel together — never sed the version alone.
-# NemoClaw@1162e89 declares min/max_openshell_version 0.0.72 (native mTLS since
-# 0.0.71); Hermes base unchanged (v0.17.0 / v2026.6.19).
-# WHEN TO CHANGE: move to the next NemoClaw TAG that includes the OpenClaw
-# 2026.6.10 upgrade (first tag after v0.0.74), then drop this SHA pin.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-1162e89b4c1689b6a185bb5d90490494f2409cbc}}"
+# NemoClaw is pinned to TAG v0.0.78 — the first release tag that carries the
+# OpenClaw 2026.6.10 upgrade (PR #5595), superseding our temporary SHA pin
+# 1162e89b (= v0.0.74 + that one commit). 2026.6.10 remains required for
+# current OpenClaw mobile apps (>=2026.6.x) to pair — older sandbox gateways
+# reject their bootstrap tokens (bootstrap_token_invalid). npm SRI integrity
+# hashes travel with the version strings — never sed the version alone.
+# NemoClaw@v0.0.78 declares min/max_openshell_version 0.0.72 (native mTLS
+# since 0.0.71); Hermes base unchanged (v0.17.0 / v2026.6.19); Dockerfile /
+# Dockerfile.base are byte-identical to 1162e89b.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.78}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
@@ -147,12 +145,14 @@ install_nemoclaw() {
   git -C "$source_dir" -c advice.detachedHead=false checkout --quiet --detach FETCH_HEAD
   [[ -n "$source_dir" && -f "$source_dir/install.sh" ]] || fail "Could not find NemoClaw install.sh in source checkout."
 
-  # NemoClaw upstream Dockerfile/Dockerfile.base pin Debian package versions
-  # (procps=2:4.0.4-9, e2fsprogs=1.47.2-3+b11, tmux=3.5a-3) even though the
-  # base image is Ubuntu 24.04 noble, where those exact versions don't exist.
-  # The pinned `apt-get install` then fails with exit 100, breaking every
+  # NemoClaw upstream Dockerfile/Dockerfile.base pin exact Debian package
+  # versions (procps=2:4.0.4-9, e2fsprogs=1.47.2-3+b11, tmux=3.5a-3). Since
+  # NemoClaw v0.0.74+ the base is node:22-trixie-slim (Debian 13), so the
+  # pins are distro-correct — but Debian's live index drops superseded
+  # point-release versions, so any security update upstream of us makes the
+  # pinned `apt-get install` fail with exit 100, breaking every
   # `nemoclaw onboard` on a freshly-deployed VPS. Unpin them so apt picks
-  # whatever's available in noble. Re-apply this whenever NemoClaw is
+  # whatever's currently in trixie. Re-apply this whenever NemoClaw is
   # re-extracted; the in-tree Dockerfiles are version-controlled upstream
   # and our patch lives only in this installer.
   for _dockerfile in "$source_dir/Dockerfile" "$source_dir/Dockerfile.base"; do

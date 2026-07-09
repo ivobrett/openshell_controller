@@ -484,10 +484,13 @@ version-check block in `launch.sh`.
 ## 11. NemoClaw Dockerfile apt Unpinning
 
 **What it is:** `install_versioned_nemoclaw_openshell.sh` runs `sed` over
-NemoClaw's extracted `Dockerfile` and `Dockerfile.base` to drop the
-Debian-style version pin (`tmux=3.5a-3`, `procps=2:4.0.4-9`,
-`e2fsprogs=1.47.2-3+b11`) on three apt packages — those pins target Debian,
-but the base image is Ubuntu noble, so apt errors with exit 100.
+NemoClaw's extracted `Dockerfile` and `Dockerfile.base` to drop the exact
+Debian version pin (`tmux=3.5a-3`, `procps=2:4.0.4-9`,
+`e2fsprogs=1.47.2-3+b11`) on three apt packages. Historically the pins
+targeted Debian while the base was Ubuntu noble (guaranteed exit 100);
+since NemoClaw v0.0.74+ the base is `node:22-trixie-slim` (Debian 13),
+so the pins resolve — until a Debian point-release supersedes a pinned
+version and drops it from the live index. Same failure, new trigger.
 
 **Why we need it:** Without this, every fresh-image NemoClaw install hangs
 sandbox creation for ~90 s with no usable error.

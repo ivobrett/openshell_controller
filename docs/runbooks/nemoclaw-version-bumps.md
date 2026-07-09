@@ -22,6 +22,20 @@ because NemoClaw pins Debian package versions on Ubuntu). A version
 bump may obsolete several — check, then delete what's no longer needed
 in the same change set.
 
+> **Update (2026-07-09, v0.0.78 bump):** since NemoClaw v0.0.74+
+> (commit `1162e89b`) the `Dockerfile` / `Dockerfile.base` base image is
+> `node:22-trixie-slim` (Debian 13), **not** `openshell/sandbox-base-u24`
+> (Ubuntu noble). The apt pins are now distro-correct, so they resolve —
+> until Debian ships a point-release security update that supersedes a
+> pinned version and drops it from the live index. Same exit-100
+> failure, new cause. `Dockerfile.base` also now carries ~16 pinned
+> packages (python3, curl, git, …), not just the original three. The
+> cheap pre-flight before any bump: extract the tag's `Dockerfile.base`
+> apt layer into a stub dockerfile and
+> `docker build --platform linux/amd64` it locally — it fails in
+> seconds if any pin has gone stale. Sections below predate this and
+> describe the noble era; the sed-unpin strategy itself is unchanged.
+
 ## What can break when a pin changes
 
 NemoClaw upstream's Dockerfiles install:
@@ -78,9 +92,11 @@ in exactly the same way, and our patch fixes both.
 # 2) Inspect the extracted Dockerfiles for NEW pinned apt installs
 #    beyond the three we know about:
 grep -nE 'apt-get install.*=[0-9]+' /opt/nemoclaw/Dockerfile /opt/nemoclaw/Dockerfile.base
-# Expected output: only `procps`, `e2fsprogs`, `tmux` should still appear
-# (with their pin already stripped by the installer's sed).
-# Anything else is a new offender — add to the sed block.
+# Expected (since v0.0.74+/trixie): `procps`, `e2fsprogs`, `tmux` appear
+# unpinned (stripped by the installer's sed); Dockerfile.base additionally
+# has a large upstream-intended pinned block (python3, curl, git, …).
+# Those pins are legitimate on trixie — only add one to the sed block if
+# the build actually fails on it (superseded point-release version).
 
 # 3) End-to-end smoke test: create a real sandbox through the controller.
 COOKIE=$(curl -sS -i -X POST http://127.0.0.1:3000/api/auth/login \

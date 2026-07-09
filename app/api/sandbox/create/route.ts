@@ -771,6 +771,17 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
     let stderr = ""
     let settled = false
     let checkingReady = false
+    // Set when the readiness poll saw the sandbox Ready and we SIGTERMed the
+    // onboard. We then WAIT for the child's close event instead of resolving
+    // immediately: a SIGTERMed `nemoclaw onboard` shuts down gracefully and
+    // rewrites ~/.nemoclaw/sandboxes.json on the way out (observed taking
+    // 14s on the BYOVPS, 2026-07-09). Resolving at readiness let that dying
+    // write land AFTER our registry patches (agent stamp + route metadata),
+    // clobbering them — the row lost `agent` and the UI classified the
+    // sandbox as Custom. Deferring to close makes every caller-side registry
+    // patch strictly ordered after nemoclaw's last write.
+    let readyKill: { verification: SandboxVerification } | null = null
+    let killEscalation: NodeJS.Timeout | null = null
 
     const finish = (result: {
       completed: boolean
@@ -787,6 +798,7 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
       settled = true
       clearTimeout(timer)
       clearInterval(readinessTimer)
+      if (killEscalation) clearTimeout(killEscalation)
       resolve(result)
     }
 
@@ -817,6 +829,19 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
     child.on("close", (code, signal) => {
       console.log(`[sandbox/create] ready-command:close file=${file} elapsedMs=${elapsedMs(startedAt)} code=${code} signal=${signal} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}`)
       if (code !== 0) logStderr("ready-command:close-stderr", file, stderr)
+      if (readyKill) {
+        finish({
+          completed: false,
+          timedOut: false,
+          forcedReady: true,
+          readyVerification: readyKill.verification,
+          exitCode: code,
+          signal,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+        })
+        return
+      }
       finish({
         completed: true,
         timedOut: false,
@@ -830,23 +855,24 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
     })
 
     const readinessTimer = setInterval(() => {
-      if (settled || checkingReady) return
+      if (settled || checkingReady || readyKill) return
       checkingReady = true
       verifySandboxCreation(sandboxName)
         .then((verification) => {
-          if (!settled && verification.verified) {
-            console.log(`[sandbox/create] ready-command:ready sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGTERM`)
+          if (!settled && !readyKill && verification.verified) {
+            console.log(`[sandbox/create] ready-command:ready sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGTERM (waiting for onboard exit before returning)`)
+            readyKill = { verification }
+            clearInterval(readinessTimer)
             child.kill("SIGTERM")
-            finish({
-              completed: false,
-              timedOut: false,
-              forcedReady: true,
-              readyVerification: verification,
-              exitCode: null,
-              signal: "SIGTERM",
-              stdout: stdout.trim(),
-              stderr: stderr.trim(),
-            })
+            // Graceful shutdown normally finishes within seconds; the dying
+            // registry write was observed at 14s. Escalate well past that so
+            // SIGKILL can't truncate the write, but never hang the create.
+            killEscalation = setTimeout(() => {
+              if (!settled) {
+                console.log(`[sandbox/create] ready-command:ready-escalate sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGKILL`)
+                child.kill("SIGKILL")
+              }
+            }, 30000)
           }
         })
         .finally(() => {

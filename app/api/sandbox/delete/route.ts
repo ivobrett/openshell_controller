@@ -1,11 +1,45 @@
 import { NextResponse } from "next/server"
 import { execFile } from "node:child_process"
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import path from "node:path"
 import { promisify } from "node:util"
 import { resolveSandboxRef } from "@/app/lib/openshellHost"
 import { OPENSHELL_BIN, hostCommandEnv } from "@/app/lib/hostCommands"
 import { readHermesRemoteAccess, unexposeHermesRemote } from "@/app/lib/hermesRemote"
 
 const execFileAsync = promisify(execFile)
+
+const NEMOCLAW_REGISTRY_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "sandboxes.json")
+
+// `openshell sandbox delete` only removes the sandbox from the gateway; the
+// ~/.nemoclaw/sandboxes.json row survives. Stale rows are not cosmetic:
+// NemoClaw v0.0.78's pre-upgrade backup-all iterates REGISTERED sandboxes and
+// its strict mode fails on any row whose sandbox is not running — so every
+// deleted-but-not-deregistered sandbox re-arms installer Gate A on the next
+// upgrade (docs/runbooks/live-vps-upgrades.md). Remove the row once the
+// gateway confirms the sandbox is gone. Best effort: registry cleanup failure
+// must not fail the delete that already happened.
+function removeNemoClawRegistryEntry(sandboxName: string) {
+  try {
+    if (!existsSync(NEMOCLAW_REGISTRY_FILE)) return { ok: true as const, removed: false }
+    const current = JSON.parse(readFileSync(NEMOCLAW_REGISTRY_FILE, "utf8"))
+    const sandboxes = current && typeof current.sandboxes === "object" && current.sandboxes !== null
+      ? (current.sandboxes as Record<string, unknown>)
+      : null
+    if (!sandboxes || !(sandboxName in sandboxes)) return { ok: true as const, removed: false }
+    delete sandboxes[sandboxName]
+    if (current.defaultSandbox === sandboxName) {
+      const remaining = Object.keys(sandboxes)
+      current.defaultSandbox = remaining.length > 0 ? remaining[0] : null
+    }
+    const tempPath = `${NEMOCLAW_REGISTRY_FILE}.tmp.${process.pid}.${Date.now()}`
+    writeFileSync(tempPath, `${JSON.stringify(current, null, 2)}\n`, { mode: 0o600 })
+    renameSync(tempPath, NEMOCLAW_REGISTRY_FILE)
+    return { ok: true as const, removed: true }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Failed to remove NemoClaw registry entry" }
+  }
+}
 
 const PERSISTENT_STATE_TARGETS: Record<string, { dir: string; targets: string[] }> = {
   openclaw: {
@@ -261,6 +295,15 @@ export async function POST(request: Request) {
 
     const deletion = await waitForSandboxDeleted(target.sandboxName, 45000, 1500)
     const deleted = deletion.deleted || openShellAlreadyGone
+    let registryCleanup: ReturnType<typeof removeNemoClawRegistryEntry> | null = null
+    if (deleted) {
+      registryCleanup = removeNemoClawRegistryEntry(target.sandboxName)
+      if (!registryCleanup.ok) {
+        console.warn(`[sandbox/delete] registry-cleanup:warning sandbox=${target.sandboxName} error=${registryCleanup.error}`)
+      } else if (registryCleanup.removed) {
+        console.log(`[sandbox/delete] registry-cleanup:removed sandbox=${target.sandboxName}`)
+      }
+    }
     console.log(`[sandbox/delete] request:complete sandbox=${target.sandboxName} deleted=${deleted} elapsedMs=${elapsedMs(startedAt)}`)
     return NextResponse.json({
       ok: deleted,

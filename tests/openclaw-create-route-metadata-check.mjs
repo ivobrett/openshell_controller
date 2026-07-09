@@ -162,4 +162,24 @@ assert.match(
   'the IO wrapper must read the onboarding session as the no-sibling fallback',
 )
 
+// The registry patches are only ordered correctly if the ready-command WAITS
+// for the SIGTERMed onboard to exit before resolving. A SIGTERMed
+// `nemoclaw onboard` rewrites ~/.nemoclaw/sandboxes.json during graceful
+// shutdown (observed 14s after SIGTERM on the BYOVPS, 2026-07-09); resolving
+// at readiness let that dying write clobber the agent stamp + route metadata.
+// Guard the deferral: the readiness handler records readyKill and must NOT
+// call finish() itself — the close handler resolves the forcedReady result.
+{
+  const readyBlock = routeSource.match(/const readinessTimer = setInterval\(\(\) => \{[\s\S]*?\}, intervalMs\)/)?.[0]
+  assert.ok(readyBlock, 'readiness poll block must exist in runCreateCommandUntilReady')
+  assert.match(readyBlock, /readyKill = \{ verification \}/, 'readiness handler must record the kill instead of resolving')
+  assert.doesNotMatch(readyBlock, /finish\(\{/, 'readiness handler must not resolve directly — the close handler must, after nemoclaw\'s dying registry write')
+  assert.match(readyBlock, /child\.kill\("SIGKILL"\)/, 'readiness kill must escalate to SIGKILL so a hung onboard cannot stall the create')
+  assert.match(
+    routeSource,
+    /if \(readyKill\) \{\s*\n\s*finish\(\{\s*\n\s*completed: false,\s*\n\s*timedOut: false,\s*\n\s*forcedReady: true,/,
+    'close handler must resolve the forcedReady result recorded by the readiness kill',
+  )
+}
+
 console.log('openclaw-create-route-metadata-check: all assertions passed')

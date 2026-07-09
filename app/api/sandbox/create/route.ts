@@ -9,6 +9,7 @@ import { recordActivity } from "@/app/lib/activityLog"
 import { repairOpenClawExecApprovalsFile } from "@/app/lib/sandboxPrivilegedFiles"
 import { ensureAutoApproveNodes } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
+import { planRouteMetadataPatch } from "@/app/lib/sandboxCreate/registryRouteMetadata"
 import {
   bucketCandidatesByAgent,
   type QuickDeployAgent,
@@ -544,6 +545,43 @@ function patchNemoClawRegistryAgent(sandboxName: string, agent: string) {
     return { ok: true as const, patched: true }
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "Failed to patch NemoClaw registry agent" }
+  }
+}
+
+const NEMOCLAW_ONBOARD_SESSION_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "onboard-session.json")
+
+// NemoClaw v0.0.78+ refuses every create/recover on a gateway while any
+// registered sandbox row lacks durable provider+model metadata — and our
+// OpenClaw ready-command SIGTERMs onboarding before it writes those fields
+// (see the comment above runOnboardOnce). Complete the row ourselves from
+// the gateway's single shared route. Planning logic + full rationale in
+// app/lib/sandboxCreate/registryRouteMetadata.ts; runbook Trap 3 in
+// docs/runbooks/live-vps-upgrades.md.
+function patchNemoClawRegistryRouteMetadata(sandboxName: string) {
+  try {
+    const current = existsSync(NEMOCLAW_REGISTRY_FILE)
+      ? JSON.parse(readFileSync(NEMOCLAW_REGISTRY_FILE, "utf8"))
+      : {}
+    let onboardSession: unknown = null
+    try {
+      if (existsSync(NEMOCLAW_ONBOARD_SESSION_FILE)) {
+        onboardSession = JSON.parse(readFileSync(NEMOCLAW_ONBOARD_SESSION_FILE, "utf8"))
+      }
+    } catch {
+      onboardSession = null
+    }
+    const plan = planRouteMetadataPatch(current, sandboxName, onboardSession)
+    if (plan.action === "none") {
+      return { ok: true as const, patched: false as const, reason: plan.reason }
+    }
+    const sandboxes = current.sandboxes as Record<string, unknown>
+    sandboxes[sandboxName] = plan.entry
+    const tempPath = `${NEMOCLAW_REGISTRY_FILE}.tmp.${process.pid}.${Date.now()}`
+    writeFileSync(tempPath, `${JSON.stringify(current, null, 2)}\n`, { mode: 0o600 })
+    renameSync(tempPath, NEMOCLAW_REGISTRY_FILE)
+    return { ok: true as const, patched: true as const, filledFields: plan.filledFields, sourceKind: plan.sourceKind }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Failed to patch NemoClaw registry route metadata" }
   }
 }
 
@@ -1158,7 +1196,31 @@ export async function POST(request: Request) {
         error: "Sandbox readiness polling produced no verification result.",
       }
       const created = readiness.verified
-      if (created) patchNemoClawRegistryAgent(sandboxName, agent)
+      if (created) {
+        patchNemoClawRegistryAgent(sandboxName, agent)
+        const routePatch = patchNemoClawRegistryRouteMetadata(sandboxName)
+        if (routePatch.ok && routePatch.patched) {
+          console.log(
+            `[sandbox/create] registry-route-metadata sandbox=${sandboxName} source=${routePatch.sourceKind} filled=${routePatch.filledFields.join(",")}`,
+          )
+        } else if (routePatch.ok && !routePatch.patched && routePatch.reason === "no-source") {
+          // First sandbox on a fresh gateway with no completed onboarding
+          // session: nothing to copy from. The NEXT create on this gateway
+          // will fail NemoClaw v0.0.78's route-compatibility check until
+          // this row gains provider/model — surface it instead of failing
+          // silently (fix per docs/runbooks/live-vps-upgrades.md Trap 3).
+          console.log(`[sandbox/create] registry-route-metadata sandbox=${sandboxName} WARNING no durable route source; next create on this gateway may fail route compatibility`)
+          await recordCreateActivity({
+            type: "sandbox.create.warning",
+            status: "warning",
+            sandboxName,
+            message: `Sandbox ${sandboxName} was created, but its NemoClaw registry row has no inference-route metadata and no source to copy it from. On NemoClaw v0.0.78+ the next sandbox create may fail until the row is completed (see docs/runbooks/live-vps-upgrades.md, Trap 3).`,
+            metadata: { blueprint, agent, reason: routePatch.reason },
+          })
+        } else if (!routePatch.ok) {
+          console.log(`[sandbox/create] registry-route-metadata sandbox=${sandboxName} ERROR ${routePatch.error}`)
+        }
+      }
 
       if (!created && result.error && !result.timedOut) {
         await recordCreateActivity({

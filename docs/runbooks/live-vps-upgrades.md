@@ -124,12 +124,14 @@ model metadata ...
 
 Two ways rows end up metadata-less:
 1. Sandboxes created before fingerprint/metadata tracking (pre-0.78).
-2. **Our own controller's OpenClaw blueprint create**: the create route
-   SIGTERMs `nemoclaw onboard` as soon as the sandbox is reachable
-   (readiness re-poll design), which on 0.78 is *before* onboarding
-   writes provider/model into the registry. Every Quick-Created OpenClaw
-   sandbox therefore poisons the route for the next create until fixed
-   (controller-side fix pending; see "Known issues").
+2. **Our own controller's OpenClaw blueprint create** — FIXED 2026-07-09
+   and covered by `tests/openclaw-create-route-metadata-check.mjs`: the
+   ready-command now waits for the SIGTERMed onboard to exit (its
+   graceful shutdown writes the registry row, observed 12–14 s after
+   SIGTERM) before stamping the agent and completing any missing route
+   fields from the gateway's shared route (sibling row, else
+   `onboard-session.json`). Rows written by controllers older than that
+   fix look exactly like case 1 — treat them the same way.
 
 **Fix (verified 2026-07-09):** back up and patch the registry row with
 the route the sandbox actually uses (on our boxes: the hosted NVIDIA
@@ -202,11 +204,11 @@ docker images | grep nemoclaw-sandbox-base-local
 
 ## Known issues / follow-ups (as of 2026-07-09)
 
-- **Controller leaves OpenClaw registry rows metadata-less on 0.78**
-  (Trap 3, cause 2). Until the create route is fixed to complete or
-  resume onboarding metadata, apply the registry patch after each
-  OpenClaw Quick Create if a subsequent create fails with the
-  route-conflict error.
+- ~~Controller leaves OpenClaw registry rows metadata-less on 0.78~~ —
+  fixed same day (Trap 3, cause 2). The delete route now also
+  deregisters `~/.nemoclaw/sandboxes.json` rows once the gateway
+  confirms deletion, so stale rows of deleted sandboxes no longer
+  re-arm installer Gate A (`tests/sandbox-delete-registry-cleanup-check.mjs`).
 - **`install_versioned_nemoclaw_openshell.sh` base-image build may be
   redundant on 0.78+**: NemoClaw now builds and pins its own
   `nemoclaw-sandbox-base-local:<sha>` at first sandbox create. The

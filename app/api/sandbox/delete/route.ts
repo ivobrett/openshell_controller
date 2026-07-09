@@ -318,6 +318,7 @@ export async function POST(request: Request) {
       stateWipe,
       openShell: result,
       deletion,
+      registryCleanup,
       hermesRemoteTeardown,
       note: deleted ? "Sandbox delete completed." : "Sandbox delete command completed, but inventory still reports the sandbox.",
     }, { status: deleted ? 200 : 202 })

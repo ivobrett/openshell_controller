@@ -17,19 +17,11 @@ original design draft lives in git history (`git log -- HERMES_REMOTE_DESKTOP_PL
 
 ---
 
-> **Hermes ≥0.18 update (2026-07-11, commit `9cdf1e7`):** the June-2026
-> upstream hardening made `--insecure` a NO-OP — a non-loopback dashboard
-> bind refuses to start without a registered auth provider. launch.sh now
-> binds the dashboard to `127.0.0.1:(PORT+1)` and publishes it on PORT via
-> an in-sandbox socat (the same pattern nemoclaw-start uses). On loopback
-> binds Hermes' Host/Origin DNS-rebinding guards accept only
-> loopback-shaped headers, so every proxy hop rewrites Host and Origin to
-> `127.0.0.1:<PORT>`: the Traefik middleware (expose.sh), the controller
-> HTTP proxy route, and the server.mjs WS tunnel. The session-token gate
-> is unchanged. Symptom of the old flow on 0.18: expose/watchdog log
-> `dashboard did not become ready on port <PORT> within 60s` and
-> /tmp/hermes-dashboard.log inside the sandbox says `Refusing to bind
-> dashboard to 0.0.0.0`.
+> **Hermes ≥0.18 (2026-07-11, commits `9cdf1e7` + `bba9a17`):** upstream's
+> June-2026 hardening removed unauthenticated non-loopback dashboard binds.
+> The exposure architecture changed fundamentally — read **§1a** before
+> touching any of `launch.sh`, `expose.sh`, the dashboard proxy route, or
+> the `server.mjs` WS tunnel.
 
 ## 1. Architecture (as built)
 
@@ -49,7 +41,9 @@ Traefik's compose-bridge gateway IP (typically 172.18.0.1), port 21000+hash
 sandbox container → gateway-process netns (only place inference.local resolves)
         │
         ▼
-hermes dashboard (uvicorn, 0.0.0.0:<same hashed port>, pinned session token)
+socat 0.0.0.0:<hashed port> → 127.0.0.1:<hashed port + 1>   (in gw netns; §1a)
+        ▼
+hermes dashboard (uvicorn, 127.0.0.1:<hashed port + 1>, pinned session token)
         │  HTTPS_PROXY → 10.200.0.1:3128 (policy-enforcing L7 proxy)
         ▼
 upstream LLM provider
@@ -77,6 +71,74 @@ Key mechanics:
   (mode, port, token, URL, hermes version). This is the single source of
   truth read by the launcher, the watchdog, and the controller API/UI.
 
+## 1a. The Hermes ≥0.18 exposure model (fundamental change, 2026-07-11)
+
+### What upstream changed
+
+Hermes' June-2026 hardening rebuilt the dashboard's network trust model
+around the bind address:
+
+| Bind | ≤0.17 behavior | ≥0.18 behavior |
+|---|---|---|
+| `0.0.0.0` + `--insecure` | Starts; session token is the auth; WS peer/Host checks bypassed | **Refuses to start.** `--insecure` is a NO-OP; a non-loopback bind requires a registered auth provider (config-yaml password or Nous OAuth). There is no unauthenticated public-bind option. |
+| `127.0.0.1` | Rarely used by us | Starts with the session token as auth, but three guards engage: (1) **WS peer check** — only loopback peers may connect; (2) **HTTP Host guard** — the `Host` header must be the bound host (loopback aliases OK, port ignored); (3) **WS Origin guard** — a present `Origin` header must also target the bound host. |
+
+The guards are DNS-rebinding defences: on a loopback bind Hermes assumes
+"local browser talking to localhost" and rejects anything that looks like a
+foreign website driving requests at it. Our exposure is neither of those
+things — it is a chain of proxies we own — so we satisfy the letter of each
+guard at the hop where we control the bytes.
+
+### Our adaptation (how each guard is satisfied)
+
+The dashboard now binds `127.0.0.1:(PORT+1)` inside the gateway netns and an
+in-sandbox `socat` publishes it on `0.0.0.0:PORT` — the identical pattern
+NemoClaw's own `nemoclaw-start` uses for its dashboard (loopback 19119
+behind socat 18789). Auth is still exclusively the pinned session token.
+
+| Guard | Satisfied by |
+|---|---|
+| WS/HTTP peer must be loopback | The socat hop — every connection the dashboard sees originates from `127.0.0.1` inside the netns, regardless of where it really came from. |
+| Host header must be loopback-shaped | Each proxy we own rewrites `Host: 127.0.0.1:<PORT>`: **Traefik** (customRequestHeaders middleware written by `expose.sh` — covers the public URL, the panel's browser probe, the desktop app), the **controller HTTP proxy route** (`hermes/dashboard/proxy`), and the **server.mjs WS tunnel** (handshake bytes written by hand). |
+| Origin header must be loopback-shaped | Same three hops rewrite `Origin: http://127.0.0.1:<PORT>`. |
+
+**The undici trap (`bba9a17`):** Node's `fetch()` treats `Host` as a
+forbidden header and silently drops it — `headers.set('host', …)` compiles,
+type-checks, and never reaches the wire. The controller HTTP proxy therefore
+uses raw `node:http.request`, which sends the provided `Host` verbatim. If
+you ever rewrite that route, this is the constraint that forced the design.
+(The WS tunnel was always raw sockets; Traefik middleware is unaffected.)
+
+### What this means for the trust model
+
+- **Nothing about who can reach the dashboard changed.** The session token
+  remains the only credential, still verified constant-time by Hermes, still
+  injected server-side by the controller proxy, still demanded by
+  `launch.sh`'s bogus-token-401 probe before anything is exposed.
+- **The in-sandbox attack surface got smaller.** ≤0.17 the dashboard
+  listened on every sandbox interface; now only loopback listens, and the
+  single public listener is a dumb TCP forwarder we start explicitly.
+- **We deliberately neutralize Hermes' DNS-rebinding guard at our hops.**
+  That is sound because the rewrite happens server-side in infrastructure we
+  control — a malicious website cannot influence the `Host`/`Origin` that
+  Traefik or the controller writes upstream, and the public entry is pinned
+  to an exact `Host(<public domain>)` Traefik rule behind TLS. The guard
+  still protects anyone who runs a dashboard *without* our proxy chain.
+- **Version coupling:** this adaptation is calibrated to 0.18's guard
+  semantics. Any future Hermes bump must re-check `web_server.py`'s
+  `_is_accepted_host` / `_ws_host_origin_is_allowed` / `_ws_client_is_allowed`
+  before assuming the exposure still works (add it to the version-bump
+  pre-flight).
+
+### Failure signatures (all observed live 2026-07-11)
+
+| You see | It means |
+|---|---|
+| expose/watchdog: `dashboard did not become ready on port <PORT> within 60s`; in-sandbox `/tmp/hermes-dashboard.log`: `Refusing to bind dashboard to 0.0.0.0` | The pre-0.18 launch flow ran against a 0.18 sandbox (old launch.sh, or a revert). |
+| Browser/desktop: `{"detail":"Invalid Host header. Dashboard requests must use the hostname the server was bound to."}` | A proxy hop is leaking a non-loopback `Host` — check the three rewrite points above; remember the undici trap. |
+| WS connects then drops immediately, HTTP fine | `Origin` rewrite missing on the WS path (server.mjs tunnel or Traefik for the public path). |
+| Dashboard up on internal port but public probe dead | The socat publisher died — `launch.sh` restarts it; check `/tmp/hermes-dashboard-socat.log` in the sandbox. |
+
 ## 2. Components
 
 Everything lives in **this repo** so deployments pick it up by cloning a
@@ -87,7 +149,7 @@ branch — manidae-cloud only sets one env var (see §3).
 | `scripts/hermes-remote/lib.sh` | Shared helpers: port hash, container/gateway-PID/Traefik-bridge/rules-dir/public-host discovery. No hardcoded IPs or paths — every assumption is discovered or loud-fails. |
 | `scripts/hermes-remote/expose.sh <sb> [--mode desktop\|web]` | Idempotent end-to-end setup: port + token, dashboard launch, systemd forward unit, UFW, Traefik rule, watchdog timer, access record. Self-installs its systemd units. Verifies the public URL (status 200, token 200, bogus-token 401, no token leak) before declaring success. |
 | `scripts/hermes-remote/unexpose.sh <sb>` | Symmetric best-effort teardown of all of the above. |
-| `scripts/hermes-remote/launch.sh <sb>` | Idempotent dashboard (re)launcher. Re-discovers container + gateway PID each run; short-circuits when healthy; provisions `API_SERVER_KEY` (+ config-hash re-pin); auto-upgrades hermes <0.16 via `upgrade-hermes.sh`. |
+| `scripts/hermes-remote/launch.sh <sb>` | Idempotent dashboard (re)launcher. Re-discovers container + gateway PID each run; short-circuits when healthy; provisions `API_SERVER_KEY` (+ config-hash re-pin); auto-upgrades hermes <0.16 via `upgrade-hermes.sh`. Since Hermes ≥0.18: binds the dashboard to loopback `PORT+1` and publishes on `PORT` via in-sandbox socat (§1a). |
 | `scripts/hermes-remote/upgrade-hermes.sh <sb>` | In-place hermes-agent upgrade inside the sandbox (pip through the L7 proxy from the gateway netns) + gateway restart. |
 | `scripts/hermes-remote/watchdog.sh` | Iterates access records; re-runs `launch.sh` and nudges wedged forward units. Run by the timer. |
 | `app/lib/hermesRemote.ts` | Controller-side wrapper: `exposeHermesRemote` / `unexposeHermesRemote` / `readHermesRemoteAccess` / `hermesRemoteMode()`. |
@@ -182,10 +244,13 @@ remote dashboard mid-session).
 - **Tenant isolation** — per-sandbox URL, port, token, forward unit, and
   Traefik rule; sandboxes cannot see each other's netns. Compromise of one
   token exposes one sandbox's dashboard only.
-- **`--insecure` on the dashboard is required and OK** — it permits the
-  non-loopback bind *and* disables `_ws_client_is_allowed`, which would
-  otherwise reject Traefik-proxied WS upgrades (X-Forwarded-For rewrites the
-  client address). The session-token gate stays fully active.
+- **The dashboard binds loopback-only (Hermes ≥0.18; see §1a).** The
+  historical `--insecure --host 0.0.0.0` bind is gone — upstream made
+  `--insecure` a no-op and public binds impossible without an auth provider.
+  Peer/Host/Origin guards are satisfied by the in-sandbox socat hop plus
+  server-side header rewrites at Traefik, the controller HTTP proxy, and the
+  server.mjs WS tunnel. The session-token gate stays fully active and is the
+  sole credential.
 - **Nous OAuth (future)** — hermes ≥0.16 ships `hermes dashboard register`
   (writes an OAuth client for the Nous Portal). When we want SSO-grade login
   on the desktop path, that flips `/api/status` to `auth_required: true` and
@@ -207,6 +272,8 @@ Fail-mode cheatsheet (every row was hit for real during bring-up):
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| `Refusing to bind dashboard to 0.0.0.0` in /tmp/hermes-dashboard.log | Pre-0.18 launch flow against a ≥0.18 sandbox | See §1a — launch.sh must bind loopback + socat-publish. |
+| `{"detail":"Invalid Host header…"}` in browser/desktop | A proxy hop leaks a non-loopback Host (undici fetch strips Host silently) | See §1a failure signatures — check Traefik middleware, proxy route (must be node:http), server.mjs tunnel. |
 | 502 from Traefik | Forward not bound, or bound on the wrong bridge | `systemctl restart hermes-remote-forward@<sb>`. The bind IP must be **Traefik's compose-bridge gateway** (`docker inspect <traefik> … .Gateway`, typically `172.18.0.1`) — NOT docker0, and `host.docker.internal` does not resolve in this stack. Check UFW allows `172.0.0.0/8 → <port>`. |
 | Forward unit flapping with "sandbox is not ready" | OpenShell gateway restarted / sandbox supervisor disconnected | `openshell sandbox list`. If sandboxes sit in Provisioning/Error after a gateway restart, see the **ensure-mtls gotcha** below. |
 | Public `/api/status` 200 but desktop gets 401 | Token mismatch (e.g. dashboard restarted unpinned) | `launch.sh <sb>` relaunches with the pinned token from the access record; re-copy the token from the UI. |

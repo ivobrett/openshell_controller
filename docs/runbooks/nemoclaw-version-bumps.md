@@ -211,3 +211,10 @@ use; `git describe --tags` fails on our tag-less shallow clones, use
 4. Walk `docs/upstream-divergence-audit.md` for shims the new tag
    obsoletes (v0.0.80: none — `upgrade-hermes.sh` stays a safe no-op,
    short-circuiting at >=0.16).
+5. **If the Hermes pin moves** (`agents/hermes/Dockerfile.base`
+   `HERMES_VERSION`): re-check the dashboard guard functions in Hermes'
+   `hermes_cli/web_server.py` — `_is_accepted_host`,
+   `_ws_host_origin_is_allowed`, `_ws_client_is_allowed`, and the
+   non-loopback bind auth-provider gate. Our remote-desktop exposure is
+   calibrated to their 0.18 semantics (HERMES_REMOTE_DESKTOP.md §1a);
+   the 0.17→0.18 bump silently broke every exposure until adapted.

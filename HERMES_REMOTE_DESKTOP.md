@@ -17,6 +17,20 @@ original design draft lives in git history (`git log -- HERMES_REMOTE_DESKTOP_PL
 
 ---
 
+> **Hermes ≥0.18 update (2026-07-11, commit `9cdf1e7`):** the June-2026
+> upstream hardening made `--insecure` a NO-OP — a non-loopback dashboard
+> bind refuses to start without a registered auth provider. launch.sh now
+> binds the dashboard to `127.0.0.1:(PORT+1)` and publishes it on PORT via
+> an in-sandbox socat (the same pattern nemoclaw-start uses). On loopback
+> binds Hermes' Host/Origin DNS-rebinding guards accept only
+> loopback-shaped headers, so every proxy hop rewrites Host and Origin to
+> `127.0.0.1:<PORT>`: the Traefik middleware (expose.sh), the controller
+> HTTP proxy route, and the server.mjs WS tunnel. The session-token gate
+> is unchanged. Symptom of the old flow on 0.18: expose/watchdog log
+> `dashboard did not become ready on port <PORT> within 60s` and
+> /tmp/hermes-dashboard.log inside the sandbox says `Refusing to bind
+> dashboard to 0.0.0.0`.
+
 ## 1. Architecture (as built)
 
 ```

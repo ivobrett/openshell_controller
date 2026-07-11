@@ -131,10 +131,18 @@ install_nemoclaw() {
   require_command git
   require_command docker
 
-  local work_dir source_dir
-  work_dir="$(mktemp -d)"
-  trap 'rm -rf "$work_dir"' RETURN
-  source_dir="$work_dir/NemoClaw"
+  # The source checkout must OUTLIVE this installer: when upstream
+  # install.sh runs from a source checkout it installs the CLI with
+  # `npm link`, making the global nemoclaw a symlink into that checkout.
+  # The previous mktemp-plus-RETURN-trap workdir left a dangling global
+  # CLI ("nemoclaw: command not found" / npm ls shows "nemoclaw@" with no
+  # version) after every SUCCESSFUL run — the failure only got noticed
+  # 2026-07-11 because aborted runs skip the RETURN trap and keep their
+  # temp dir alive. Use a persistent checkout instead (fresh each run).
+  local source_dir
+  source_dir="${NEMOCLAW_SRC_DIR:-/opt/nemoclaw-src}"
+  rm -rf "$source_dir"
+  mkdir -p "$source_dir"
 
   log "Cloning NemoClaw $NEMOCLAW_INSTALL_REF"
   git init --quiet "$source_dir"

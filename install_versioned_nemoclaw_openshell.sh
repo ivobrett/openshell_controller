@@ -10,16 +10,22 @@ NC='\033[0m'
 
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.72}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.78 — the first release tag that carries the
-# OpenClaw 2026.6.10 upgrade (PR #5595), superseding our temporary SHA pin
-# 1162e89b (= v0.0.74 + that one commit). 2026.6.10 remains required for
-# current OpenClaw mobile apps (>=2026.6.x) to pair — older sandbox gateways
-# reject their bootstrap tokens (bootstrap_token_invalid). npm SRI integrity
-# hashes travel with the version strings — never sed the version alone.
-# NemoClaw@v0.0.78 declares min/max_openshell_version 0.0.72 (native mTLS
-# since 0.0.71); Hermes base unchanged (v0.17.0 / v2026.6.19); Dockerfile /
-# Dockerfile.base are byte-identical to 1162e89b.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.78}}"
+# NemoClaw is pinned to TAG v0.0.80 (bumped from v0.0.78 on 2026-07-11).
+# What changed for us in 78→80 (full pre-flight in the bump commit):
+#   - Hermes base image v0.17.0 → v0.18.0 (calver v2026.7.1) with new
+#     tarball/npm integrity hashes. npm SRI integrity hashes travel with
+#     the version strings — never sed a version alone.
+#   - install.sh now runs `upgrade-sandboxes --auto` after the pre-upgrade
+#     backup: RUNNING sandboxes whose agent version or NemoClaw build
+#     fingerprint is stale are REBUILT automatically (recreated on the new
+#     image, state restored from the validated backup). Accepted policy
+#     change 2026-07-11 — see docs/runbooks/byovps-controller-upgrade.md.
+#   - min/max_openshell_version still 0.0.72; OpenClaw reviewed default
+#     still 2026.6.10 (required for >=2026.6.x mobile apps to pair —
+#     older gateways reject their bootstrap tokens); no apt-pin changes.
+#   - The 256 MiB backup maxBuffer bug is still present — the sed shim
+#     below still applies.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.80}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

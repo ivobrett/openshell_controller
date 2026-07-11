@@ -43,7 +43,12 @@ async function proxy(request: Request, sandboxId: string) {
   request.headers.forEach((value, key) => {
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value)
   })
-  headers.set('host', target.host)
+  // Hermes >=0.18 binds the dashboard to loopback (scripts/hermes-remote/
+  // launch.sh) and its Host/Origin DNS-rebinding guards then only accept
+  // loopback-shaped headers — the connection still goes to the bridge-IP
+  // forward, only the headers say loopback. Session token stays the auth.
+  headers.set('host', `127.0.0.1:${access.port}`)
+  headers.set('origin', `http://127.0.0.1:${access.port}`)
   // Hermes renders the SPA under this prefix natively — no HTML rewriting needed.
   headers.set('x-forwarded-prefix', prefix)
   // Inject the session token server-side so it gates every /api/* call (the browser

@@ -178,6 +178,12 @@ http:
       headers:
         customRequestHeaders:
           X-Forwarded-Prefix: "/hermes/${SANDBOX}"
+          # Hermes >=0.18 binds the dashboard to loopback (see launch.sh) and
+          # its Host/Origin DNS-rebinding guards then only accept
+          # loopback-shaped headers. Rewrite both here; the session-token
+          # gate remains the auth, unchanged.
+          Host: "127.0.0.1:${PORT}"
+          Origin: "http://127.0.0.1:${PORT}"
 EOF
 
 # ── Watchdog (one unit heals every exposed sandbox) ───────────────

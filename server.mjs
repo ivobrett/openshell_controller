@@ -1242,7 +1242,11 @@ function handleHermesProxyUpgrade(req, socket, head) {
   socket.pause()
   const upstreamSocket = net.connect({ host, port: Number(access.port) })
   const skip = new Set(['host', 'x-forwarded-prefix', 'x-hermes-session-token', 'origin'])
-  const lines = [`GET ${upstreamPath} HTTP/1.1`, `Host: ${host}:${access.port}`]
+  // Hermes >=0.18: the dashboard binds loopback behind an in-sandbox socat
+  // (scripts/hermes-remote/launch.sh), and its Host/Origin guards then only
+  // accept loopback-shaped headers. Keep connecting to the bridge-IP forward;
+  // present loopback headers.
+  const lines = [`GET ${upstreamPath} HTTP/1.1`, `Host: 127.0.0.1:${access.port}`]
   for (let i = 0; i < req.rawHeaders.length; i += 2) {
     const k = req.rawHeaders[i]
     if (skip.has(String(k).toLowerCase())) continue
@@ -1250,7 +1254,7 @@ function handleHermesProxyUpgrade(req, socket, head) {
   }
   lines.push(`X-Forwarded-Prefix: ${prefix}`)
   lines.push(`X-Hermes-Session-Token: ${access.token}`)
-  lines.push(`Origin: http://${host}:${access.port}`)
+  lines.push(`Origin: http://127.0.0.1:${access.port}`)
   const requestHead = lines.join('\r\n') + '\r\n\r\n'
 
   let opened = false

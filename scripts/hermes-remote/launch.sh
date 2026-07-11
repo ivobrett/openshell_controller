@@ -67,6 +67,7 @@ fi
 
 # ── (Re)launch ───────────────────────────────────────────────────
 docker exec "$CONTAINER" pkill -f 'hermes_cli.main dashboard' 2>/dev/null
+docker exec "$CONTAINER" pkill -f "TCP-LISTEN:${PORT}," 2>/dev/null
 sleep 2
 
 # Notes carried over from the validated single-tenant launcher + POC:
@@ -74,26 +75,54 @@ sleep 2
 #  * su (not ssh) to the sandbox user: avoids OpenShell's extra SSH seccomp
 #    filters which break os.openpty() for the embedded chat PTY.
 #  * source /tmp/nemoclaw-proxy-env.sh: HTTPS_PROXY + CA bundle + HERMES_HOME.
-#  * --insecure --host 0.0.0.0: required for non-loopback bind AND to bypass
-#    _ws_client_is_allowed, which rejects Traefik-proxied WS upgrades.
 #  * HERMES_DASHBOARD_SESSION_TOKEN pins the session token (>=0.16) so it
 #    survives restarts; the desktop app keeps its saved credential.
+#
+# Hermes >=0.18 (June 2026 hardening): --insecure is a NO-OP and any
+# non-loopback bind hard-refuses to start without a registered auth
+# provider ("There is no unauthenticated public-bind option"). So the
+# dashboard now binds 127.0.0.1 on an internal port and a socat forwarder
+# publishes it on ${PORT} — the exact pattern nemoclaw-start uses for its
+# own dashboard (loopback 19119 behind socat 18789). Consequences:
+#  * _ws_client_is_allowed: loopback bind accepts only loopback peers —
+#    satisfied, the socat hop makes every peer 127.0.0.1.
+#  * Host/Origin guards: loopback binds require loopback-shaped Host and
+#    Origin headers, so every proxy hop we own rewrites them to
+#    127.0.0.1:${PORT} (Traefik middleware in expose.sh, the HTTP proxy
+#    route, the server.mjs WS tunnel). Backward compatible with 0.16/0.17.
+INTERNAL_PORT=$((PORT + 1))
 docker exec -d --privileged "$CONTAINER" nsenter -t "$GW_PID" -n -- \
-  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --insecure --host 0.0.0.0 --port ${PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
+  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
   || die "docker exec failed launching dashboard"
 
 # ── Wait for readiness, then verify the auth gate ────────────────
+ready=0
 for _ in $(seq 1 30); do
   sleep 2
-  if nsenter_sandbox "$CONTAINER" "$GW_PID" curl -sf -m 4 "http://127.0.0.1:${PORT}/api/status" >/dev/null 2>&1; then
+  if nsenter_sandbox "$CONTAINER" "$GW_PID" curl -sf -m 4 "http://127.0.0.1:${INTERNAL_PORT}/api/status" >/dev/null 2>&1; then
     # Token gate sanity: a bogus token must be rejected on a protected route.
     code=$(nsenter_sandbox "$CONTAINER" "$GW_PID" curl -s -m 4 -o /dev/null -w '%{http_code}' \
-      -H 'X-Hermes-Session-Token: bogus' "http://127.0.0.1:${PORT}/api/config" 2>/dev/null)
+      -H 'X-Hermes-Session-Token: bogus' "http://127.0.0.1:${INTERNAL_PORT}/api/config" 2>/dev/null)
     [ "$code" = "401" ] || die "auth gate not engaged (got $code for bogus token) — refusing to expose"
-    log "dashboard up on port $PORT (auth gate verified)"
+    ready=1
+    break
+  fi
+done
+if [ "$ready" != "1" ]; then
+  docker exec "$CONTAINER" tail -5 /tmp/hermes-dashboard.log >&2 2>/dev/null
+  die "dashboard did not become ready on internal port $INTERNAL_PORT within 60s"
+fi
+
+# ── Publish loopback dashboard on ${PORT} via socat ───────────────
+docker exec -d --privileged "$CONTAINER" nsenter -t "$GW_PID" -n -- \
+  su -s /bin/bash sandbox -c "exec socat TCP-LISTEN:${PORT},bind=0.0.0.0,fork,reuseaddr TCP:127.0.0.1:${INTERNAL_PORT} > /tmp/hermes-dashboard-socat.log 2>&1" \
+  || die "docker exec failed launching socat forwarder"
+for _ in $(seq 1 10); do
+  sleep 1
+  if nsenter_sandbox "$CONTAINER" "$GW_PID" curl -sf -m 4 "http://127.0.0.1:${PORT}/api/status" >/dev/null 2>&1; then
+    log "dashboard up on port $PORT (loopback :${INTERNAL_PORT} via socat, auth gate verified)"
     exit 0
   fi
 done
-
-docker exec "$CONTAINER" tail -5 /tmp/hermes-dashboard.log >&2 2>/dev/null
-die "dashboard did not become ready on port $PORT within 60s"
+docker exec "$CONTAINER" tail -3 /tmp/hermes-dashboard-socat.log >&2 2>/dev/null
+die "socat forwarder did not answer on port $PORT"

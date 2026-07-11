@@ -22,6 +22,22 @@ because NemoClaw pins Debian package versions on Ubuntu). A version
 bump may obsolete several — check, then delete what's no longer needed
 in the same change set.
 
+> **Update (2026-07-11, first live instance of the trixie failure):**
+> Debian shipped curl `8.14.1-2+deb13u4` and dropped the pinned `deb13u3`
+> from the index — every base-image build (OpenClaw, Hermes, AND the
+> per-agent `agents/hermes/Dockerfile.base` +
+> `agents/langchain-deepagents-code/Dockerfile.base`, which the old sed
+> never touched) died with apt exit 100. In the UI this surfaces as
+> "Sandbox creation command failed" immediately (~10 s), journal shows
+> `SandboxBaseImageResolutionError ... inputs differ from main`. The
+> installer now finds ALL `Dockerfile*` in the tree and also unpins
+> `curl`. On a live box, patch `/opt/nemoclaw-src/**/Dockerfile*` in
+> place (nemoclaw re-reads them per build; `/opt/nemoclaw-src` is the
+> npm-linked install since installer `ae9bdaa`). The pin-check stub
+> below identifies the stale package in seconds:
+> `docker run --rm node:22-trixie-slim bash -c 'apt-get update -qq;
+> apt-cache policy <pkg>'` and compare Candidate to the pin.
+>
 > **Update (2026-07-09, v0.0.78 bump):** since NemoClaw v0.0.74+
 > (commit `1162e89b`) the `Dockerfile` / `Dockerfile.base` base image is
 > `node:22-trixie-slim` (Debian 13), **not** `openshell/sandbox-base-u24`

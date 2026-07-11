@@ -163,15 +163,20 @@ install_nemoclaw() {
   # whatever's currently in trixie. Re-apply this whenever NemoClaw is
   # re-extracted; the in-tree Dockerfiles are version-controlled upstream
   # and our patch lives only in this installer.
-  for _dockerfile in "$source_dir/Dockerfile" "$source_dir/Dockerfile.base"; do
-    if [[ -f "$_dockerfile" ]]; then
-      sed -i.bak \
-        -e 's/procps=2:4\.0\.4-9/procps/g' \
-        -e 's/e2fsprogs=1\.47\.2-3+b11/e2fsprogs/g' \
-        -e 's/tmux=3\.5a-3/tmux/g' \
-        "$_dockerfile" && rm -f "${_dockerfile}.bak"
-    fi
-  done
+  # Per-agent base images (agents/hermes, agents/langchain-deepagents-code)
+  # carry the same pinned apt block as the top-level Dockerfiles, so patch
+  # every Dockerfile* in the tree. curl joined the unpin list 2026-07-11:
+  # Debian shipped 8.14.1-2+deb13u4 and dropped the pinned deb13u3 from the
+  # trixie index, killing every deepagents/hermes/openclaw base-image build
+  # with apt exit 100 ("Sandbox creation command failed" in the UI).
+  while IFS= read -r _dockerfile; do
+    sed -i.bak \
+      -e 's/procps=2:4\.0\.4-9/procps/g' \
+      -e 's/e2fsprogs=1\.47\.2-3+b11/e2fsprogs/g' \
+      -e 's/tmux=3\.5a-3/tmux/g' \
+      -e 's/curl=[^[:space:]\\]*/curl/g' \
+      "$_dockerfile" && rm -f "${_dockerfile}.bak"
+  done < <(find "$source_dir" -name 'Dockerfile*' -not -path '*/node_modules/*' -type f)
 
   # NemoClaw's sandbox state backup (src/lib/state/sandbox.ts) buffers the
   # whole SSH+tar stream in memory via spawnSync with a hard-coded

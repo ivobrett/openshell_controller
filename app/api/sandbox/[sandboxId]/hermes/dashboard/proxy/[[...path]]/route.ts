@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import http from 'node:http'
+import { Readable } from 'node:stream'
 import { readHermesRemoteAccess } from '@/app/lib/hermesRemote'
 
 // Proxy the in-sandbox Hermes dashboard (NemoClaw v0.17+) through the controller,
@@ -58,18 +60,32 @@ async function proxy(request: Request, sandboxId: string) {
 
   const method = request.method.toUpperCase()
   const hasBody = !['GET', 'HEAD'].includes(method)
-  const init: RequestInit & { duplex?: 'half' } = {
-    method,
-    headers,
-    body: hasBody ? request.body : undefined,
-    redirect: 'manual',
-    cache: 'no-store',
-  }
-  if (hasBody) init.duplex = 'half'
+  const bodyBuffer = hasBody ? Buffer.from(await request.arrayBuffer()) : undefined
 
-  let upstream: Response
+  // node:http, not fetch: undici's fetch treats Host as a forbidden header
+  // and silently strips it, so the loopback Host rewrite above never reached
+  // the wire and Hermes 0.18 answered "Invalid Host header" (2026-07-11).
+  const requestHeaders: Record<string, string> = {}
+  headers.forEach((value, key) => { requestHeaders[key] = value })
+  if (bodyBuffer) requestHeaders['content-length'] = String(bodyBuffer.length)
+
+  let upstream: { status: number; headers: http.IncomingHttpHeaders; stream: Readable }
   try {
-    upstream = await fetch(target.toString(), init)
+    upstream = await new Promise((resolve, reject) => {
+      const upstreamReq = http.request(
+        {
+          host: target.hostname,
+          port: Number(access.port),
+          path: upstreamPath + reqUrl.search,
+          method,
+          headers: requestHeaders,
+        },
+        (res) => resolve({ status: res.statusCode || 502, headers: res.headers, stream: res }),
+      )
+      upstreamReq.on('error', reject)
+      if (bodyBuffer) upstreamReq.write(bodyBuffer)
+      upstreamReq.end()
+    })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : 'Hermes dashboard unreachable' },
@@ -78,14 +94,23 @@ async function proxy(request: Request, sandboxId: string) {
   }
 
   const responseHeaders = new Headers()
-  upstream.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP.has(key.toLowerCase())) responseHeaders.set(key, value)
-  })
+  for (const [key, value] of Object.entries(upstream.headers)) {
+    if (HOP_BY_HOP.has(key.toLowerCase()) || value === undefined) continue
+    if (Array.isArray(value)) {
+      for (const v of value) responseHeaders.append(key, v)
+    } else {
+      responseHeaders.set(key, value)
+    }
+  }
   responseHeaders.set('cache-control', 'no-store')
-  const location = upstream.headers.get('location')
+  const location = responseHeaders.get('location')
   if (location && location.startsWith('/')) responseHeaders.set('location', `${prefix}${location}`)
 
-  return new NextResponse(upstream.body, { status: upstream.status, headers: responseHeaders })
+  const responseBody =
+    method === 'HEAD' || upstream.status === 204 || upstream.status === 304
+      ? null
+      : (Readable.toWeb(upstream.stream) as unknown as ReadableStream)
+  return new NextResponse(responseBody, { status: upstream.status, headers: responseHeaders })
 }
 
 type Ctx = { params: Promise<{ sandboxId: string; path?: string[] }> }

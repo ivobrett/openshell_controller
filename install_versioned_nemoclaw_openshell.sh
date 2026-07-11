@@ -165,6 +165,23 @@ install_nemoclaw() {
     fi
   done
 
+  # NemoClaw's sandbox state backup (src/lib/state/sandbox.ts) buffers the
+  # whole SSH+tar stream in memory via spawnSync with a hard-coded
+  # maxBuffer of 256 MiB. Any sandbox whose /sandbox/.<agent> state exceeds
+  # that can NEVER be backed up (tar dies at exit 255 mid-stream), and the
+  # failure is misreported as "in-sandbox SSH endpoint did not answer".
+  # install.sh's strict pre-upgrade backup gate (hard-coded
+  # NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1, skipped counts as failed) then
+  # blocks the whole upgrade. Hit for real 2026-07-11 on the Oracle BYOVPS
+  # (607 MiB of OpenClaw state). Raise the cap to 2 GiB before the CLI is
+  # built. Remove when upstream streams backups to disk instead of memory.
+  _state_ts="$source_dir/src/lib/state/sandbox.ts"
+  if [[ -f "$_state_ts" ]]; then
+    sed -i.bak \
+      -e 's/maxBuffer: 256 \* 1024 \* 1024/maxBuffer: 2048 * 1024 * 1024/g' \
+      "$_state_ts" && rm -f "${_state_ts}.bak"
+  fi
+
   if [[ -z "${NVIDIA_INFERENCE_API_KEY:-}" && -n "${NVIDIA_API_KEY:-}" ]]; then
     export NVIDIA_INFERENCE_API_KEY="$NVIDIA_API_KEY"
   elif [[ -z "${NVIDIA_API_KEY:-}" && -n "${NVIDIA_INFERENCE_API_KEY:-}" ]]; then

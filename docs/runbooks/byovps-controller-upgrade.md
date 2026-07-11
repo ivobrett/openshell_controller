@@ -348,6 +348,38 @@ Follow-ups spotted during the run (not blocking, worth fixing):
 4. The backup `maxBuffer` shim deserves an upstream NemoClaw issue
    (stream to disk instead of buffering tar in memory).
 
+## Execution record — 2026-07-11 (second run, NemoClaw v0.0.78 → v0.0.80)
+
+Same box, 3 live sandboxes. Ran the full runbook again for the v0.0.80
+pin bump (Hermes base 0.17.0 → 0.18.0). Outcome: complete success; one
+new gate discovered (E, below).
+
+- Pre-flight caught the headline change before touching the box: since
+  v0.0.80, install.sh **auto-rebuilds running stale sandboxes**
+  (`upgrade-sandboxes --auto`) — a policy decision the operator
+  explicitly accepted (see live-vps-upgrades.md Policy). Staleness =
+  agent `expected_version` mismatch OR NemoClaw build-fingerprint
+  drift; pre-fingerprint legacy rows and version-matched sandboxes are
+  left alone. On this box only `ivos-hermes` (0.17.0 → 0.18.0) was
+  rebuilt; `ivos-openclaw` (2026.6.10 matches, legacy row) and
+  `my-first-deepagent` (0.1.34 matches) were untouched.
+- First installer run failed SAFE at the new rebuild preflight:
+  host port 18789 (the singleton primary-dashboard forward) belonged to
+  `ivos-openclaw` after the morning's recovery work. Fix: `openshell
+  forward stop 18789 ivos-openclaw`, re-run (Gate E in
+  live-vps-upgrades.md).
+- Rebuild restored state (14 dirs, 3 files) + policy presets from the
+  validated backup; the hermes-remote desktop forward re-established
+  itself against the new container without manual work (watchdog).
+  Rebuild output warned `.hermes/.env` is not preserved — regenerated
+  by onboarding; re-apply manual edits if you made any.
+- Verify the installed rev with `git -C /opt/nemoclaw-src log -1
+  --format=%h` and compare against the PEELED tag commit
+  (`git rev-parse <tag>^{commit}` — release tags are annotated, so
+  `rev-parse <tag>` alone gives the tag object, not the commit). The
+  new hermes base image tag equals that commit sha (`c5f1194b` for
+  v0.0.80).
+
 ## If something goes wrong mid-operation
 
 - `openshell sandbox list` → `transport error / Connection refused`:

@@ -186,3 +186,28 @@ restart needed; nemoclaw re-reads the Dockerfiles per build.
 **General rule:** bump one version at a time, re-run the smoke test
 above, and grep the extracted Dockerfiles for new pinned apt installs
 before declaring the bump done.
+
+## Pre-flight additions learned on the v0.0.80 bump (2026-07-11)
+
+Do these against a local shallow checkout BEFORE editing the pin
+(`git fetch --depth 1 origin <tag>`; note release tags are ANNOTATED —
+`git rev-parse FETCH_HEAD^{commit}` for the real commit sha, which is
+also what base-image tags like `nemoclaw-hermes-sandbox-base-local:<sha>`
+use; `git describe --tags` fails on our tag-less shallow clones, use
+`git log -1 --format=%h`):
+
+1. **Diff `scripts/install.sh` and `src/lib/actions/` between the pins,
+   not just the Dockerfiles.** v0.0.80 added `upgrade-sandboxes --auto`
+   to the install flow — a behavior change that rebuilds running stale
+   sandboxes (see live-vps-upgrades.md Policy). Dockerfile-only review
+   would have missed it entirely.
+2. Check which of our wrapper seds still match: the apt unpin list AND
+   the backup `maxBuffer` shim (`grep -c 'maxBuffer: 256' src/lib/state/
+   sandbox.ts` — still 3 sites in v0.0.80).
+3. Check `nemoclaw-blueprint/blueprint.yaml` `min/max_openshell_version`
+   (still 0.0.72 at v0.0.80 → `--skip-openshell` path stays valid) and
+   `agents/*/manifest.yaml` `expected_version` — those decide which live
+   sandboxes the v0.0.80+ installer will auto-rebuild.
+4. Walk `docs/upstream-divergence-audit.md` for shims the new tag
+   obsoletes (v0.0.80: none — `upgrade-hermes.sh` stays a safe no-op,
+   short-circuiting at >=0.16).

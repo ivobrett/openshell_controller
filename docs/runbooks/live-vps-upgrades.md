@@ -162,7 +162,7 @@ route — the row just predates the tracking.
 
 | Gate | Trigger | Resolution |
 |---|---|---|
-| **A. Strict pre-upgrade backup** — `Strict pre-upgrade backup requires every registered sandbox to be backed up; N skipped` | Any registered sandbox not in Ready phase (`backup-all` skips not-running; `NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1` is hard-coded by install.sh, no bypass) | Bring every sandbox to Ready first. If one is permanently dead (Trap 2), preserve its data, delete it, and remove its registry row before re-running. |
+| **A. Strict pre-upgrade backup** — `Strict pre-upgrade backup requires every registered sandbox to be backed up; N skipped` | Any registered sandbox not in Ready phase (`backup-all` skips not-running; `NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1` is hard-coded by install.sh, no bypass — under it a *skipped* sandbox fails the gate too, so `NEMOCLAW_SKIP_UNREACHABLE_SANDBOX_BACKUP=1` does not help here). Also fires for a *Ready* sandbox whose state exceeds NemoClaw's 256 MiB in-memory backup buffer — misreported as "SSH endpoint did not answer" (2026-07-11, BYOVPS) | Bring every sandbox to Ready first. If one is permanently dead (Trap 2), preserve its data, delete it, and remove its registry row before re-running. For the >256 MiB case: our wrapper installer sed-raises `maxBuffer` to 2 GiB since commit `ca4806c`; diagnose with `NEMOCLAW_REBUILD_VERBOSE=1 nemoclaw backup-all` (tar `exit=255` at ~268435456 bytes). See `byovps-controller-upgrade.md` pre-flight step 5 for the leaked-tunnel variant of the same error message. |
 | **B. Legacy managed recreate** — `Legacy sandbox recovery requires explicit confirmation` | Registry rows that predate managed-image provenance tracking | Verify the sandbox was created via the controller's managed flow (its `nemoclaw-sandbox-local:*` image timestamps match creation), then re-run with the exact JSON from the error: `NEMOCLAW_CONFIRM_LEGACY_MANAGED_RECREATE='["name1",...]'` |
 | **C. Provider mismatch** — `Requested provider 'vllm' is not available in this environment` | Empty registry → install.sh runs fresh onboarding with our installer's `NEMOCLAW_PROVIDER` default (vllm) | Pass the box's real provider: `NEMOCLAW_PROVIDER=build` (hosted NVIDIA / nvidia-prod) plus `NVIDIA_INFERENCE_API_KEY` (grab from the controller's `.env.local` `NVIDIA_API_KEY`). |
 | **D. Stale onboarding session** — `Previous onboarding session failed. Re-run with --fresh...` | A previous onboarding attempt died mid-flight | `HOME=/root nemoclaw onboard --fresh --non-interactive ...` to discard, or `--resume` to continue it. The versioned installer does not pass either flag, so clear the session before re-running it. |
@@ -217,5 +217,13 @@ docker images | grep nemoclaw-sandbox-base-local
   (audit §11 territory).
 - `/opt/nemoclaw` is a leftover source checkout from the original
   bootstrap and does NOT track the installed CLI version (it still held
-  1162e89b after the 0.78 CLI was live). Check the running CLI with
-  `nemoclaw --version` / the base-image tag, not that directory.
+  1162e89b after the 0.78 CLI was live). Since installer commit
+  `ae9bdaa` (2026-07-11) the authoritative installed source lives at
+  `/opt/nemoclaw-src` — upstream install.sh `npm link`s the global
+  `nemoclaw` into it, so it must never be deleted while the CLI is in
+  use. Check the installed rev with
+  `git -C /opt/nemoclaw-src describe --tags`. (Before `ae9bdaa` the
+  wrapper npm-linked a mktemp dir and deleted it on success, leaving a
+  dangling global CLI — that's why the runbook used to say "trust only
+  `nemoclaw --version`", which itself lies about the tag: it reports
+  upstream's unsynced package.json version, e.g. `v0.1.0` on v0.0.78.)

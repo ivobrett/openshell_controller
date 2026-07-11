@@ -41,6 +41,7 @@ import { useAuth } from "@/app/components/providers/AuthProvider"
 import { useInventory, usePermissionFeeds, useSandboxTelemetry, useMcpServers } from "@/app/hooks/queries"
 import { visiblePendingRequests, loadDismissedPermissionAlerts } from "@/app/lib/permissionAlerts"
 import { launchOpenClawDashboard } from "@/app/lib/launchDashboard"
+import { displaySandboxAgent } from "@/app/lib/agentDisplay"
 import { restartRuntime } from "@/app/lib/restartRuntime"
 import {
   buildOperatorTerminalRoute,
@@ -54,12 +55,6 @@ const BASELINE_MCP: { id: string; label: string }[] = [
   { id: "memory", label: "Memory" },
   { id: "inter-sandbox-chat", label: "Inter-sandbox chat" },
 ]
-
-function displaySandboxAgent(agent?: string) {
-  if (agent === "hermes") return "Hermes"
-  if (agent === "custom") return "Custom"
-  return "OpenClaw"
-}
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (

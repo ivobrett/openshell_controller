@@ -25,6 +25,7 @@ import {
 } from "@/app/components/ui/dropdown-menu"
 import { StatusLed } from "@/app/components/StatusLed"
 import { SandboxTypeLogo } from "./SandboxTypeLogo"
+import { displaySandboxAgent } from "@/app/lib/agentDisplay"
 import { CapabilityChips } from "./CapabilityChips"
 import { DeleteSandboxDialog } from "./DeleteSandboxDialog"
 import { buildOperatorTerminalRoute } from "@/app/lib/dashboardSession"
@@ -40,12 +41,6 @@ import { cn } from "@/app/lib/utils"
 type StatusFilter = "all" | "running" | "stopped" | "attention"
 
 const VIEW_MODE_KEY = "openshell-control.sandbox-view"
-
-function displaySandboxAgent(agent?: string) {
-  if (agent === "hermes") return "Hermes"
-  if (agent === "custom") return "Custom"
-  return "OpenClaw"
-}
 
 interface SandboxTableProps {
   sandboxes: SandboxInventoryItem[]

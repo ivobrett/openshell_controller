@@ -10,22 +10,28 @@ NC='\033[0m'
 
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.72}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.80 (bumped from v0.0.78 on 2026-07-11).
-# What changed for us in 78→80 (full pre-flight in the bump commit):
-#   - Hermes base image v0.17.0 → v0.18.0 (calver v2026.7.1) with new
-#     tarball/npm integrity hashes. npm SRI integrity hashes travel with
-#     the version strings — never sed a version alone.
-#   - install.sh now runs `upgrade-sandboxes --auto` after the pre-upgrade
-#     backup: RUNNING sandboxes whose agent version or NemoClaw build
-#     fingerprint is stale are REBUILT automatically (recreated on the new
-#     image, state restored from the validated backup). Accepted policy
-#     change 2026-07-11 — see docs/runbooks/byovps-controller-upgrade.md.
-#   - min/max_openshell_version still 0.0.72; OpenClaw reviewed default
-#     still 2026.6.10 (required for >=2026.6.x mobile apps to pair —
-#     older gateways reject their bootstrap tokens); no apt-pin changes.
-#   - The 256 MiB backup maxBuffer bug is still present — the sed shim
-#     below still applies.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.80}}"
+# NemoClaw is pinned to TAG v0.0.81 (bumped from v0.0.80 on 2026-07-12).
+# What changed for us in 80→81 (pre-flight against the v0.0.80..v0.0.81 diff):
+#   - Debian bumped the pinned curl to 8.14.1-2+deb13u4 (the deb13u3 that
+#     broke every fresh build is now current); our wildcard unpin covers it
+#     either way, so this is just noise for us.
+#   - NEW pinned apt package `ripgrep=14.1.1-1+b4` in Dockerfile.base — a
+#     fresh time bomb. Added to the wildcard-unpin sed below proactively.
+#   - min/max_openshell_version still 0.0.72 (--skip-openshell stays valid);
+#     OpenClaw reviewed default still 2026.6.10; Hermes base still v0.18.0.
+#   - The 256 MiB backup maxBuffer bug is STILL present (3 sites) — the sed
+#     shim below still applies. install.sh still auto-rebuilds stale running
+#     sandboxes (the 80 policy change).
+#   - MOBILE DEVICE/NODE PAIRING is UNCHANGED for us: the device-approval
+#     allowlist (openclaw_device_approval_policy.py) and the #4462 loopback
+#     `devices approve` wrapper are byte-identical to 0.80, so the controller
+#     fix f2565bc (nsenter gateway netns + stored device cred) still applies.
+#     The 0.81 "loopback/no-token/no-admin-scope pairing" overhaul the
+#     maintainers flagged is WhatsApp CHANNEL pairing (#4522) + npm plugin
+#     provenance (Dockerfile `openclaw plugins install npm-pack:`), not the
+#     mobile node pairing our controller drives. See
+#     memory/project_openclaw_pairing_v0078_regression.md.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.81}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
@@ -181,6 +187,7 @@ install_nemoclaw() {
       -e 's/e2fsprogs=1\.47\.2-3+b11/e2fsprogs/g' \
       -e 's/tmux=3\.5a-3/tmux/g' \
       -e 's/curl=[^[:space:]\\]*/curl/g' \
+      -e 's/ripgrep=[^[:space:]\\]*/ripgrep/g' \
       "$_dockerfile" && rm -f "${_dockerfile}.bak"
   done < <(find "$source_dir" -name 'Dockerfile*' -not -path '*/node_modules/*' -type f)
 

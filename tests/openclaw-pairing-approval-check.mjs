@@ -90,13 +90,36 @@ const PAIRING_LIB = 'app/lib/openclawPairing.ts'
     assert.ok(!REQUEST_ID_RE.test(bad), `expected metachar/invalid requestId to be rejected: ${JSON.stringify(bad)}`)
   }
 
-  // The approve path shell-quotes the (already-validated) id and validates
-  // before building the command — belt and suspenders.
-  assert.ok(/REQUEST_ID_RE\.test\(requestId\)/.test(lib), 'approve must validate requestId with REQUEST_ID_RE')
-  assert.ok(/shellQuote\(requestId\)/.test(lib), 'approve must shellQuote requestId')
+  // The approve path validates the target id before building any command, and
+  // every arg going into the `su -c` string is shell-quoted (shq).
+  assert.ok(/REQUEST_ID_RE\.test\(targetId\)/.test(lib), 'approve must validate the target id with REQUEST_ID_RE')
+  assert.ok(/\.map\(shq\)/.test(lib), 'gateway args must be shell-quoted via shq before entering the su -c string')
+}
+
+// ── 3. Transport invariants (rewritten 2026-07-12) ──
+// Gateway WS calls must reach the gateway inside its network namespace, on the
+// stored-device-credential path (gateway env stripped). Getting any of these
+// wrong reproduces the live failure: 1006 (wrong IP) or "device pairing
+// required" (shared-token auth). File reads still use the privileged
+// openshell-exec channel.
+{
+  const lib = read(PAIRING_LIB)
+  // Enter the gateway netns (nsenter -n) rather than dialing an IP.
+  assert.ok(/"nsenter",\s*"-t",\s*pid,\s*"-n"/.test(lib), 'gateway calls must nsenter into the gateway netns')
+  // Discover the gateway process as `openclaw` (the `openclaw-devices` watcher
+  // is intentionally excluded by -x).
+  assert.ok(/pgrep",\s*"-x",\s*"openclaw"/.test(lib), 'gateway PID must be found with `pgrep -x openclaw`')
+  // Strip the shared-token gateway env so OpenClaw uses its stored device
+  // credential (operator authority); a plain-token connection is rejected.
+  for (const key of ['OPENCLAW_GATEWAY_URL', 'OPENCLAW_GATEWAY_PORT', 'OPENCLAW_GATEWAY_TOKEN']) {
+    assert.ok(lib.includes(`-u ${key}`), `runOpenClawGateway must strip ${key} from the child env`)
+  }
+  // The operator device must be self-approved before node list/approve.
+  assert.ok(/ensureOperatorApproved/.test(lib), 'pairing lib must self-approve the operator device before node ops')
+  // File reads still go through the privileged openshell-exec channel.
   assert.ok(
     /"sandbox",\s*"exec",\s*"-n",\s*sandboxName/.test(lib),
-    'pairing lib must run via the privileged `openshell sandbox exec -n <name>` channel',
+    'file reads must run via the privileged `openshell sandbox exec -n <name>` channel',
   )
 }
 

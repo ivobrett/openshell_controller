@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isUserAuthorizedForSandbox } from "@/app/lib/controlAuth"
 import { exposeOpenClawRemote, readOpenClawRemoteAccess, unexposeOpenClawRemote } from "@/app/lib/openclawRemote"
-import { ensureAutoApproveNodes } from "@/app/lib/openclawPairing"
+import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
 import { resolveSandboxRef } from "@/app/lib/openshellHost"
 
 // The access record contains the gateway token (the mobile app's credential),
@@ -92,7 +92,18 @@ export async function POST(
   } catch {
     // Non-fatal: operator can still approve manually under "Node approval".
   }
-  return NextResponse.json({ ok: true, configured: true, access: result.access, autoApprove })
+  // Open the Control-UI Origin allowlist (allowedOrigins=["*"]) so remote
+  // clients (Obsidian, other desktop apps, a browser Control UI at the public
+  // host) aren't rejected with ws close 4008 "origin not allowed". Safe — the
+  // gateway auth token still gates access and the exposure sits behind Pangolin
+  // auth + IP allowlist. Non-fatal; picked up on the gateway's next start.
+  let controlUiOrigins: { changed: boolean } = { changed: false }
+  try {
+    controlUiOrigins = await ensureControlUiAllowedOriginsOpen(sandboxName)
+  } catch {
+    // Non-fatal: operator can widen gateway.controlUi.allowedOrigins manually.
+  }
+  return NextResponse.json({ ok: true, configured: true, access: result.access, autoApprove, controlUiOrigins })
 }
 
 // DELETE = tear down the exposure (forward + UFW + Traefik rule + access record).

@@ -7,7 +7,7 @@ import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from 
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
 import { recordActivity } from "@/app/lib/activityLog"
 import { repairOpenClawExecApprovalsFile } from "@/app/lib/sandboxPrivilegedFiles"
-import { ensureAutoApproveNodes } from "@/app/lib/openclawPairing"
+import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
 import { planRouteMetadataPatch } from "@/app/lib/sandboxCreate/registryRouteMetadata"
 import {
@@ -1304,6 +1304,19 @@ export async function POST(request: Request) {
             error: error instanceof Error ? error.message : "Failed to ensure OpenClaw node auto-approval.",
           }))
         : null
+      // Open the Control-UI Origin allowlist (gateway.controlUi.allowedOrigins=["*"])
+      // so external clients — the Obsidian plugin, other desktop apps, a browser
+      // Control UI at the public host — aren't rejected with ws close 4008
+      // "origin not allowed". Safe: the gateway auth token still gates every
+      // connection and public exposures sit behind Pangolin auth + IP allowlist.
+      // Written right after autoApproveNodes so both non-hot-reloadable defaults
+      // are on disk before the gateway's final (re)start. Best-effort.
+      const controlUiOrigins = created && isOpenClawAgent
+        ? await ensureControlUiAllowedOriginsOpen(sandboxName).catch((error) => ({
+            changed: false,
+            error: error instanceof Error ? error.message : "Failed to open OpenClaw control-UI origin allowlist.",
+          }))
+        : null
       // Pre-build the Hermes dashboard web UI dependencies on sandbox creation.
       const hermesDashboardBuild = created && agent === "hermes"
         ? await prebuildHermesDashboardWebUi(sandboxName).catch((error) => ({
@@ -1361,6 +1374,7 @@ export async function POST(request: Request) {
         deviceApproval,
         gatewayToken,
         autoApproveNodes,
+        controlUiOrigins,
         hermesDashboardBuild,
         hermesRemote,
         stdout: result.stdout,

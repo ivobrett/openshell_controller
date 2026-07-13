@@ -239,6 +239,38 @@ export async function ensureAutoApproveNodes(sandboxName: string): Promise<{ cha
   return { changed: Boolean(parsed.changed) }
 }
 
+// Open the Control-UI browser-Origin allowlist for controller-managed sandboxes:
+// set gateway.controlUi.allowedOrigins=["*"]. External clients (the Obsidian
+// plugin sends Origin: app://obsidian.md, third-party desktop apps, a browser
+// Control UI opened at the public host, etc.) are otherwise rejected by the
+// gateway's checkBrowserOrigin with ws close 4008 "origin not allowed" — the
+// handshake reaches 101 + connect.challenge and then closes, so it looks like a
+// token/transport failure. Enumerating every client origin is unworkable; the
+// gateway honours "*" (checkBrowserOrigin does `allowlist.has("*")`). This is
+// safe for our exposure model: the gateway STILL requires its auth token on
+// every connection (the Origin check is CSRF-style defence-in-depth against a
+// browser replaying AMBIENT credentials, which the token is not), and public
+// exposures sit behind Pangolin auth + an IP allowlist. Non-hot-reloadable, like
+// gateway.nodes: the value is picked up on the gateway's next start (the create
+// flow's final gateway start, or the next recover). Best-effort; mirrors
+// ensureAutoApproveNodes so both permissive defaults land in the same window.
+export async function ensureControlUiAllowedOriginsOpen(sandboxName: string): Promise<{ changed: boolean }> {
+  const patch = [
+    "import json,os",
+    "p='/sandbox/.openclaw/openclaw.json'",
+    "d=json.load(open(p))",
+    "cu=d.setdefault('gateway',{}).setdefault('controlUi',{})",
+    "changed=(cu.get('allowedOrigins') or [])!=['*']",
+    "cu['allowedOrigins']=['*']",
+    "tmp=p+'.tmp'; json.dump(d,open(tmp,'w'),indent=2); os.replace(tmp,p)",
+    "print(json.dumps({'changed':changed}))",
+  ].join("\n")
+  const res = await runSandboxExec(sandboxName, pyExec(patch))
+  const m = cleanOpenClawOutput(res.stdout).match(/\{[\s\S]*\}/)
+  const parsed = m ? (JSON.parse(m[0]) as { changed: boolean }) : { changed: false }
+  return { changed: Boolean(parsed.changed) }
+}
+
 // Generate a mobile-pairing QR setup code. `openclaw qr` is an OFFLINE encoder
 // (public URL + a short-lived bootstrapToken) — no gateway connection — so it
 // runs on the plain sandbox-exec channel with a clean env.

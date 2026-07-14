@@ -276,6 +276,116 @@ npm run open:ios         # open in Xcode (macOS)
 See [`mobile/README.md`](mobile/README.md) for full setup, prerequisites, and the
 security model.
 
+## Standalone OpenShell Install (without manidae-cloud)
+
+This dashboard does not depend on manidae-cloud. manidae-cloud is only an
+optional provisioning layer (it pre-creates a baseline sandbox, bootstraps
+Ollama, etc.); every feature degrades gracefully when it is absent. If you
+installed OpenShell yourself — for example from
+[snapcraft.io/openshell](https://snapcraft.io/openshell) or the official
+[NVIDIA/OpenShell](https://github.com/NVIDIA/OpenShell) installer — you can run
+the web dashboard and the mobile app entirely on your own hosts.
+
+### Topology
+
+The controller shells out to the local `openshell` CLI, so it runs **on the same
+host as your OpenShell gateway**. To reach it from a phone, expose it with
+[Pangolin](https://docs.fossorial.io). A clean, low-exposure setup is Pangolin
+on a small cloud VPS with a WireGuard tunnel (Gerbil + a Newt agent) back to the
+internal host — the controller host never needs a public inbound port:
+
+```text
+   Phone (mobile app)                Cloud VPS                 Internal host
+  ┌───────────────────┐        ┌───────────────────┐     ┌────────────────────────┐
+  │ OpenShell Control │  HTTPS │  Pangolin          │ WG  │  Newt agent            │
+  │ (Pangolin mode)   │ ─────► │  + Gerbil (WG srv) │◄───►│  → openshell_controller│
+  │  URL + token +    │        │  resource + token  │tunnel│    (:3000)             │
+  │  operator password│        └───────────────────┘     │  OpenShell + gateway   │
+  └───────────────────┘                                  │  (+ NemoClaw optional) │
+                                                         └────────────────────────┘
+```
+
+Pangolin is optional — on a trusted LAN or VPN (e.g. Tailscale) you can point the
+app straight at the controller with the app's **Direct URL** mode instead.
+
+### 1. Install OpenShell (and, optionally, NemoClaw)
+
+Install OpenShell and confirm a gateway is running. The controller reads gateway
+metadata from `~/.config/openshell/gateways/`, so the controller must run as the
+same user that owns that directory.
+
+> **Snap note:** a strictly-confined snap may keep its state under
+> `$SNAP_USER_DATA` (`~/snap/openshell/current/…`) rather than `~/.config`. If the
+> controller reports "no gateway", check where the snap stores gateway metadata
+> and either use a classic-confined install or symlink/point the controller at
+> the right path.
+
+NemoClaw is optional. Without it you still get a working dashboard; with it you
+unlock the managed agent workflows. See the feature matrix below.
+
+### 2. Install and run the controller
+
+From the repository root on the OpenShell host:
+
+```bash
+./install.sh
+grep OPENSHELL_CONTROL_PASSWORD .env.local   # note the generated operator password
+npm run start                                # serves the web dashboard on :3000
+```
+
+`install.sh` requires Node 20+, npm, and Docker to be present and reachable (the
+NemoClaw-oriented features expect Docker even when a bare OpenShell install does
+not use it). It generates the operator password, signing secret, and recovery
+token into `.env.local`.
+
+### 3. Expose it with Pangolin
+
+On the cloud VPS, install Pangolin and create a **resource** for the controller.
+On the internal host, run a **Newt** agent so Pangolin can reach
+`http://localhost:3000` over the WireGuard tunnel — no inbound port on the
+controller host. Then generate a Pangolin **resource access token** (the value
+that appears as `?token=…` in a share link); the mobile app sends it on every
+request.
+
+Because the dashboard now sits behind an HTTPS reverse proxy, set these in
+`.env.local` so secure cookies and CSRF/origin checks work, then restart:
+
+```bash
+# The public HTTPS URL Pangolin serves the resource on.
+PUBLIC_BASE_URL=https://control.example.com
+# Optional: force secure session cookies if your proxy does not forward
+# x-forwarded-proto: https (Pangolin/Newt normally do).
+# OPENSHELL_CONTROL_COOKIE_SECURE=true
+```
+
+The four Capacitor WebView origins are trusted for CORS/CSRF by default; only set
+`OPENSHELL_CONTROL_ALLOWED_APP_ORIGINS` if you customize the app's scheme (see
+[Authentication](#authentication)).
+
+### 4. Connect the mobile app
+
+Build the app (`cd mobile && npm run setup`, then open in Android Studio / Xcode —
+see [Mobile App](#mobile-app-android--ios)). On the connection screen choose
+**Pangolin**, enter the public URL, paste the access token, and sign in with the
+operator password. The app stores the returned session token on-device and can
+open the full web console/terminal already signed in.
+
+### Feature support: bare OpenShell vs OpenShell + NemoClaw
+
+| Capability | Bare OpenShell | + NemoClaw |
+| --- | --- | --- |
+| Sandbox inventory / status | ✅ (`openshell sandbox list`) | ✅ (adds NemoClaw status/defaults) |
+| Create — **Custom Sandbox** | ✅ (`openshell sandbox create`) | ✅ |
+| Create — NemoClaw blueprint / Hermes / Deep Agents | ❌ needs NemoClaw | ✅ |
+| Destroy sandbox | ✅ | ✅ |
+| Restart runtime | ✅ (in-sandbox fallback) | ✅ (NemoClaw recover) |
+| Operator terminal / file transfer | ✅ | ✅ |
+| OpenClaw gateway dashboard proxy | ✅ | ✅ |
+| Default-sandbox detection / registry cleanup | ⚠️ degraded | ✅ |
+
+The installer prints a warning when the NemoClaw CLI is not found; that is
+expected for a bare install and the dashboard still runs.
+
 ## Remote Controller Nodes
 
 The Wizards page includes **Spawn a Controller Node** for preparing a small OpenShell Control install on another VPS. This is intended for topologies where the browser-facing dashboard and the OpenShell gateway/sandbox hosts are not the same machine.

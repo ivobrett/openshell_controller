@@ -57,6 +57,7 @@
     demo: false, // when true, all API calls are served from local mock data
     approvals: [], // aggregated pending permission requests: { sandbox, req }
     approvalsFilter: null, // when set, the approvals sheet shows only this sandbox id
+    intendedAgents: {}, // name -> agent we just created it as, until telemetry catches up
   };
 
   // --- Demo mode (offline UI preview) ---------------------------------------
@@ -463,14 +464,24 @@
     if (data && Array.isArray(data.sandboxes)) {
       return data.sandboxes.map(function (s) {
         var status = normalizeStatus(s.status);
+        var name = s.name || "unknown";
+        var agent = s.agent || "openclaw";
+        // A freshly duplicated/created sandbox has no registry agent yet, so
+        // telemetry reports the "openclaw" default. Show the agent we asked
+        // for until telemetry catches up, then drop the override.
+        var intended = state.intendedAgents[name];
+        if (intended) {
+          if (agent === intended || (agent !== "openclaw" && s.agent)) delete state.intendedAgents[name];
+          else if (agent === "openclaw") agent = intended;
+        }
         return {
           id: s.id || s.name,
-          name: s.name || "unknown",
+          name: name,
           namespace: s.namespace || "openshell",
           status: status,
           ready: status === "running",
           host: s.sshHostAlias || "",
-          agent: s.agent || "openclaw",
+          agent: agent,
           isDefault: !!s.isDefault,
         };
       });
@@ -759,6 +770,15 @@
     return null;
   }
 
+  // Agent type a "New" blueprint produces (used only for optimistic display).
+  function agentForBlueprint(bp) {
+    if (bp === "nemoclaw-hermes") return "hermes";
+    if (bp === "nemoclaw-deepagents-code") return "langchain-deepagents-code";
+    if (bp === "custom-sandbox") return "custom";
+    if (bp === "nemoclaw-blueprint") return "openclaw";
+    return null;
+  }
+
   function createMode() {
     var sel = document.querySelector("#create-mode-toggle .seg[aria-selected='true']");
     return sel ? sel.dataset.cmode : "new";
@@ -846,18 +866,49 @@
       ? { blueprint: "redeploy-image", sandboxName: name, agent: $("create-agent").value, preset: preset, policy: policy }
       : { blueprint: $("create-blueprint").value, sandboxName: name, preset: preset, policy: policy };
 
+    // Remember what we asked for so the list shows the right agent immediately,
+    // before the server's registry records it (see mapSandboxes).
+    var intendedAgent = mode === "duplicate" ? $("create-agent").value : agentForBlueprint($("create-blueprint").value);
+    if (intendedAgent) state.intendedAgents[name] = intendedAgent;
+
+    var verb = mode === "duplicate" ? "Duplicating" : "Creating";
     var submit = $("create-submit");
-    busy(submit, true, mode === "duplicate" ? "Duplicating…" : "Creating…");
+    busy(submit, true, verb + "…");
+
+    // Create / redeploy-image runs the image copy + readiness poll server-side
+    // (30s+, and often longer than the Pangolin/proxy will hold the response
+    // open). Don't block the button on that whole flow — after a short grace to
+    // catch fast validation errors, close the sheet and let inventory polling
+    // surface the new sandbox as it comes up.
+    var settled = false;
+    var grace = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      busy(submit, false);
+      closeAllSheets();
+      toast(verb + " " + name + " — it'll appear when ready.");
+      refreshInventory().catch(function () {});
+    }, 5000);
+
     try {
       var r = await api("/api/sandbox/create", { method: "POST", body: body });
-      toast(r && r.created ? "Created " + name : "Create started for " + name);
-      closeAllSheets();
+      clearTimeout(grace);
+      if (!settled) { settled = true; busy(submit, false); closeAllSheets(); }
+      toast(r && r.created ? "Created " + name : name + " started.");
       refreshInventory().catch(function () {});
     } catch (err) {
-      if (err instanceof AuthError) { closeAllSheets(); return handleAuthExpired(); }
-      setBanner(errEl, err.message || "Create failed.", "error");
-    } finally {
-      busy(submit, false);
+      clearTimeout(grace);
+      if (err instanceof AuthError) { busy(submit, false); closeAllSheets(); return handleAuthExpired(); }
+      if (settled) {
+        // Sheet already closed after the grace period; the request most likely
+        // just outlived a proxy timeout while the server keeps working. Trust
+        // inventory polling rather than showing a misleading failure.
+        refreshInventory().catch(function () {});
+      } else {
+        settled = true;
+        busy(submit, false);
+        setBanner(errEl, err.message || "Create failed.", "error");
+      }
     }
   }
 

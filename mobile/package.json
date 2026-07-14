@@ -1,0 +1,30 @@
+{
+  "name": "openshell-control-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenShell Control companion app for Android and iOS (Capacitor).",
+  "scripts": {
+    "sync": "cap sync",
+    "add:android": "cap add android",
+    "add:ios": "cap add ios",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios",
+    "run:android": "cap run android",
+    "run:ios": "cap run ios",
+    "setup": "npm install && (cap add android || true) && (cap add ios || true) && cap sync",
+    "icons": "npx --yes @capacitor/assets generate --assetPath assets"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/browser": "^6.0.4",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2",
+    "@capacitor/preferences": "^6.0.3",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

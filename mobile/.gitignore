@@ -1,0 +1,13 @@
+# Capacitor mobile app
+
+# Dependencies
+/node_modules
+
+# Generated native platforms — recreate with `npx cap add android` / `npx cap add ios`.
+# (Kept out of git; they are large and machine/tool-version specific.)
+/android
+/ios
+
+# Build output / logs
+*.log
+.DS_Store

@@ -3,6 +3,43 @@ import { resolveAuthContext, isAuthDisabled, isAuthConfigured } from "./app/lib/
 import { isUserAuthorizedForSandbox } from "./app/lib/controlAuth"
 import { extractSandboxIdFromUrl } from "./app/lib/auth/policy.mjs"
 
+// Native WebView origins used by the Capacitor mobile app. Capacitor serves the
+// bundled app from these synthetic origins, so requests from the mobile client
+// carry one of them in the Origin header. The app authenticates with a Bearer
+// operator token (see app/lib/auth/context.ts) rather than the session cookie.
+// Extra origins can be added via OPENSHELL_CONTROL_ALLOWED_APP_ORIGINS.
+const DEFAULT_APP_ORIGINS = [
+  "capacitor://localhost",
+  "ionic://localhost",
+  "http://localhost",
+  "https://localhost",
+]
+
+function allowedAppOrigins() {
+  const configured = (process.env.OPENSHELL_CONTROL_ALLOWED_APP_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+  return new Set([...DEFAULT_APP_ORIGINS, ...configured])
+}
+
+function requestAppOrigin(request: NextRequest) {
+  const origin = request.headers.get("origin")
+  if (origin && allowedAppOrigins().has(origin)) return origin
+  return null
+}
+
+function withCorsHeaders(response: NextResponse, appOrigin: string | null) {
+  if (!appOrigin) return response
+  response.headers.set("access-control-allow-origin", appOrigin)
+  response.headers.set("access-control-allow-credentials", "true")
+  response.headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+  response.headers.set("access-control-allow-headers", "authorization,content-type")
+  response.headers.set("access-control-max-age", "600")
+  response.headers.append("vary", "Origin")
+  return response
+}
+
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
@@ -13,6 +50,7 @@ const PUBLIC_PATHS = [
   "/forgot-password",
   "/api/auth/setup",
   "/api/auth/recover",
+  "/api/auth/handoff",
   "/favicon.ico",
   "/favicon.svg",
   "/favicon-32.png",
@@ -91,6 +129,10 @@ function trustedRequestOrigins(request: NextRequest) {
 function hasTrustedOrigin(request: NextRequest) {
   const origin = request.headers.get("origin")
   if (!origin) return true
+  // Capacitor/Ionic WebView origins use non-special URL schemes whose
+  // `URL.origin` is the opaque string "null", so they must be matched by their
+  // raw value rather than a normalized origin.
+  if (allowedAppOrigins().has(origin)) return true
   try {
     return trustedRequestOrigins(request).has(new URL(origin).origin)
   } catch {
@@ -119,6 +161,18 @@ function isDashboardProxyNavigation(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  const appOrigin = requestAppOrigin(request)
+
+  // Answer CORS preflight for the mobile app before any auth handling.
+  if (request.method === "OPTIONS" && request.nextUrl.pathname.startsWith("/api/") && appOrigin) {
+    return withCorsHeaders(withSecurityHeaders(new NextResponse(null, { status: 204 })), appOrigin)
+  }
+
+  const response = await handleRequest(request)
+  return withCorsHeaders(response, appOrigin)
+}
+
+async function handleRequest(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   const host = request.headers.get("host") || "localhost:3000"

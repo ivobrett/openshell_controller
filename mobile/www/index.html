@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>OpenShell Control</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Splash / boot -->
+    <section class="screen" id="screen-boot" data-active="true">
+      <div class="boot">
+        <div class="logo-mark" aria-hidden="true"></div>
+        <p class="boot-title">OPENSHELL CONTROL</p>
+        <div class="spinner" role="status" aria-label="Loading"></div>
+      </div>
+    </section>
+
+    <!-- Connection setup -->
+    <section class="screen" id="screen-connect">
+      <div class="scroll">
+        <header class="connect-head">
+          <div class="logo-mark" aria-hidden="true"></div>
+          <h1>Connect to OpenShell</h1>
+          <p class="muted">Point the app at your self-hosted OpenShell Control server. Your credentials stay on this device.</p>
+        </header>
+
+        <form id="connect-form" class="card form" autocomplete="off" novalidate>
+          <div class="field">
+            <label for="server-url">Server URL</label>
+            <input id="server-url" name="serverUrl" type="url" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://control.example.com" />
+            <p class="hint">The public HTTPS address of your dashboard (via Pangolin or your own reverse proxy).</p>
+          </div>
+
+          <div class="field">
+            <span class="label">Connection mode</span>
+            <div class="segmented" role="tablist" id="mode-toggle">
+              <button type="button" class="seg" data-mode="pangolin" role="tab" aria-selected="true">Pangolin</button>
+              <button type="button" class="seg" data-mode="direct" role="tab" aria-selected="false">Direct URL</button>
+            </div>
+            <p class="hint" id="mode-hint">Pangolin protects your server behind a secure tunnel. Paste the access token from your Pangolin resource share link.</p>
+          </div>
+
+          <div class="field" id="pangolin-field">
+            <label for="pangolin-token">Pangolin access token</label>
+            <input id="pangolin-token" name="pangolinToken" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Paste token from your Pangolin link" />
+            <p class="hint">From your Pangolin share URL, e.g. <code>?token=&lt;this-value&gt;</code>.</p>
+          </div>
+
+          <div class="field">
+            <label for="operator-password">Operator password</label>
+            <input id="operator-password" name="password" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Dashboard operator password" />
+            <p class="hint">The <code>OPENSHELL_CONTROL_PASSWORD</code> set on your server.</p>
+          </div>
+
+          <div class="banner error" id="connect-error" hidden></div>
+
+          <button type="submit" class="btn primary" id="connect-submit">
+            <span class="btn-label">Connect</span>
+          </button>
+        </form>
+
+        <p class="footnote muted">OpenShell Control · companion app</p>
+      </div>
+    </section>
+
+    <!-- Dashboard -->
+    <section class="screen" id="screen-dashboard">
+      <header class="topbar">
+        <div class="topbar-title">
+          <div class="status-dot" id="conn-dot"></div>
+          <div class="topbar-text">
+            <span class="topbar-name">OpenShell Control</span>
+            <span class="topbar-host" id="topbar-host">—</span>
+          </div>
+        </div>
+        <button class="icon-btn" id="menu-btn" aria-label="Menu">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+      </header>
+
+      <div class="scroll" id="dashboard-scroll">
+        <div class="stat-grid" id="stat-grid">
+          <div class="stat"><span class="stat-num" id="stat-total">0</span><span class="stat-label">Total</span></div>
+          <div class="stat"><span class="stat-num" id="stat-running">0</span><span class="stat-label">Running</span></div>
+          <div class="stat"><span class="stat-num" id="stat-ready">0</span><span class="stat-label">Ready</span></div>
+          <div class="stat"><span class="stat-num small" id="stat-gateway">—</span><span class="stat-label">Gateway</span></div>
+        </div>
+
+        <div class="section-head">
+          <h2>Sandboxes</h2>
+          <button class="chip-btn" id="refresh-btn" aria-label="Refresh">Refresh</button>
+        </div>
+
+        <div class="banner error" id="dash-error" hidden></div>
+        <div class="banner info" id="dash-message" hidden></div>
+
+        <div id="sandbox-list" class="sandbox-list"></div>
+
+        <div class="empty" id="sandbox-empty" hidden>
+          <p class="muted">No sandboxes reported yet.</p>
+        </div>
+
+        <button class="btn ghost full console-btn" id="console-btn">Open full web console</button>
+      </div>
+
+      <button class="fab" id="create-fab" aria-label="Create sandbox">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </section>
+  </div>
+
+  <!-- Sandbox detail sheet -->
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden>
+    <div class="sheet" id="sandbox-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div>
+          <h3 id="sheet-name">sandbox</h3>
+          <p class="muted" id="sheet-sub">—</p>
+        </div>
+        <span class="pill" id="sheet-status">unknown</span>
+      </div>
+      <div class="banner info" id="sheet-message" hidden></div>
+      <div class="sheet-actions">
+        <button class="btn ghost" data-action="restart">Restart runtime</button>
+        <button class="btn ghost" data-action="health">Health check</button>
+        <button class="btn ghost" data-action="console">Open console</button>
+        <button class="btn danger" data-action="destroy">Destroy sandbox</button>
+      </div>
+      <button class="btn subtle full" data-action="close-sheet">Close</button>
+    </div>
+  </div>
+
+  <!-- Create sheet -->
+  <div class="sheet-backdrop" id="create-backdrop" hidden>
+    <div class="sheet" id="create-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h3>Create sandbox</h3></div>
+      <form id="create-form" class="form">
+        <div class="field">
+          <label for="create-name">Name</label>
+          <input id="create-name" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="my-sandbox" />
+          <p class="hint">Lowercase letters, numbers and hyphens.</p>
+        </div>
+        <div class="field">
+          <label for="create-blueprint">Blueprint</label>
+          <select id="create-blueprint"></select>
+          <p class="hint" id="create-blueprint-hint"></p>
+        </div>
+        <div class="banner error" id="create-error" hidden></div>
+        <button type="submit" class="btn primary full" id="create-submit">Create</button>
+        <button type="button" class="btn subtle full" data-action="close-create">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Menu sheet -->
+  <div class="sheet-backdrop" id="menu-backdrop" hidden>
+    <div class="sheet" id="menu-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h3>Menu</h3></div>
+      <div class="sheet-actions">
+        <button class="btn ghost" data-action="menu-console">Open full web console</button>
+        <button class="btn ghost" data-action="menu-refresh">Refresh inventory</button>
+        <button class="btn danger" data-action="menu-disconnect">Disconnect</button>
+      </div>
+      <button class="btn subtle full" data-action="close-menu">Close</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

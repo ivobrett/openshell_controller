@@ -48,8 +48,26 @@ type CookieReader = {
   get(name: string): { value: string } | undefined
 }
 
-async function resolveOperator(cookies: CookieReader): Promise<boolean> {
-  const value = cookies.get(COOKIE_NAME)?.value
+type OperatorRequest = {
+  cookies: CookieReader
+  headers: Pick<Headers, "get">
+}
+
+/**
+ * Resolves the operator session token from a request. Browsers send it as the
+ * httpOnly session cookie; native clients (the Capacitor mobile app) send it as
+ * an `Authorization: Bearer <token>` header, because a WebView cannot share the
+ * cookie cross-origin. The token itself is identical in both cases.
+ */
+function operatorTokenFromRequest(request: OperatorRequest): string | undefined {
+  const authorization = request.headers.get("authorization")
+  const bearer = authorization ? /^Bearer\s+(.+)$/i.exec(authorization.trim()) : null
+  if (bearer) return bearer[1].trim()
+  return request.cookies.get(COOKIE_NAME)?.value
+}
+
+async function resolveOperator(request: OperatorRequest): Promise<boolean> {
+  const value = operatorTokenFromRequest(request)
   if (!value) return false
   const payload = await verifyOperatorSession(value, getOperatorSecret())
   return Boolean(payload)
@@ -75,11 +93,10 @@ async function resolveOAuth(cookies: CookieReader): Promise<string | null> {
 export async function resolveAuthContext(request: NextRequest): Promise<AuthContext> {
   if (isAuthDisabled()) return { kind: "disabled" }
 
-  const cookies = request.cookies
-  const isOperator = await resolveOperator(cookies)
+  const isOperator = await resolveOperator(request)
   if (isOperator) return { kind: "operator" }
 
-  const email = await resolveOAuth(cookies)
+  const email = await resolveOAuth(request.cookies)
   if (email) return { kind: "oauth", email }
 
   return { kind: "anonymous" }
@@ -92,7 +109,7 @@ export async function resolveAuthContext(request: NextRequest): Promise<AuthCont
  */
 export async function isOperator(request: NextRequest): Promise<boolean> {
   if (isAuthDisabled()) return true
-  return resolveOperator(request.cookies)
+  return resolveOperator(request)
 }
 
 /**

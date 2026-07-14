@@ -33,8 +33,17 @@ export async function POST(request: NextRequest) {
   }
 
   clearRateLimit(limitKey)
-  const response = NextResponse.json({ ok: true, next: nextPath })
-  response.cookies.set(settings.cookieName, await createSessionCookieValue(), sessionCookieOptionsForRequest(request))
+  const token = await createSessionCookieValue()
+  // Return the session token in the body so native clients (the Capacitor
+  // mobile app) can store it and authenticate via the Authorization header,
+  // since they cannot rely on the httpOnly session cookie cross-origin.
+  const response = NextResponse.json({
+    ok: true,
+    next: nextPath,
+    token,
+    expiresInSeconds: settings.ttlSeconds,
+  })
+  response.cookies.set(settings.cookieName, token, sessionCookieOptionsForRequest(request))
   return response
 }
 

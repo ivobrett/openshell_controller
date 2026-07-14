@@ -202,6 +202,16 @@ Pages:
 
 There is no email sender. Forgot-password uses `OPENSHELL_CONTROL_RECOVERY_TOKEN` from `.env.local`, which means it is a host-admin recovery flow. Anyone who can read `.env.local` can reset the dashboard password.
 
+The mobile app (see [Mobile App](#mobile-app-android--ios)) authenticates with the
+same operator password but, because a native WebView cannot share the HTTP-only
+session cookie cross-origin, it sends the returned operator session token as an
+`Authorization: Bearer <token>` header. This is resolved in
+`app/lib/auth/context.ts` (`resolveOperator`), so a Bearer token grants the same
+operator identity as the cookie. The synthetic WebView origins
+(`capacitor://localhost`, `ionic://localhost`, `http://localhost`,
+`https://localhost`) are trusted for CORS/CSRF by default; add more via
+`OPENSHELL_CONTROL_ALLOWED_APP_ORIGINS` (comma-separated).
+
 After changing `.env.local`, restart the server:
 
 ```bash
@@ -237,6 +247,34 @@ Behind a reverse proxy, route WebSocket upgrades for the dashboard proxy paths t
 ## Hermes Notes
 
 The create flow includes managed NemoClaw agent options beyond the default OpenClaw sandbox. Fresh Hermes Sandbox uses NemoClaw onboard with `--agent hermes`; Fresh Deep Agents Code Sandbox uses `--agent langchain-deepagents-code` for the upstream LangChain Deep Agents Code terminal harness. The existing Fresh NemoClaw Image and Quick Deploy paths remain OpenClaw-oriented.
+
+## Mobile App (Android / iOS)
+
+A [Capacitor](https://capacitorjs.com) companion app lives in [`mobile/`](mobile/).
+It is a native shell (Android + iOS) around a mobile-first UI that connects to a
+self-hosted OpenShell Control server over HTTPS and drives the same API as the
+web dashboard.
+
+- **Connection modes:** *Pangolin* (server behind a Pangolin tunnel, authorized
+  with an access token sent as `?token=`) or *Direct URL*.
+- **Controls:** view sandboxes and gateway status, restart runtimes, run health
+  checks, create/destroy sandboxes, and open the full web console/terminal in an
+  in-app browser (already signed in via the `/api/auth/handoff` endpoint).
+- The app signs in as **operator** with the dashboard password and stores the
+  returned session token on-device, sending it as a Bearer token (see
+  [Authentication](#authentication)).
+
+Build and run:
+
+```bash
+cd mobile
+npm run setup            # install + create android/ios projects + sync
+npm run open:android     # open in Android Studio
+npm run open:ios         # open in Xcode (macOS)
+```
+
+See [`mobile/README.md`](mobile/README.md) for full setup, prerequisites, and the
+security model.
 
 ## Remote Controller Nodes
 

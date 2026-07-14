@@ -17,13 +17,17 @@ export async function GET(request: NextRequest) {
   const nextPath = nextParam && nextParam.startsWith("/") ? nextParam : "/"
 
   const valid = isAuthDisabled() || Boolean(await verifyOperatorSession(token, getOperatorSecret()))
+  // Use RELATIVE redirects. Behind Pangolin / a reverse proxy, `request.url`
+  // reports the controller's internal bind address (e.g. http://0.0.0.0:3000),
+  // so `new URL(path, request.url)` produced an absolute Location the mobile
+  // in-app browser could not reach. A relative Location is resolved by the
+  // browser against the public URL it actually requested.
   if (!valid) {
-    const loginUrl = new URL("/login", request.url)
-    loginUrl.searchParams.set("next", nextPath)
-    return NextResponse.redirect(loginUrl)
+    const loginTarget = `/login?next=${encodeURIComponent(nextPath)}`
+    return new NextResponse(null, { status: 307, headers: { Location: loginTarget } })
   }
 
-  const response = NextResponse.redirect(new URL(nextPath, request.url))
+  const response = new NextResponse(null, { status: 307, headers: { Location: nextPath } })
   if (!isAuthDisabled()) {
     response.cookies.set(settings.cookieName, token, sessionCookieOptionsForRequest(request))
   }

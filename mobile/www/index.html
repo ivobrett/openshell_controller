@@ -28,26 +28,45 @@
           <p class="muted">Point the app at your self-hosted OpenShell Control server. Your credentials stay on this device.</p>
         </header>
 
-        <form id="connect-form" class="card form" autocomplete="off" novalidate>
+        <form id="connect-form" class="card form" data-mode="direct" autocomplete="off" novalidate>
           <div class="field">
-            <label for="server-url">Server URL</label>
-            <input id="server-url" name="serverUrl" type="url" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://control.example.com" />
-            <p class="hint">The public HTTPS address of your dashboard (via Pangolin or your own reverse proxy).</p>
-          </div>
-
-          <div class="field">
-            <span class="label">Connection mode</span>
+            <span class="label">Connection type</span>
             <div class="segmented" role="tablist" id="mode-toggle">
-              <button type="button" class="seg" data-mode="pangolin" role="tab" aria-selected="true">Pangolin</button>
-              <button type="button" class="seg" data-mode="direct" role="tab" aria-selected="false">Direct URL</button>
+              <button type="button" class="seg" data-mode="direct" role="tab" aria-selected="true">Direct</button>
+              <button type="button" class="seg" data-mode="proxy" role="tab" aria-selected="false">Proxy</button>
+              <button type="button" class="seg" data-mode="pangolin" role="tab" aria-selected="false">Pangolin</button>
             </div>
-            <p class="hint" id="mode-hint">Pangolin protects your server behind a secure tunnel. Paste the access token from your Pangolin resource share link.</p>
           </div>
 
-          <div class="field" id="pangolin-field">
+          <div class="field">
+            <label for="server-url" id="server-url-label">Server URL</label>
+            <input id="server-url" name="serverUrl" type="text" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="control.example.com" />
+            <p class="hint">Domain, IP, or host:port. Include <code>http://</code> or <code>https://</code> only if you want to force the scheme.</p>
+          </div>
+
+          <!-- Proxy (basic auth) only -->
+          <div class="field mode-proxy">
+            <label for="proxy-username">Proxy username</label>
+            <input id="proxy-username" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="proxy user" />
+          </div>
+          <div class="field mode-proxy">
+            <label for="proxy-password">Proxy password</label>
+            <input id="proxy-password" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="proxy password" />
+          </div>
+
+          <!-- Pangolin only -->
+          <div class="field mode-pangolin">
             <label for="pangolin-token">Pangolin access token</label>
-            <input id="pangolin-token" name="pangolinToken" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Paste token from your Pangolin link" />
-            <p class="hint">From your Pangolin share URL, e.g. <code>?token=&lt;this-value&gt;</code>.</p>
+            <input id="pangolin-token" name="pangolinToken" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="tokenId.tokenSecret" />
+            <p class="hint">Use the format <code>tokenId.tokenSecret</code>.</p>
+          </div>
+          <div class="field mode-pangolin">
+            <div class="adv-head">
+              <label for="pangolin-param">Advanced token parameter</label>
+              <button type="button" class="link-btn" id="pangolin-param-toggle">Show</button>
+            </div>
+            <p class="hint">Default is <code>p_token</code>; WebSockets use this query parameter.</p>
+            <input id="pangolin-param" type="text" value="p_token" autocapitalize="none" autocorrect="off" spellcheck="false" hidden />
           </div>
 
           <div class="field">
@@ -56,12 +75,23 @@
             <p class="hint">The <code>OPENSHELL_CONTROL_PASSWORD</code> set on your server.</p>
           </div>
 
+          <div class="toggle-row">
+            <div class="toggle-text">
+              <span class="label">Insecure / LAN Mode</span>
+              <p class="hint">HTTPS required unless explicitly enabled.</p>
+            </div>
+            <button type="button" class="switch" id="insecure-toggle" role="switch" aria-checked="false"><span class="knob"></span></button>
+          </div>
+
           <div class="banner error" id="connect-error" hidden></div>
 
           <button type="submit" class="btn primary" id="connect-submit">
             <span class="btn-label">Connect</span>
           </button>
         </form>
+
+        <button type="button" class="btn subtle full" id="demo-btn" style="margin-top:14px">Preview UI with demo data</button>
+        <p class="hint" style="text-align:center;margin-top:8px">No server needed — explore the interface with sample sandboxes.</p>
 
         <p class="footnote muted">OpenShell Control · companion app</p>
       </div>
@@ -77,9 +107,15 @@
             <span class="topbar-host" id="topbar-host">—</span>
           </div>
         </div>
-        <button class="icon-btn" id="menu-btn" aria-label="Menu">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
+        <div class="topbar-actions">
+          <button class="icon-btn bell-btn" id="approvals-btn" aria-label="Permission requests">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+            <span class="bell-badge" id="approvals-badge" hidden>0</span>
+          </button>
+          <button class="icon-btn" id="menu-btn" aria-label="Menu">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+          </button>
+        </div>
       </header>
 
       <div class="scroll" id="dashboard-scroll">
@@ -125,6 +161,7 @@
         <span class="pill" id="sheet-status">unknown</span>
       </div>
       <div class="banner info" id="sheet-message" hidden></div>
+      <button class="btn warn full" data-action="permissions" id="sheet-permissions" hidden></button>
       <div class="sheet-actions">
         <button class="btn ghost" data-action="restart">Restart runtime</button>
         <button class="btn ghost" data-action="health">Health check</button>
@@ -140,21 +177,61 @@
     <div class="sheet" id="create-sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-head"><h3>Create sandbox</h3></div>
-      <form id="create-form" class="form">
+      <form id="create-form" class="form" data-cmode="new">
+        <div class="field">
+          <span class="label">Mode</span>
+          <div class="segmented" role="tablist" id="create-mode-toggle">
+            <button type="button" class="seg" data-cmode="new" role="tab" aria-selected="true">New</button>
+            <button type="button" class="seg" data-cmode="duplicate" role="tab" aria-selected="false">Duplicate</button>
+          </div>
+        </div>
+
+        <div class="field create-new-only">
+          <label for="create-blueprint">Blueprint</label>
+          <select id="create-blueprint"></select>
+          <p class="hint" id="create-blueprint-hint"></p>
+        </div>
+
+        <div class="field create-dup-only">
+          <label for="create-agent">Image type</label>
+          <select id="create-agent">
+            <option value="openclaw">OpenClaw image</option>
+            <option value="hermes">Hermes image</option>
+            <option value="custom">Custom image</option>
+          </select>
+          <p class="hint">Copies the latest running image of this type — no rebuild.</p>
+        </div>
+
         <div class="field">
           <label for="create-name">Name</label>
           <input id="create-name" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="my-sandbox" />
           <p class="hint">Lowercase letters, numbers and hyphens.</p>
         </div>
+
         <div class="field">
-          <label for="create-blueprint">Blueprint</label>
-          <select id="create-blueprint"></select>
-          <p class="hint" id="create-blueprint-hint"></p>
+          <label for="create-policy">Policy preset</label>
+          <select id="create-policy"></select>
+          <p class="hint" id="create-policy-hint"></p>
         </div>
+
         <div class="banner error" id="create-error" hidden></div>
         <button type="submit" class="btn primary full" id="create-submit">Create</button>
         <button type="button" class="btn subtle full" data-action="close-create">Cancel</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Permission requests sheet -->
+  <div class="sheet-backdrop" id="approvals-backdrop" hidden>
+    <div class="sheet" id="approvals-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h3>Permission requests</h3></div>
+      <p class="muted" id="approvals-sub" style="margin:-8px 0 16px">Agent network access awaiting your approval.</p>
+      <div id="approvals-list" class="approval-list"></div>
+      <div class="empty" id="approvals-empty" hidden>
+        <p class="muted">No pending requests. Agent network requests will appear here.</p>
+      </div>
+      <button class="btn subtle full" data-action="close-approvals">Close</button>
     </div>
   </div>
 
@@ -165,6 +242,7 @@
       <div class="sheet-head"><h3>Menu</h3></div>
       <div class="sheet-actions">
         <button class="btn ghost" data-action="menu-console">Open full web console</button>
+        <button class="btn ghost" data-action="menu-copy-link">Copy console link</button>
         <button class="btn ghost" data-action="menu-refresh">Refresh inventory</button>
         <button class="btn danger" data-action="menu-disconnect">Disconnect</button>
       </div>
@@ -175,6 +253,7 @@
   <!-- Toast -->
   <div id="toast" class="toast" hidden></div>
 
+  <script src="presets.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

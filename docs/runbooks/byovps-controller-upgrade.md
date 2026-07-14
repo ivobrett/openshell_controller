@@ -380,6 +380,111 @@ new gate discovered (E, below).
   new hermes base image tag equals that commit sha (`c5f1194b` for
   v0.0.80).
 
+## Execution record — 2026-07-13 (third run, NemoClaw v0.0.80 → v0.0.81)
+
+Same Oracle box (130.61.64.124), 3 live sandboxes (`ivos-openclaw`,
+`my-first-deepagent`, `ivos-hermes`). Controller `1d17446` → `f9413fa`
+(2 commits: openclaw-pairing netns fix + the v0.0.81 pin bump).
+**Outcome: complete success, zero container restarts** — all three
+containers kept their pre-upgrade uptimes (45h / 47h / 6 days) straight
+through the operation. The single most useful pre-flight finding is #1
+below: a tag-to-tag NemoClaw bump does **not** auto-rebuild anything
+unless a manifest `expected_version` moved.
+
+1. **`upgrade-sandboxes --auto` is a no-op across a pure tag bump — and
+   you can prove it before touching the box.** The v0.0.80+ auto-rebuild
+   fires on two axes (`src/lib/domain/maintenance/upgrade.ts`):
+   `agent-version` (sandbox agent version behind the manifest
+   `expected_version`) and `image-drift`
+   (`isNemoclawImageStale(recorded, current)` — true only when a
+   *recorded* NemoClaw build fingerprint differs from the *running* one).
+   - **image-drift can never fire on our boxes across a tag bump.** The
+     "fingerprint" is `getVersion()` (`src/lib/core/version.ts`), which
+     resolves `git describe --tags` → `.version` file → `package.json`.
+     On the installer's shallow grafted clone git-describe fails and
+     there is no `.version` file, so it falls through to
+     `package.json` = **`0.1.0`** — a constant upstream never bumps per
+     tag. Every managed sandbox therefore records `nemoclawVersion:
+     "0.1.0"`, and the running value is also `0.1.0`, so
+     `recorded === current` → not stale. (Legacy pre-fingerprint rows
+     like `ivos-openclaw` record `null` → also not stale.)
+   - **agent-version:** diff `agents/*/manifest.yaml` between the tags.
+     For v0.0.80→v0.0.81 **no `expected_version` changed** (hermes stayed
+     0.18.0/v2026.7.1, deepagent 0.1.34, openclaw 2026.6.10), so nothing
+     was stale on this axis either.
+   - Confirm on the box with `HOME=/root nemoclaw upgrade-sandboxes
+     --check` — it printed **"All sandboxes are up to date"** here, which
+     is the green light that the installer's `upgrade-sandboxes --auto`
+     will be a no-op. Run this in pre-flight; if it reports a stale
+     sandbox, expect an interruption for that one (Policy in
+     `live-vps-upgrades.md`).
+
+2. **Clear orphan registry rows BEFORE the installer or Gate A fails.**
+   `sandboxes.json` carried a phantom row `my-hermes-new` (a failed
+   create from the 2026-07-11 v0.0.80 session: `createdAt` set, but no
+   container even in `docker ps -a`, all fingerprint fields null). It
+   was absent from `openshell sandbox list` yet present in `nemoclaw
+   list`. The strict pre-upgrade backup (Gate A) would have skipped it
+   (no container to back up) and failed. `upgrade-sandboxes --check`
+   flags exactly this: *"N recorded sandbox(es) were not found on their
+   recorded gateway … run `nemoclaw <name> destroy`"*. Sanctioned fix
+   (back up the registry first): `cp
+   ~/.nemoclaw/sandboxes.json{,.bak-preupgrade-$(date +%s)}` then
+   `HOME=/root nemoclaw sandbox destroy my-hermes-new --yes` (it just
+   clears the stranded record — *"already absent from the live
+   gateway"*). Re-check → *"All sandboxes are up to date."*
+
+3. **Reap leaked controller dashboard tunnels before `backup-all`.**
+   8 duplicate lazy `/dashboard/open` forwards had accumulated (5 to
+   `ivos-openclaw`, 2 to `my-first-deepagent`, 1 to `ivos-hermes` — the
+   `ssh … sandbox@openshell-<name> -N -L 127.0.0.1:209xx:18789` form).
+   These hold in-sandbox SSH slots and are the leaked-tunnel cause of the
+   misleading "SSH endpoint did not answer" backup failure (pre-flight
+   step 5). Reaped by PID from `pgrep -f 'sandbox@openshell-.* -N -L
+   127.0.0.1'` (they re-spin on demand). Do NOT match the `nemoclaw-start`
+   sessions or the singleton `-L …:18789:…:18789` primary forward — those
+   use `--sandbox-id`, not `sandbox@openshell-`. After reaping,
+   `backup-all` returned **3 backed up, 0 failed, 0 skipped**.
+
+4. **Gate B (legacy managed recreate) fired for `ivos-openclaw`** — same
+   as every prior run (its 2026-07-06 row predates fingerprint tracking).
+   Verified managed via its running-container image tag
+   `nemoclaw-sandbox-local:ivos-openclaw-1783345424773`
+   (≈ 2026-07-06 13:43:44, ~1 min before the 13:44:46 registry creation),
+   then re-ran with
+   `NEMOCLAW_CONFIRM_LEGACY_MANAGED_RECREATE='["ivos-openclaw"]'`.
+   Because nothing was stale, the confirmation only satisfied the
+   backup-recovery-prep gate; it did **not** recreate the sandbox.
+
+5. **Source review of v0.0.80→v0.0.81 (686 files) surfaced nothing
+   dangerous for a live box.** `scripts/install.sh` changed 4 lines only
+   (`npm install` → `npm ci` for the plugin build — lockfile was in sync,
+   `npm ci` added 81 packages cleanly). `src/lib/state/sandbox.ts` was
+   heavily refactored but still has **3** `maxBuffer: 256 * 1024 * 1024`
+   sites, so our installer's sed shim still matches. Hermes stayed
+   0.18.0 → no remote-desktop recalibration
+   (`nemoclaw-version-bumps.md` #5). Manifest changes were additive
+   restore/state-dir refinements (hermes `dashboard-home` state dir,
+   deepagent config.toml key-allowlist merge, openclaw openclaw-config
+   merge) — none touched `expected_version`.
+
+- Installed rev check: `git -C /opt/nemoclaw-src log -1 --format=%h`
+  → `457311c` (= `git rev-parse v0.0.81^{commit}`). OpenShell untouched
+  at 0.0.72. Controller `/login → 200`, service active.
+- **Step 3 fresh-create E2E: PASSED on this box.** Threw a
+  `v0081-smoke` OpenClaw sandbox via `POST /api/sandbox/create`
+  (`{"blueprint":"nemoclaw-blueprint","gpuMode":"none",
+  "createInference":{"mode":"auto"}}` — `auto` reuses the gateway's
+  existing shared entrim.ai route, no key needed). First create built
+  the new per-agent base image `nemoclaw-sandbox-base-local:457311c6`
+  (= the v0.0.81 source commit — proves the new source built), reached
+  Ready, returned `created=True verified=True`, and its registry row had
+  full route metadata (`OK`, provider=compatible-endpoint). Deleted via
+  `POST /api/sandbox/delete` → `deleted=True registryCleanup removed`.
+  The three live sandboxes stayed Ready with unchanged uptimes the whole
+  time. (A clean v0.0.81 create + real mobile pairing was also validated
+  on a fresh Hetzner cloud box the same day.)
+
 ## If something goes wrong mid-operation
 
 - `openshell sandbox list` → `transport error / Connection refused`:

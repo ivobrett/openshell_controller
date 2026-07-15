@@ -10,28 +10,28 @@ NC='\033[0m'
 
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.72}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.81 (bumped from v0.0.80 on 2026-07-12).
-# What changed for us in 80→81 (pre-flight against the v0.0.80..v0.0.81 diff):
-#   - Debian bumped the pinned curl to 8.14.1-2+deb13u4 (the deb13u3 that
-#     broke every fresh build is now current); our wildcard unpin covers it
-#     either way, so this is just noise for us.
-#   - NEW pinned apt package `ripgrep=14.1.1-1+b4` in Dockerfile.base — a
-#     fresh time bomb. Added to the wildcard-unpin sed below proactively.
+# NemoClaw is pinned to TAG v0.0.83 (commit 45b1cb5a; bumped from v0.0.81 on
+# 2026-07-15). Pre-flight against the v0.0.81..v0.0.83 diff:
 #   - min/max_openshell_version still 0.0.72 (--skip-openshell stays valid);
-#     OpenClaw reviewed default still 2026.6.10; Hermes base still v0.18.0.
+#     OpenClaw reviewed default still 2026.6.10 (mobile pairing intact, no
+#     OpenClaw-driven rebuild); Hermes base still v0.18.0. No agent-manifest
+#     expected_version moved, so `upgrade-sandboxes --auto` is a no-op and
+#     running sandboxes are NOT rebuilt.
+#   - Dockerfile.base STILL exact-pins Debian trixie packages (curl=
+#     8.14.1-2+deb13u4, git, python3, jq, iproute2, iptables, ca-certificates…)
+#     — the wildcard curl/ripgrep unpin below still applies (ripgrep/e2fsprogs/
+#     tmux seds are harmless no-ops if a package is absent at this tag).
+#   - `npm audit signatures` is STILL a hard `&&` gate in Dockerfile.base; the
+#     best-effort wrap below is still required (v0.0.83's "corporate CA
+#     anchoring" targets a TLS-intercepting proxy, NOT the Sigstore CDN 403
+#     that blocks some cloud IPs — see the wrap comment below).
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites) — the sed
-#     shim below still applies. install.sh still auto-rebuilds stale running
-#     sandboxes (the 80 policy change).
-#   - MOBILE DEVICE/NODE PAIRING is UNCHANGED for us: the device-approval
-#     allowlist (openclaw_device_approval_policy.py) and the #4462 loopback
-#     `devices approve` wrapper are byte-identical to 0.80, so the controller
-#     fix f2565bc (nsenter gateway netns + stored device cred) still applies.
-#     The 0.81 "loopback/no-token/no-admin-scope pairing" overhaul the
-#     maintainers flagged is WhatsApp CHANNEL pairing (#4522) + npm plugin
-#     provenance (Dockerfile `openclaw plugins install npm-pack:`), not the
-#     mobile node pairing our controller drives. See
+#     shim below still applies.
+#   - v0.0.83 adds inference-route-safety (explicit/fail-safe shared-route
+#     changes) + onboarding recovery; no change to the mobile-pairing path our
+#     controller drives (fix f2565bc still applies). See
 #     memory/project_openclaw_pairing_v0078_regression.md.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.81}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.83}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

@@ -191,6 +191,35 @@ install_nemoclaw() {
       "$_dockerfile" && rm -f "${_dockerfile}.bak"
   done < <(find "$source_dir" -name 'Dockerfile*' -not -path '*/node_modules/*' -type f)
 
+  # Same class of upstream-baked, moving-target network gate as the Debian
+  # pins above, but the failing dependency is Sigstore, not Debian. The
+  # OpenClaw base-image build ends with `npm ... mcporter-runtime audit
+  # signatures` (Dockerfile.base), which bootstraps the Sigstore trust root
+  # from https://tuf-repo-cdn.sigstore.dev via tuf-js. That CDN sits behind
+  # Google's edge and returns HTTP 403 to some cloud IP ranges (confirmed on
+  # a fresh Hetzner box 2026-07-15, IP-reputation block — persistent, not a
+  # UA quirk). tuf-js can't fetch the TUF timestamp -> `audit signatures`
+  # exits 1 -> the whole base-image `docker build` dies with exit 1, surfaced
+  # in the UI as the base-image-glibc-probe retry then "Sandbox creation
+  # command failed". Because it's IP-dependent, the same code "works" on one
+  # deploy and fails on the next. Make ONLY the signature-attestation step
+  # best-effort; keep `npm ci` and `npm audit --audit-level=low` (the real
+  # vuln gate) hard. Security loss is minimal: the exact mcporter bytes are
+  # already pinned two lines above by SRI integrity (sha512) + the committed
+  # lockfile sha256; `audit signatures` only adds Sigstore provenance on top.
+  # Guarded so re-extraction/re-run never double-wraps. Keep in sync with
+  # manidae-cloud startup_agentgateway.sh.j2.
+  # `/WARN…/b` makes it idempotent (never double-wraps a re-extracted tree);
+  # the `& ` in the replacement re-inserts the matched command verbatim, so it
+  # works for both the `&&`-joined form (Dockerfile.base) and the `; \`-joined
+  # form (top-level Dockerfile). BSD- and GNU-sed compatible.
+  while IFS= read -r _dockerfile; do
+    sed -i.bak \
+      -e '/WARN: audit signatures skipped/b' \
+      -e 's#npm --prefix /usr/local/lib/nemoclaw/mcporter-runtime audit signatures#{ & || echo "WARN: audit signatures skipped (Sigstore TUF unreachable from build host)" >\&2; }#' \
+      "$_dockerfile" && rm -f "${_dockerfile}.bak"
+  done < <(find "$source_dir" -name 'Dockerfile*' -not -path '*/node_modules/*' -type f)
+
   # NemoClaw's sandbox state backup (src/lib/state/sandbox.ts) buffers the
   # whole SSH+tar stream in memory via spawnSync with a hard-coded
   # maxBuffer of 256 MiB. Any sandbox whose /sandbox/.<agent> state exceeds

@@ -11,6 +11,7 @@ import { isOperator, oauthEmail } from "@/app/lib/auth/context"
 import { getSandboxAccessMap } from "@/app/lib/auth/sandboxAccessStore"
 import { filterInventoryForUser } from "@/app/lib/auth/filterInventory.mjs"
 import { isNemoClawImage, readSandboxContainerImageMap, type SandboxImageMap } from "@/app/lib/sandboxContainerImage"
+import { applyInFlightPresentation } from "@/app/lib/sandboxCreateState.mjs"
 
 const execFileAsync = promisify(execFile)
 const NEMOCLAW_REGISTRY_FILE = path.join(process.env.HOME || "/tmp", ".nemoclaw", "sandboxes.json")
@@ -257,12 +258,15 @@ async function readSandbox(name: string, defaultSandboxNames: Set<string>, regis
 
     const sandboxName = parseField(detailsStdout, "Name") ?? name
     const namespace = parseField(detailsStdout, "Namespace") ?? "openshell"
-    const phase = normalizePhase(parseField(detailsStdout, "Phase"))
+    const rawPhase = normalizePhase(parseField(detailsStdout, "Phase"))
     const sandboxId = parseField(detailsStdout, "Id") ?? sandboxName
     const sshConfig = sshStdout.trim()
     const sshHostAlias = parseSshHostAlias(sshConfig, sandboxName)
     const isDefault = defaultSandboxNames.has(sandboxName)
-    const agent = resolveSandboxAgent(sandboxName, sandboxId, registry, imageMap)
+    const rawAgent = resolveSandboxAgent(sandboxName, sandboxId, registry, imageMap)
+    // While a create is in flight, present a transient Error/Unknown phase as
+    // Pending and prefer the intended agent over an image-inferred "custom".
+    const { phase, agent } = applyInFlightPresentation(sandboxName, rawPhase, rawAgent)
 
     return {
       summary: {
@@ -307,13 +311,16 @@ async function readSandbox(name: string, defaultSandboxNames: Set<string>, regis
   } catch (error) {
     const sandboxName = name
     const isDefault = defaultSandboxNames.has(sandboxName)
-    const agent = resolveSandboxAgent(sandboxName, sandboxName, registry, imageMap)
+    const rawAgent = resolveSandboxAgent(sandboxName, sandboxName, registry, imageMap)
+    // A sandbox that isn't inspectable yet is expected mid-onboard; present it
+    // as Pending (not Unknown) with the intended agent while its create runs.
+    const { phase, agent } = applyInFlightPresentation(sandboxName, "Unknown", rawAgent)
     return {
       summary: {
         id: sandboxName,
         name: sandboxName,
         namespace: "openshell",
-        status: "Unknown",
+        status: phase,
         sshHostAlias: `openshell-${sandboxName}`,
         hasSshConfig: false,
         source: "openshell",
@@ -337,12 +344,12 @@ async function readSandbox(name: string, defaultSandboxNames: Set<string>, regis
           },
         },
         status: {
-          phase: "Unknown",
+          phase,
           podIP: `openshell-${sandboxName}`,
           conditions: [
             {
               type: "Ready",
-              status: "False",
+              status: phase === "Running" ? "True" : "False",
             },
           ],
         },

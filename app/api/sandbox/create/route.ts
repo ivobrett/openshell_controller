@@ -6,6 +6,7 @@ import { promisify } from "node:util"
 import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from "@/app/lib/openshellHost"
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
 import { recordActivity } from "@/app/lib/activityLog"
+import { clearSandboxCreateInFlight, markSandboxCreateInFlight } from "@/app/lib/sandboxCreateState.mjs"
 import { repairOpenClawExecApprovalsFile } from "@/app/lib/sandboxPrivilegedFiles"
 import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
@@ -1093,6 +1094,9 @@ export async function GET() {
 export async function POST(request: Request) {
   const requestStartedAt = Date.now()
   console.log(`[sandbox/create] request:start elapsedMs=0`)
+  // Cleared in the finally below. Lets the live inventory present this sandbox
+  // as "Provisioning" (not "Error"/"Custom") while onboard is still running.
+  let inFlightSandboxName: string | null = null
   try {
     const body = await request.json()
     const blueprint = typeof body?.blueprint === "string" ? body.blueprint : ""
@@ -1114,6 +1118,15 @@ export async function POST(request: Request) {
       message: `Sandbox creation started for ${sandboxName} using ${blueprint}.`,
       metadata: { blueprint, gpuMode, inferenceMode: createInference.mode },
     })
+
+    // Mark this sandbox as being created so the live inventory can show it as
+    // "Provisioning" (amber) instead of the transient "Error"/"Custom" it would
+    // otherwise report during the onboard's container-startup window.
+    const intendedAgent = isNemoClawOnboardBlueprint(blueprint)
+      ? nemoClawAgentForBlueprint(blueprint)
+      : undefined
+    inFlightSandboxName = sandboxName
+    markSandboxCreateInFlight(sandboxName, intendedAgent)
 
     if (isNemoClawOnboardBlueprint(blueprint)) {
       const agent = nemoClawAgentForBlueprint(blueprint)
@@ -1681,5 +1694,7 @@ export async function POST(request: Request) {
     const status = /required|must be|too long|unknown blueprint/.test(message) ? 400 : 500
     console.log(`[sandbox/create] request:error elapsedMs=${elapsedMs(requestStartedAt)} message=${message}`)
     return NextResponse.json({ ok: false, error: message }, { status })
+  } finally {
+    if (inFlightSandboxName) clearSandboxCreateInFlight(inFlightSandboxName)
   }
 }

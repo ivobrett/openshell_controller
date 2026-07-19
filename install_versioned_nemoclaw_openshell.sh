@@ -8,30 +8,32 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.72}"
+OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.85}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.83 (commit 45b1cb5a; bumped from v0.0.81 on
-# 2026-07-15). Pre-flight against the v0.0.81..v0.0.83 diff:
-#   - min/max_openshell_version still 0.0.72 (--skip-openshell stays valid);
-#     OpenClaw reviewed default still 2026.6.10 (mobile pairing intact, no
-#     OpenClaw-driven rebuild); Hermes base still v0.18.0. No agent-manifest
-#     expected_version moved, so `upgrade-sandboxes --auto` is a no-op and
-#     running sandboxes are NOT rebuilt.
+# NemoClaw is pinned to TAG v0.0.88 (commit 09a5268c; bumped from v0.0.83 on
+# 2026-07-19). Pre-flight against the v0.0.83..v0.0.88 diff:
+#   - **BREAKING: blueprint min_openshell_version == max_openshell_version ==
+#     "0.0.85"** (was 0.0.72). `--skip-openshell` is NO LONGER valid — OPENSHELL_VERSION
+#     is bumped to v0.0.85 above IN LOCKSTEP. OpenShell 0.0.85 = published commit
+#     3dee5570; see the v0.0.88 tree's docs/security/openshell-0.0.85-migration-review.md.
+#   - OpenClaw reviewed default still 2026.6.10 (mobile pairing intact, no
+#     OpenClaw-driven rebuild); Hermes base still v0.18.0 / v2026.7.1 (remote-
+#     desktop semantics unchanged — HERMES_REMOTE_DESKTOP.md §1a stays valid).
 #   - Dockerfile.base STILL exact-pins Debian trixie packages (curl=
-#     8.14.1-2+deb13u4, git, python3, jq, iproute2, iptables, ca-certificates…)
-#     — the wildcard curl/ripgrep unpin below still applies (ripgrep/e2fsprogs/
-#     tmux seds are harmless no-ops if a package is absent at this tag).
-#   - `npm audit signatures` is STILL a hard `&&` gate in Dockerfile.base; the
-#     best-effort wrap below is still required (v0.0.83's "corporate CA
-#     anchoring" targets a TLS-intercepting proxy, NOT the Sigstore CDN 403
-#     that blocks some cloud IPs — see the wrap comment below).
+#     8.14.1-2+deb13u4, git, python3, jq, gnupg, iproute2, iptables, nftables,
+#     libcap2-bin, openssh-sftp-server, ca-certificates…). Checked ALL 18 pins
+#     against live trixie (node:22-trixie-slim) on 2026-07-19 — every one still
+#     resolves, so NO new unpins needed; the curl/ripgrep/procps/e2fsprogs/tmux
+#     wildcard unpin below stays as a defensive no-op.
+#   - `npm audit signatures` is STILL a hard `&&` gate (Dockerfile.base:301 AND
+#     Dockerfile:371) — the best-effort wrap below is still required.
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites) — the sed
 #     shim below still applies.
-#   - v0.0.83 adds inference-route-safety (explicit/fail-safe shared-route
-#     changes) + onboarding recovery; no change to the mobile-pairing path our
-#     controller drives (fix f2565bc still applies). See
-#     memory/project_openclaw_pairing_v0078_regression.md.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.83}}"
+#   - OpenShell 0.0.85 gains authenticated inference health probes + a
+#     credential-placeholder fail-closed (commit 40194f9). NOTE: this did NOT
+#     fix the hermes-sandbox inference 503 — that is a separate NemoClaw
+#     hermes-agent provisioning bug. See memory/project_hermes_inference_503.md.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.88}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
@@ -136,6 +138,35 @@ install_openshell() {
   require_command sh
   log "Installing OpenShell $OPENSHELL_VERSION"
   curl -LsSf "$OPENSHELL_INSTALL_URL" | OPENSHELL_VERSION="$OPENSHELL_VERSION" sh
+
+  # --- openshell-sandbox coherence guard (learned on the v0.0.88 bump) ---
+  # The OpenShell .deb that install.sh lays down ships ONLY /usr/bin/openshell
+  # and /usr/bin/openshell-gateway. /usr/bin/openshell-sandbox — the supervisor
+  # / L7 router sideloaded into EVERY sandbox container — is installed
+  # SEPARATELY, downstream, by nemoclaw's own scripts/install-openshell.sh
+  # (invoked from `nemoclaw onboard` during install_nemoclaw below).
+  #
+  # On a live box that already carried an OLDER openshell-sandbox, the .deb
+  # upgrade bumps CLI+gateway but leaves the sandbox binary STALE. NemoClaw's
+  # coherence check then hard-fails onboarding with "The selected OpenShell
+  # sandbox does not match the active CLI build" and refuses to auto-repair
+  # (its stable channel ignores FORCE_INSTALL on that path). Remove the stale /
+  # mismatched host binary here so the downstream onboarding takes its
+  # "missing Docker-driver binaries -> reinstall pinned OpenShell" branch and
+  # lays down a coherent, checksum-verified gateway+sandbox set. This is a
+  # no-op on a fresh box (no openshell-sandbox yet) and only fires when the two
+  # versions actually disagree — at which point no sandbox is safely running an
+  # incoherent supervisor anyway.
+  local _os_sbx _cli_ver _sbx_ver
+  _os_sbx="$(command -v openshell-sandbox 2>/dev/null || true)"
+  if [[ -n "$_os_sbx" ]] && command -v openshell >/dev/null 2>&1; then
+    _cli_ver="$(openshell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+    _sbx_ver="$(openshell-sandbox --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+    if [[ -n "$_cli_ver" && -n "$_sbx_ver" && "$_cli_ver" != "$_sbx_ver" ]]; then
+      warn "openshell-sandbox $_sbx_ver != openshell CLI $_cli_ver — removing the stale supervisor so NemoClaw onboarding reinstalls a coherent $_cli_ver set (the .deb ships only CLI+gateway)."
+      rm -f "$_os_sbx"
+    fi
+  fi
 }
 
 install_nemoclaw() {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { resolveAuthContext, isAuthConfigured } from "@/app/lib/auth/context"
 import { getSandboxAccessMap } from "@/app/lib/auth/sandboxAccessStore"
+import { isMinimalProfile } from "@/app/lib/controlProfile"
 
 export type Capabilities = {
   createSandbox: boolean
@@ -42,6 +43,21 @@ const OAUTH_CAPS: Capabilities = {
   viewSkills: true,   // setup prompts are read-only and secret-free (§13.2)
 }
 
+// Minimal-profile hosts have no NemoClaw/OpenClaw stack, so the features that
+// depend on it are turned off regardless of role. This drives both the nav
+// (via visibleNavItems) and the per-sandbox action gating client-side. Plain
+// custom-sandbox lifecycle (create/delete/restart/terminal/files) stays on.
+function applyProfileCaps(caps: Capabilities): Capabilities {
+  if (!isMinimalProfile()) return caps
+  return {
+    ...caps,
+    openDashboard: false, // OpenClaw gateway dashboard — no OpenClaw in minimal
+    manageInference: false, // NemoClaw-applied inference routes
+    manageMcp: false, // MCP broker is not installed in minimal
+    viewWizards: false, // NemoClaw migration/deploy wizards
+  }
+}
+
 function allowedSandboxesForEmail(email: string): string[] {
   const map = getSandboxAccessMap() // Map<sandboxName, Set<email>>
   const allowed: string[] = []
@@ -61,7 +77,7 @@ export async function GET(request: NextRequest) {
       operator: true,               // legacy field — keep, ShieldsPanel + setup-account read it
       configured,
       email: null,
-      capabilities: OPERATOR_CAPS,
+      capabilities: applyProfileCaps(OPERATOR_CAPS),
       allowedSandboxes: "all",
     })
   }
@@ -72,7 +88,7 @@ export async function GET(request: NextRequest) {
       operator: false,
       configured,
       email: ctx.email,
-      capabilities: OAUTH_CAPS,
+      capabilities: applyProfileCaps(OAUTH_CAPS),
       allowedSandboxes: allowedSandboxesForEmail(ctx.email),
     })
   }

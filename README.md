@@ -314,11 +314,26 @@ Install OpenShell and confirm a gateway is running. The controller reads gateway
 metadata from `~/.config/openshell/gateways/`, so the controller must run as the
 same user that owns that directory.
 
-> **Snap note:** a strictly-confined snap may keep its state under
-> `$SNAP_USER_DATA` (`~/snap/openshell/current/…`) rather than `~/.config`. If the
-> controller reports "no gateway", check where the snap stores gateway metadata
-> and either use a classic-confined install or symlink/point the controller at
-> the right path.
+> **Snap quick-start.** For a host whose only OpenShell is the snap, bring up a
+> local Docker-driver gateway named `openshell-gateway` (the name the controller
+> defaults to in minimal mode):
+>
+> ```bash
+> snap install openshell
+> snap install docker
+> snap connect openshell:docker docker:docker-daemon
+> snap connect openshell:log-observe
+> snap connect openshell:system-observe
+> snap start openshell.gateway
+> openshell gateway add http://127.0.0.1:17670 --local --name openshell-gateway
+> ```
+>
+> Docker sandboxes additionally require a sandbox-JWT signing key. Generate one
+> and drop a `gateway.toml` next to the snap state, then restart the gateway —
+> the full validated recipe (incl. the `[openshell.gateway.gateway_jwt]` and
+> `allow_unauthenticated_users` config) is in
+> [`docs/runbooks/minimal-openshell-host.md`](docs/runbooks/minimal-openshell-host.md).
+> Confirm with `openshell sandbox create --name smoke` → `Ready`.
 
 NemoClaw is optional. Without it you still get a working dashboard; with it you
 unlock the managed agent workflows. See the feature matrix below.
@@ -328,15 +343,33 @@ unlock the managed agent workflows. See the feature matrix below.
 From the repository root on the OpenShell host:
 
 ```bash
-./install.sh
+./install.sh                                 # full profile (NemoClaw/OpenClaw features)
+# — or, for a host that only has the OpenShell CLI + a local gateway:
+./install.sh --minimal
 grep OPENSHELL_CONTROL_PASSWORD .env.local   # note the generated operator password
 npm run start                                # serves the web dashboard on :3000
 ```
 
-`install.sh` requires Node 20+, npm, and Docker to be present and reachable (the
-NemoClaw-oriented features expect Docker even when a bare OpenShell install does
-not use it). It generates the operator password, signing secret, and recovery
+`install.sh` requires Node 20+ and npm. The default (full) profile also requires
+Docker and the npx/uvx MCP toolchain, and expects NemoClaw for the managed-agent
+blueprints. It generates the operator password, signing secret, and recovery
 token into `.env.local`.
+
+**Minimal profile (`--minimal`)** is purpose-built for a host that already has
+just the OpenShell CLI + a local gateway (e.g. the `openshell` snap). It:
+
+- requires only `openshell` on `PATH` — Docker/NemoClaw checks become warnings,
+  and the npx/uvx MCP toolchain is skipped;
+- auto-detects the active gateway name (defaults to `openshell-gateway`) and
+  writes `OPENSHELL_CONTROL_PROFILE=minimal` + no `NEMOCLAW_*`/MCP env;
+- restricts the controller to **plain custom sandboxes** — the create wizard (web
+  and mobile) offers only *New Custom Sandbox*, and the OpenClaw dashboard,
+  inference-routing, MCP, and Wizards surfaces are hidden;
+- still generates the auth secret + trusts the mobile-app origins, so the mobile
+  app connects exactly as in full mode.
+
+Re-running with (or without) `--minimal` converges an existing `.env.local` to
+the chosen profile. Full installs are unaffected — the default is `full`.
 
 ### 3. Expose it with Pangolin
 
@@ -384,7 +417,11 @@ open the full web console/terminal already signed in.
 | Default-sandbox detection / registry cleanup | ⚠️ degraded | ✅ |
 
 The installer prints a warning when the NemoClaw CLI is not found; that is
-expected for a bare install and the dashboard still runs.
+expected for a bare install and the dashboard still runs. The "Bare OpenShell"
+column is what a *full-profile* install exposes against a NemoClaw-less host.
+Installing with `--minimal` additionally hides the OpenClaw gateway dashboard,
+inference-routing, MCP, and Wizards surfaces (rows that need NemoClaw/OpenClaw),
+leaving a focused custom-sandbox controller.
 
 ## Remote Controller Nodes
 

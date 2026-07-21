@@ -27,8 +27,27 @@ assert.match(
   /operator:\s*true/,
   'route must keep the legacy operator:true field (ShieldsPanel + setup-account read it)',
 )
-assert.match(source, /capabilities:\s*OPERATOR_CAPS/, 'operator branch must return OPERATOR_CAPS')
-assert.match(source, /capabilities:\s*OAUTH_CAPS/, 'oauth branch must return OAUTH_CAPS')
+// Both branches return their base caps through applyProfileCaps(), which is an
+// identity in the default `full` profile and only strips NemoClaw/OpenClaw-
+// dependent capabilities under OPENSHELL_CONTROL_PROFILE=minimal. The base caps
+// wired into each branch must still be OPERATOR_CAPS / OAUTH_CAPS.
+assert.match(
+  source,
+  /capabilities:\s*applyProfileCaps\(OPERATOR_CAPS\)/,
+  'operator branch must return OPERATOR_CAPS (via applyProfileCaps)',
+)
+assert.match(
+  source,
+  /capabilities:\s*applyProfileCaps\(OAUTH_CAPS\)/,
+  'oauth branch must return OAUTH_CAPS (via applyProfileCaps)',
+)
+// applyProfileCaps must be an identity in the default profile: it may only
+// remove capabilities inside an isMinimalProfile() guard, never in full mode.
+assert.match(
+  source,
+  /function applyProfileCaps[\s\S]*?if \(!isMinimalProfile\(\)\) return caps/,
+  'applyProfileCaps must return base caps unchanged unless the minimal profile is active',
+)
 
 // Identity must be derived server-side, never from client-supplied headers.
 assert.match(

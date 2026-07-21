@@ -21,6 +21,7 @@ DO_START=0
 DO_AUDIT=1
 DO_CLEAN_NEXT=0
 ALLOW_ROOT=0
+MINIMAL=0
 
 usage() {
   cat <<EOF
@@ -30,6 +31,12 @@ Usage:
   ./install.sh [options]
 
 Options:
+  --minimal       Minimal install for a host that already has the OpenShell CLI
+                  + a local gateway (e.g. the 'openshell' snap). Manages plain
+                  custom sandboxes only: no NemoClaw/OpenClaw/Hermes, no
+                  inference routing, no MCP broker. Skips NemoClaw discovery and
+                  the npx/uvx MCP toolchain; defaults OPENSHELL_GATEWAY to the
+                  detected local gateway (openshell-gateway).
   --no-build      Install and configure without running npm run build
   --no-audit      Skip the non-blocking npm audit summary
   --clean-next    Remove .next after a successful build for a clean dev start
@@ -47,6 +54,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --minimal)
+      MINIMAL=1
+      shift
+      ;;
     --no-build)
       DO_BUILD=0
       shift
@@ -199,6 +210,20 @@ find_openshell() {
   fi
 }
 
+detect_gateway_name() {
+  # Best-effort: read the active ('*') gateway from `openshell gateway list`.
+  # Strips ANSI colour codes the CLI emits. Falls back to openshell-gateway,
+  # the name the OpenShell snap setup instructions register.
+  local bin="$1"
+  local name=""
+  if [[ -n "$bin" ]]; then
+    name="$("$bin" gateway list 2>/dev/null \
+      | sed -E 's/\x1b\[[0-9;]*m//g' \
+      | awk '/^[[:space:]]*\*/ {print $2; exit}')"
+  fi
+  printf '%s\n' "${name:-openshell-gateway}"
+}
+
 find_nemoclaw_bin() {
   local candidate
   for candidate in \
@@ -320,7 +345,15 @@ fi
 
 require_command node
 require_command npm
-require_command docker
+if [[ "$MINIMAL" -eq 1 ]]; then
+  # In minimal mode Docker is owned by the OpenShell gateway (e.g. the docker
+  # snap wired to openshell.gateway), not the controller. A missing/unreachable
+  # docker CLI here is a warning, not a hard stop — the controller drives
+  # sandboxes through the `openshell` CLI, not the Docker socket directly.
+  command -v docker >/dev/null 2>&1 || warn "docker CLI not found; the controller does not need it directly in minimal mode, but the OpenShell gateway does."
+else
+  require_command docker
+fi
 prepend_user_bin
 
 NODE_MAJOR="$(node_major)"
@@ -329,13 +362,25 @@ if [[ "$NODE_MAJOR" -lt "$MIN_NODE_MAJOR" ]]; then
 fi
 
 log "Node $(node -v), npm $(npm -v)"
-ensure_npx
-ensure_uvx
-
-if ! docker ps >/dev/null 2>&1; then
-  fail "Docker is not reachable. Start Docker and rerun the installer."
+if [[ "$MINIMAL" -eq 1 ]]; then
+  log "Minimal profile: skipping npx/uvx MCP toolchain setup"
+else
+  ensure_npx
+  ensure_uvx
 fi
-log "Docker is reachable: $(docker --version)"
+
+if [[ "$MINIMAL" -eq 1 ]]; then
+  if docker ps >/dev/null 2>&1; then
+    log "Docker is reachable: $(docker --version)"
+  else
+    warn "Docker is not reachable from this user. That is fine for the controller in minimal mode; ensure the OpenShell gateway itself has Docker access."
+  fi
+else
+  if ! docker ps >/dev/null 2>&1; then
+    fail "Docker is not reachable. Start Docker and rerun the installer."
+  fi
+  log "Docker is reachable: $(docker --version)"
+fi
 
 OPENSHELL_BIN="$(find_openshell || true)"
 if [[ -n "$OPENSHELL_BIN" ]]; then
@@ -346,11 +391,24 @@ if [[ -n "$OPENSHELL_BIN" ]]; then
     warn "OpenShell CLI exists, but 'openshell sandbox list' did not complete successfully."
     warn "The dashboard can install, but inventory and lifecycle operations may be degraded."
   fi
+elif [[ "$MINIMAL" -eq 1 ]]; then
+  fail "OpenShell CLI was not found on PATH or at ~/.local/bin/openshell. It is required for a minimal install. Install it first (e.g. 'snap install openshell') and register a local gateway."
 else
   warn "OpenShell CLI was not found on PATH or at ~/.local/bin/openshell."
   warn "Sandbox create/delete, policy grants, terminal, and dashboard proxy features require it."
 fi
 
+if [[ "$MINIMAL" -eq 1 ]]; then
+  # No NemoClaw in minimal mode; leave the NEMOCLAW_* env keys unset.
+  NEMOCLAW_BIN=""
+  NEMOCLAW_SETUP=""
+  NEMOCLAW_CWD=""
+  MINIMAL_GATEWAY="$(detect_gateway_name "$OPENSHELL_BIN")"
+  log "Minimal profile: OpenShell gateway = ${MINIMAL_GATEWAY}"
+  exit_nemoclaw_discovery=1
+fi
+
+if [[ "${exit_nemoclaw_discovery:-0}" -ne 1 ]]; then
 NEMOCLAW_BIN="$(find_nemoclaw_bin || true)"
 NEMOCLAW_SETUP="$(find_nemoclaw_setup || true)"
 NEMOCLAW_CWD="$(nemoclaw_cwd_for "${NEMOCLAW_BIN:-${NEMOCLAW_SETUP:-}}" || true)"
@@ -366,16 +424,19 @@ if [[ -n "$NEMOCLAW_SETUP" ]]; then
 else
   log "Legacy NemoClaw setup workflow was not found; current installs use 'nemoclaw onboard'."
 fi
+fi  # end non-minimal NemoClaw discovery
 
 check_port 3000 "dashboard HTTP"
 check_port 3011 "operator terminal upstream"
 
-if docker ps --format '{{.Names}}' | grep -Eq '^openshell-cluster-'; then
-  log "OpenShell gateway container detected:"
-  docker ps --format '  {{.Names}}\t{{.Image}}\t{{.Ports}}' | grep -E 'openshell-cluster-' || true
-else
-  warn "No openshell-cluster-* Docker container is currently running."
-  warn "Install can continue, but the UI will show limited inventory until OpenShell is started."
+if [[ "$MINIMAL" -ne 1 ]]; then
+  if docker ps --format '{{.Names}}' | grep -Eq '^openshell-cluster-'; then
+    log "OpenShell gateway container detected:"
+    docker ps --format '  {{.Names}}\t{{.Image}}\t{{.Ports}}' | grep -E 'openshell-cluster-' || true
+  else
+    warn "No openshell-cluster-* Docker container is currently running."
+    warn "Install can continue, but the UI will show limited inventory until OpenShell is started."
+  fi
 fi
 
 if [[ -f package-lock.json ]]; then
@@ -393,6 +454,17 @@ if [[ "$DO_AUDIT" -eq 1 ]]; then
   fi
 fi
 
+# Profile-dependent env values.
+if [[ "$MINIMAL" -eq 1 ]]; then
+  PROFILE_VALUE="minimal"
+  GATEWAY_VALUE="${MINIMAL_GATEWAY:-openshell-gateway}"
+  CONTAINER_VALUE=""              # no openshell-cluster-* container in minimal
+else
+  PROFILE_VALUE="full"
+  GATEWAY_VALUE="nemoclaw"
+  CONTAINER_VALUE="$OPEN_SHELL_CONTAINER_DEFAULT"
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   log "Creating $ENV_FILE"
   cat > "$ENV_FILE" <<EOF
@@ -401,8 +473,10 @@ PORT=3000
 NEXT_PUBLIC_DASHBOARD_PORT=3000
 NEXT_PUBLIC_API_BASE=/api
 NEXT_PUBLIC_ENABLE_SANDBOX_OPERATIONS=true
-OPEN_SHELL_CONTAINER=${OPEN_SHELL_CONTAINER_DEFAULT}
-OPENSHELL_GATEWAY=nemoclaw
+OPENSHELL_CONTROL_PROFILE=${PROFILE_VALUE}
+NEXT_PUBLIC_OPENSHELL_CONTROL_PROFILE=${PROFILE_VALUE}
+OPEN_SHELL_CONTAINER=${CONTAINER_VALUE}
+OPENSHELL_GATEWAY=${GATEWAY_VALUE}
 OPENSHELL_CONTROL_CREATE_GPU_MODE=none
 # For containerized CLI runs, when supported by the installed OpenShell/NemoClaw versions:
 # OPENSHELL_GATEWAY_HOST=host.docker.internal
@@ -427,28 +501,37 @@ upsert_env "PORT" "3000"
 upsert_env "NEXT_PUBLIC_DASHBOARD_PORT" "3000"
 upsert_env "NEXT_PUBLIC_API_BASE" "/api"
 upsert_env "NEXT_PUBLIC_ENABLE_SANDBOX_OPERATIONS" "true"
-upsert_env "OPEN_SHELL_CONTAINER" "$OPEN_SHELL_CONTAINER_DEFAULT"
-upsert_env "OPENSHELL_GATEWAY" "nemoclaw"
+# Profile + gateway are correctness-critical: set_env (replace) so re-running
+# the installer against an existing .env.local converges to the chosen profile.
+set_env "OPENSHELL_CONTROL_PROFILE" "$PROFILE_VALUE"
+set_env "NEXT_PUBLIC_OPENSHELL_CONTROL_PROFILE" "$PROFILE_VALUE"
+set_env "OPENSHELL_GATEWAY" "$GATEWAY_VALUE"
 upsert_env "OPENSHELL_CONTROL_CREATE_GPU_MODE" "none"
-upsert_env "OPENSHELL_OLLAMA_BASE_URL" "http://127.0.0.1:11434"
-upsert_env "OPENSHELL_OLLAMA_WINDOWS_INTEROP" "1"
-set_env "OPENSHELL_GATEWAY_HOST" "${OPENSHELL_GATEWAY_HOST:-}"
-set_env "OPENSHELL_GATEWAY_PORT" "${OPENSHELL_GATEWAY_PORT:-}"
-set_env "OPENSHELL_GATEWAY_URL" "${OPENSHELL_GATEWAY_URL:-}"
-set_env "OPENSHELL_OLLAMA_HOSTS" "${OPENSHELL_OLLAMA_HOSTS:-}"
-set_env "OPENSHELL_OLLAMA_PROBE_TIMEOUT_MS" "${OPENSHELL_OLLAMA_PROBE_TIMEOUT_MS:-}"
 set_env "OPENSHELL_CONTROL_VENV" "${VIRTUAL_ENV:-$PROJECT_VENV}"
 set_env "OPENSHELL_HOME" "${HOME:-}"
 set_env "OPENSHELL_BIN" "${OPENSHELL_BIN:-}"
-set_env "NEMOCLAW_BIN" "${NEMOCLAW_BIN:-}"
-set_env "NEMOCLAW_SETUP" "${NEMOCLAW_SETUP:-}"
-set_env "NEMOCLAW_CWD" "${NEMOCLAW_CWD:-}"
 upsert_env "TERMINAL_SERVER_AUTOSTART" "true"
 upsert_env "OPENSHELL_CONTROL_PASSWORD" "$(random_token 18)"
 upsert_env "OPENSHELL_CONTROL_AUTH_SECRET" "$(random_token 32)"
 upsert_env "OPENSHELL_CONTROL_RECOVERY_TOKEN" "$(random_token 18)"
-upsert_env "MCP_BROKER_TOKEN_TTL_HOURS" "168"
-upsert_env "MCP_BROKER_REQUEST_TIMEOUT_MS" "45000"
+
+if [[ "$MINIMAL" -ne 1 ]]; then
+  # Full-profile-only env: container name, Ollama discovery, MCP broker,
+  # NemoClaw CLI locations. Minimal hosts have none of these.
+  upsert_env "OPEN_SHELL_CONTAINER" "$OPEN_SHELL_CONTAINER_DEFAULT"
+  upsert_env "OPENSHELL_OLLAMA_BASE_URL" "http://127.0.0.1:11434"
+  upsert_env "OPENSHELL_OLLAMA_WINDOWS_INTEROP" "1"
+  set_env "OPENSHELL_GATEWAY_HOST" "${OPENSHELL_GATEWAY_HOST:-}"
+  set_env "OPENSHELL_GATEWAY_PORT" "${OPENSHELL_GATEWAY_PORT:-}"
+  set_env "OPENSHELL_GATEWAY_URL" "${OPENSHELL_GATEWAY_URL:-}"
+  set_env "OPENSHELL_OLLAMA_HOSTS" "${OPENSHELL_OLLAMA_HOSTS:-}"
+  set_env "OPENSHELL_OLLAMA_PROBE_TIMEOUT_MS" "${OPENSHELL_OLLAMA_PROBE_TIMEOUT_MS:-}"
+  set_env "NEMOCLAW_BIN" "${NEMOCLAW_BIN:-}"
+  set_env "NEMOCLAW_SETUP" "${NEMOCLAW_SETUP:-}"
+  set_env "NEMOCLAW_CWD" "${NEMOCLAW_CWD:-}"
+  upsert_env "MCP_BROKER_TOKEN_TTL_HOURS" "168"
+  upsert_env "MCP_BROKER_REQUEST_TIMEOUT_MS" "45000"
+fi
 
 chmod 600 "$ENV_FILE" || true
 

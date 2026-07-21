@@ -17,6 +17,7 @@ import {
   type RegistryShape,
 } from "@/app/lib/sandboxCreate/agentFilter"
 import { readSandboxContainerImageMap, type SandboxImageMap } from "@/app/lib/sandboxContainerImage"
+import { isMinimalProfile } from "@/app/lib/controlProfile"
 import {
   commandExists,
   HOST_PATH,
@@ -1040,6 +1041,26 @@ async function waitForSandboxReady(sandboxName: string, timeoutMs: number, inter
 }
 
 export async function GET() {
+  // Minimal-profile hosts (plain OpenShell, no NemoClaw) only support plain
+  // custom sandboxes, so expose just that blueprint. Filtering here drives BOTH
+  // the web wizard and the mobile app's create sheet — they read this list.
+  if (isMinimalProfile()) {
+    return NextResponse.json({
+      ok: true,
+      baselineSandboxes: await getBaselineSandboxesStatus(),
+      blueprints: [
+        {
+          id: "custom-sandbox",
+          label: "New Custom Sandbox",
+          description: "Create a generic OpenShell sandbox with a custom policy path.",
+          type: "custom",
+          source: "dashboard-custom",
+          supportsTailscale: false,
+        },
+      ],
+    })
+  }
+
   const baselineStatus = await getBaselineSandboxesStatus()
   return NextResponse.json({
     ok: true,

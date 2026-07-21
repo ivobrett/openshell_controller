@@ -403,7 +403,7 @@ function buildSandboxSshArgs(sandboxName: string, extraArgs: string[]) {
     "-o", "UserKnownHostsFile=/dev/null",
     "-o", "GlobalKnownHostsFile=/dev/null",
     "-o", "LogLevel=ERROR",
-    "-o", `ProxyCommand=${OPENSHELL_BIN} ssh-proxy --gateway-name nemoclaw --name ${sandboxName}`,
+    "-o", `ProxyCommand=${OPENSHELL_BIN} ssh-proxy --gateway-name ${OPENSHELL_GATEWAY || "nemoclaw"} --name ${sandboxName}`,
     `sandbox@openshell-${sandboxName}`,
     ...extraArgs,
   ]

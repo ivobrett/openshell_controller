@@ -133,6 +133,7 @@ the right one based on what you're doing:
 | **`docs/runbooks/byovps-architecture.md`** | A script works on cloud VPS but breaks on BYOVPS (or vice versa). Covers Traefik network mode, hermes process naming, openshell-gateway ensure-mtls flips, needrestart, ollama bootstrap source-of-truth. |
 | **`docs/runbooks/byovps-controller-upgrade.md`** | Admin checklist: upgrading controller code + NemoClaw/OpenClaw pins on a live BYOVPS with running sandboxes. Wraps §2 deploy + `live-vps-upgrades.md` into one end-to-end procedure (pre-flight, controller git upgrade, `--skip-openshell` installer run, verify, rollback). |
 | **`docs/runbooks/fresh-vps-setup.md`** | Brand-new VPS (BYOVPS or cloud) bring-up. Not needed for incremental deploys — those use §2. |
+| **`docs/runbooks/minimal-openshell-host.md`** | Installing the controller in **minimal profile** (`./install.sh --minimal`, `OPENSHELL_CONTROL_PROFILE=minimal`) against a plain OpenShell host (e.g. the `openshell` snap, gateway `openshell-gateway`) — custom sandboxes only, no NemoClaw/OpenClaw. Includes the full snap gateway + `gateway_jwt` bring-up recipe. Invariants: `tests/minimal-profile-check.mjs`; profile logic: `app/lib/controlProfile.ts`. |
 | **`HERMES_REMOTE_DESKTOP.md`** | Anything about the Hermes Desktop public-URL flow: architecture, expose.sh / launch.sh, session-token gate, Traefik rule, troubleshooting cheatsheet (§5). |
 | **`SANDBOX_ACCESS_CONTROL.md`** | Per-sandbox OAuth-user access controls + the file-backed `data/sandbox-access.json` store. |
 

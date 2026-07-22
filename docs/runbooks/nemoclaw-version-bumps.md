@@ -79,9 +79,12 @@ in the same change set.
 > The pin lives in FOUR sync'd places (keep them coherent):
 > `install_versioned_nemoclaw_openshell.sh` (controller, version pin only —
 > doesn't write runtime env), the cloud template (version + digest, runtime
-> env), `vps_validation.py` (BYOVPS AgentGateway, version pin), and
-> `byovps_bootstrap.py` (BYOVPS, `NEMOCLAW_INSTALL_TAG`, still lagging — bump
-> separately). Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
+> env), `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
+> `byovps_bootstrap.py` (BYOVPS phase 2, `NEMOCLAW_INSTALL_TAG` + digest in its
+> onboard export and `.env.local`). All four are at v0.0.92 / OpenClaw 2026.7.1
+> as of 2026-07-22; the digest freeze is wired into both manidae runtime-env
+> writers (cloud template + `byovps_bootstrap.py`). Full write-up:
+> `memory/project_openclaw_floating_base_image_skew.md`.
 
 > **Update (2026-07-11, first live instance of the trixie failure):**
 > Debian shipped curl `8.14.1-2+deb13u4` and dropped the pinned `deb13u3`

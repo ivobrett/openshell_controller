@@ -22,6 +22,67 @@ because NemoClaw pins Debian package versions on Ubuntu). A version
 bump may obsolete several — check, then delete what's no longer needed
 in the same change set.
 
+## Floating base-image drift — the failure mode that has NO code change on our side
+
+> **Update (2026-07-22, the v0.0.88 base-image-float outage):** this is a
+> DIFFERENT failure class from the apt-pin traps below — nothing on our side
+> changed. NemoClaw's per-sandbox build does `FROM ghcr.io/nvidia/nemoclaw/sandbox-base:latest`,
+> a **floating** tag. Upstream periodically rebuilds `:latest` with a newer
+> OpenClaw. NemoClaw has an **anti-downgrade guard**: if the base image's
+> OpenClaw is NEWER than the pinned/reviewed `OPENCLAW_VERSION`, it hard-fails
+> the build:
+>
+> ```
+> #NN ERROR: Base image has OpenClaw 2026.7.1, which is newer than reviewed target 2026.6.10
+> Failed to build OpenClaw sandbox base image (exit 1)
+> SandboxBaseImageResolutionError: ... inputs differ from main, but no image built
+> ```
+>
+> So one day every OpenClaw create starts failing with zero commits from us —
+> the base floated past our pin. In the controller journal it looks like endless
+> `readiness:attempt ... verified=false` + `openshell sandbox get → "sandbox not
+> found"` (red herrings; the real error is the base-image build). To SEE the
+> real error, nemoclaw suppresses build output — run `nemoclaw onboard` in the
+> background, grab the staged context from `/tmp/nemoclaw-build-*` (prefix
+> `nemoclaw-build-`, cleaned on exit), then `docker build --progress=plain .`
+> it directly (all ARGs default).
+>
+> **The 2026-07-22 fix:** bumped NemoClaw v0.0.88→v0.0.92 (OpenClaw
+> 2026.6.10→2026.7.1) to match the floated base. OpenShell stayed 0.0.85.
+> Controller repo: `gatewaydashboard` 9e375c5. See NVIDIA/NemoClaw#7393.
+>
+> ### DECISION (2026-07-22): freeze the base to a digest, don't track `:latest`
+>
+> To stop this recurring, manidae-cloud's **cloud** deploy path now pins the
+> base image to an **immutable digest** instead of the floating tag. The cloud
+> template (`backend/app/core/deployment/terraform_templates/includes/startup_agentgateway.sh.j2`)
+> defines `NEMOCLAW_SANDBOX_BASE_IMAGE_REF=ghcr.io/nvidia/nemoclaw/sandbox-base@sha256:<digest>`
+> and writes it into the controller's `.env.local`, which is passed through to
+> `nemoclaw onboard`. NemoClaw's `imageRefCanRefresh()` never re-pulls a ref
+> containing `@sha256:`, so upstream can no longer float us into a broken state.
+> The guard also trusts a digest-pinned `sandbox-base@sha256:*` as a first-party
+> base. A digest that is OLDER than the target is safe (the build just installs
+> the reviewed OpenClaw in-layer); only a NEWER floating tag hard-fails — which
+> the digest pin makes impossible.
+>
+> **LOCKSTEP RULE for every future NemoClaw/OpenClaw bump:** when you move
+> `NEMOCLAW_INSTALL_REF` / `OPENCLAW_VERSION`, also refresh the digest so it
+> carries the new OpenClaw. Recipe:
+>
+> ```bash
+> docker pull -q ghcr.io/nvidia/nemoclaw/sandbox-base:latest
+> docker run --rm ghcr.io/nvidia/nemoclaw/sandbox-base:latest openclaw --version   # must equal OPENCLAW_VERSION
+> docker images --digests ghcr.io/nvidia/nemoclaw/sandbox-base | grep latest       # copy the sha256 into NEMOCLAW_SANDBOX_BASE_IMAGE_REF
+> ```
+>
+> Test guarding it: `backend/tests/test_startup_agentgateway_template.py::test_sandbox_base_image_frozen_to_digest`.
+> The pin lives in FOUR sync'd places (keep them coherent):
+> `install_versioned_nemoclaw_openshell.sh` (controller, version pin only —
+> doesn't write runtime env), the cloud template (version + digest, runtime
+> env), `vps_validation.py` (BYOVPS AgentGateway, version pin), and
+> `byovps_bootstrap.py` (BYOVPS, `NEMOCLAW_INSTALL_TAG`, still lagging — bump
+> separately). Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
+
 > **Update (2026-07-11, first live instance of the trixie failure):**
 > Debian shipped curl `8.14.1-2+deb13u4` and dropped the pinned `deb13u3`
 > from the index — every base-image build (OpenClaw, Hermes, AND the

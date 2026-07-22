@@ -10,32 +10,37 @@ NC='\033[0m'
 
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.85}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.88 (commit 09a5268c; bumped from v0.0.83 on
-# 2026-07-19). Pre-flight against the v0.0.83..v0.0.88 diff:
-#   - **BREAKING: blueprint min_openshell_version == max_openshell_version ==
-#     "0.0.85"** (was 0.0.72). `--skip-openshell` is NO LONGER valid — OPENSHELL_VERSION
-#     is bumped to v0.0.85 above IN LOCKSTEP. OpenShell 0.0.85 = published commit
-#     3dee5570; see the v0.0.88 tree's docs/security/openshell-0.0.85-migration-review.md.
-#   - OpenClaw reviewed default still 2026.6.10 (mobile pairing intact, no
-#     OpenClaw-driven rebuild); Hermes base still v0.18.0 / v2026.7.1 (remote-
-#     desktop semantics unchanged — HERMES_REMOTE_DESKTOP.md §1a stays valid).
+# NemoClaw is pinned to TAG v0.0.92 (commit 3ef2ca87b; bumped from v0.0.88 on
+# 2026-07-22). Why the bump: upstream rebuilt the FLOATING base image
+# `ghcr.io/nvidia/nemoclaw/sandbox-base:latest` to carry OpenClaw 2026.7.1,
+# but v0.0.88 reviewed OpenClaw 2026.6.10. The per-sandbox build has an
+# anti-downgrade guard ("Base image has OpenClaw 2026.7.1, which is newer
+# than reviewed target 2026.6.10" → exit 1), so EVERY OpenClaw create started
+# failing at the base-image build with SandboxBaseImageResolutionError. The
+# fix is to move our reviewed pin up to match the floated base. v0.0.92
+# reviews OpenClaw 2026.7.1 (Node 22.23.1); see NVIDIA/NemoClaw#7393.
+# Pre-flight against the v0.0.88..v0.0.92 diff:
+#   - blueprint min_openshell_version == max_openshell_version == "0.0.85"
+#     UNCHANGED from v0.0.88, so OPENSHELL_VERSION stays v0.0.85 and
+#     `--skip-openshell` is valid on a box already at 0.0.85.
+#   - OpenClaw reviewed default 2026.6.10 -> 2026.7.1 (matches the floated
+#     sandbox-base:latest; integrity pin OPENCLAW_2026_7_1_INTEGRITY ships in
+#     the v0.0.92 Dockerfile.base). Hermes base still v0.18.0 (remote-desktop
+#     semantics unchanged — HERMES_REMOTE_DESKTOP.md §1a stays valid).
 #   - Dockerfile.base STILL exact-pins Debian trixie packages (curl=
 #     8.14.1-2+deb13u4, git, python3, jq, gnupg, iproute2, iptables, nftables,
 #     libcap2-bin, openssh-sftp-server, ca-certificates…). Checked ALL 18 pins
-#     against live trixie (node:22-trixie-slim) on 2026-07-19 — every one still
-#     resolves, so NO new unpins needed; the curl/ripgrep/procps/e2fsprogs/tmux
-#     wildcard unpin below stays as a defensive no-op.
-#   - `npm audit signatures` is STILL a hard `&&` gate (Dockerfile.base:301 AND
-#     Dockerfile:371) — the best-effort wrap below is still required.
+#     against live trixie (node:22-trixie-slim, Debian 13.6) on 2026-07-22 —
+#     every one still resolves, so NO new unpins needed; the
+#     curl/ripgrep/procps/e2fsprogs/tmux wildcard unpin below stays a
+#     defensive no-op.
+#   - `npm audit signatures` is STILL a hard `&&` gate (Dockerfile.base AND
+#     Dockerfile) — the best-effort wrap below is still required.
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites) — the sed
 #     shim below still applies.
-#   - OpenShell 0.0.85 gains authenticated inference health probes + a
-#     credential-placeholder fail-closed (commit 40194f9). NOTE: this did NOT
-#     fix the hermes-sandbox inference 503 — that is a separate NemoClaw
-#     hermes-agent provisioning bug. See memory/project_hermes_inference_503.md.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.88}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.92}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.10}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE="${NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE:-1}"
 NEMOCLAW_NON_INTERACTIVE="${NEMOCLAW_NON_INTERACTIVE:-1}"

@@ -18,8 +18,8 @@ import { OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
 // authority, and both mirror what scripts/hermes-remote/launch.sh already does:
 //
 //   1. nsenter into the gateway's network namespace and connect via loopback
-//      (127.0.0.1:18789). Discover the gateway PID with `pgrep -x openclaw`
-//      (the in-sandbox auto-pair watcher is `openclaw-devices`, excluded).
+//      (127.0.0.1:18789). Discover the gateway PID with `pgrep -f
+//      openclaw-gateway` (see findGatewayPid — the argv0 changed in 2026.7.1).
 //   2. Authenticate with the gateway's STORED DEVICE CREDENTIAL, not the shared
 //      gateway.auth.token. A plain-token connection is rejected with "device
 //      pairing required"; a hand-written devices/paired.json is IGNORED (the

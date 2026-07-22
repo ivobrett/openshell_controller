@@ -116,19 +116,29 @@ async function resolveContainer(sandboxName: string): Promise<string> {
   return name
 }
 
-// The OpenClaw gateway process is `openclaw` (argv0); the in-sandbox auto-pair
-// watcher is `openclaw-devices`, so `pgrep -x openclaw` excludes it. Multiple
-// `openclaw` processes share the gateway netns, so any works for nsenter; the
-// lowest PID is the long-lived main gateway.
+// Find the long-lived OpenClaw gateway process so we can nsenter its netns.
+//
+// OpenClaw 2026.7.1 renamed the gateway's argv0 from `openclaw` to
+// `openclaw-gateway`. The bare `openclaw` process is now a TRANSIENT CLI child
+// that comes and goes, so the old `pgrep -x openclaw` matched nothing whenever
+// it wasn't running — findGatewayPid threw, every pairing WS call died, and
+// "check pending" silently showed nothing. `pgrep -x` also can't match
+// `openclaw-gateway` (comm is truncated to 15 chars), so we match the full
+// command line with `-f`. All openclaw-family processes (gateway, the
+// `openclaw-devices` watcher, transient CLIs) share the gateway netns, and the
+// lowest PID is the long-lived gateway — so match `openclaw-gateway` first
+// (2026.7.1+), then fall back to any `openclaw` process for older builds.
 async function findGatewayPid(container: string): Promise<string> {
-  const res = await runDocker(["exec", container, "pgrep", "-x", "openclaw"])
-  const pids = res.stdout
-    .split(/\r?\n/)
-    .map((line) => Number(line.trim()))
-    .filter((n) => Number.isInteger(n) && n > 0)
-    .sort((a, b) => a - b)
-  if (pids.length === 0) throw new Error(`no openclaw gateway process in ${container}`)
-  return String(pids[0])
+  for (const pattern of ["openclaw-gateway", "openclaw"]) {
+    const res = await runDocker(["exec", container, "pgrep", "-f", pattern])
+    const pids = res.stdout
+      .split(/\r?\n/)
+      .map((line) => Number(line.trim()))
+      .filter((n) => Number.isInteger(n) && n > 0)
+      .sort((a, b) => a - b)
+    if (pids.length > 0) return String(pids[0])
+  }
+  throw new Error(`no openclaw gateway process in ${container}`)
 }
 
 // Read the shared gateway token (for the offline QR encoder) + the gateway port.

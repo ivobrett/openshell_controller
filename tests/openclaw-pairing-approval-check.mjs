@@ -106,9 +106,15 @@ const PAIRING_LIB = 'app/lib/openclawPairing.ts'
   const lib = read(PAIRING_LIB)
   // Enter the gateway netns (nsenter -n) rather than dialing an IP.
   assert.ok(/"nsenter",\s*"-t",\s*pid,\s*"-n"/.test(lib), 'gateway calls must nsenter into the gateway netns')
-  // Discover the gateway process as `openclaw` (the `openclaw-devices` watcher
-  // is intentionally excluded by -x).
-  assert.ok(/pgrep",\s*"-x",\s*"openclaw"/.test(lib), 'gateway PID must be found with `pgrep -x openclaw`')
+  // Discover the long-lived gateway process by full-cmdline match. OpenClaw
+  // 2026.7.1 renamed the gateway argv0 to `openclaw-gateway` (the bare
+  // `openclaw` is now a transient CLI child), and `pgrep -x` can't match the
+  // 16-char comm — so we match `-f openclaw-gateway`, falling back to
+  // `-f openclaw` for older builds. Regressing to `pgrep -x openclaw` breaks
+  // pairing on 2026.7.1 (findGatewayPid finds nothing, "check pending" is empty).
+  assert.ok(/pgrep",\s*"-f",\s*pattern/.test(lib), 'gateway PID must be found with `pgrep -f` over a pattern')
+  assert.ok(/"openclaw-gateway",\s*"openclaw"/.test(lib), 'findGatewayPid must prefer `openclaw-gateway` then fall back to `openclaw`')
+  assert.ok(!/pgrep",\s*"-x",\s*"openclaw"/.test(lib), 'must NOT regress to `pgrep -x openclaw` (breaks OpenClaw 2026.7.1 pairing)')
   // Strip the shared-token gateway env so OpenClaw uses its stored device
   // credential (operator authority); a plain-token connection is rejected.
   for (const key of ['OPENCLAW_GATEWAY_URL', 'OPENCLAW_GATEWAY_PORT', 'OPENCLAW_GATEWAY_TOKEN']) {

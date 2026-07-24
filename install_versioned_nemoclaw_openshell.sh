@@ -264,12 +264,22 @@ install_nemoclaw() {
   # install.sh's strict pre-upgrade backup gate (hard-coded
   # NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1, skipped counts as failed) then
   # blocks the whole upgrade. Hit for real 2026-07-11 on the Oracle BYOVPS
-  # (607 MiB of OpenClaw state). Raise the cap to 2 GiB before the CLI is
+  # (607 MiB of OpenClaw state). Raise the cap to 8 GiB before the CLI is
   # built. Remove when upstream streams backups to disk instead of memory.
+  #
+  # Why 8 GiB and not 2 GiB: OpenClaw agent state grows unbounded (the
+  # gateway keeps per-session transcripts + attachments under
+  # /sandbox/.openclaw). On the same Oracle box by 2026-07-24 that dir had
+  # reached 1.8 GiB — already brushing the old 2 GiB cap, and the
+  # rebuild-with-restore path buffers the tar TWICE (backup then restore).
+  # 8 GiB clears both current agents (OpenClaw 1.8 GiB, Hermes .hermes
+  # 351 MiB) with headroom for months of growth. The buffer is only
+  # allocated as the tar streams, so oversizing it costs nothing until a
+  # backup actually runs.
   _state_ts="$source_dir/src/lib/state/sandbox.ts"
   if [[ -f "$_state_ts" ]]; then
     sed -i.bak \
-      -e 's/maxBuffer: 256 \* 1024 \* 1024/maxBuffer: 2048 * 1024 * 1024/g' \
+      -e 's/maxBuffer: 256 \* 1024 \* 1024/maxBuffer: 8192 * 1024 * 1024/g' \
       "$_state_ts" && rm -f "${_state_ts}.bak"
   fi
 

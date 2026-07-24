@@ -190,77 +190,137 @@ with `NEMOCLAW_REBUILD_VERBOSE=1 nemoclaw backup-all` — `exit=255` at
 `sandbox SSH connection limit reached` means more leaked tunnels
 (Pre-flight step 6).
 
-## Step 3 — the destructive window (OpenShell bump + NemoClaw + rebuild)
+## Step 3 — the destructive window (the sequence that ACTUALLY works on BYOVPS)
 
-Run **detached** (base-image build is 10+ min; an SSH drop must not
-orphan it). Provider from Pre-flight step 5.
+> **Do NOT run the full wrapper (no `--skip-openshell`) and expect it to
+> do the OpenShell bump.** On a BYOVPS with a source checkout at
+> `/opt/nemoclaw-src`, that path is broken two ways: (1) the wrapper's
+> naive `install_openshell` (the NVIDIA project `install.sh`) kills the
+> gateway *before* the backup and dies at the 17670 probe; (2) even the
+> NemoClaw-native retire path (v0.0.92 `install.sh`
+> `preinstall_backup_and_retire_legacy_gateway`) can't self-complete —
+> its `stop_legacy_openshell_gateway_process` refuses on the BYOVPS
+> PID-file trust check, and the source-checkout `install_nemoclaw` uses
+> `maybe_install_openshell_during_install if-missing` (won't upgrade an
+> already-present OpenShell). So we decompose the bump into explicit,
+> observable steps. All verified on the 2026-07-24 Oracle run.
+
+The ordering that matters: **install the new CLI + take the validated
+backup while containers are Ready → lay down the new OpenShell binaries
+(non-destructive) → only then kill the gateway → recreate+restore.** The
+pre-upgrade backup gate needs Ready containers, so it MUST run before the
+gateway dies; and you can't re-run `install.sh` afterward (its backup
+gate fails on the dead containers).
 
 ```bash
 cd /opt/openshell-controller
+NODE=$(ls -d /root/.nvm/versions/node/*/bin | head -1); export PATH="$NODE:/root/.local/bin:/usr/local/bin:$PATH"
 
-# 3a. Full installer — bumps the OpenShell .deb (kills the gateway →
-#     all containers Exited). On BYOVPS it then FAILS at the 17670
-#     readiness probe (gateway binds 8080, not 17670) — EXPECTED. The
-#     OpenShell package upgrade itself has completed by then.
-nohup env NEMOCLAW_PROVIDER=<build|custom> \
-  ./install_versioned_nemoclaw_openshell.sh \
-  > /tmp/vinstall-openshell.log 2>&1 &
-tail -f /tmp/vinstall-openshell.log     # watch until it exits at 17670
-openshell --version                      # confirm it is now the new pin
+# 3a. Validated backup while Ready (the restore source):
+NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1 HOME=/root nemoclaw backup-all   # 0 failed, 0 skipped
 
-# 3b. Finish the NemoClaw half with --skip-openshell. This installs the
-#     new CLI, builds the new base image, and runs upgrade-sandboxes
-#     --auto: the version-moved agent (OpenClaw) is rebuilt with state
-#     restored from the backup; already-at-target agents just restart.
-#     Gate B fires for any legacy (pre-fingerprint) row — confirm it.
-nohup env NEMOCLAW_PROVIDER=<build|custom> \
+# 3b. Install the new NemoClaw CLI while Ready, via the wrapper
+#     --skip-openshell. It re-takes the backup with the new 8 GiB CLI,
+#     builds+links v0.0.92, then EXPECTEDLY dies at "Could not retire the
+#     legacy OpenShell gateway after backup" — HARMLESS (gateway +
+#     containers untouched). Confirms Gate B for the legacy row.
+nohup env HOME=/root NEMOCLAW_NON_INTERACTIVE=1 \
+  NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 NEMOCLAW_PROVIDER=<build|custom> \
   NEMOCLAW_CONFIRM_LEGACY_MANAGED_RECREATE='["<legacy-sandbox>"]' \
   ./install_versioned_nemoclaw_openshell.sh --skip-openshell \
-  > /tmp/vinstall-nemoclaw.log 2>&1 &
-tail -f /tmp/vinstall-nemoclaw.log
+  > /tmp/vinstall-cli.log 2>&1 &
+# wait for "Could not retire the legacy OpenShell gateway" — that is DONE.
+# Verify: containers still Ready; new CLI at git -C /opt/nemoclaw-src log -1.
+
+# 3c. Install the new OpenShell binaries — NON-destructive. The running
+#     old gateway keeps its inode; containers stay Ready. (Use NemoClaw's
+#     install-openshell.sh, NOT the wrapper's install_openshell — it just
+#     downloads+verifies the coherent openshell/-gateway/-sandbox set at
+#     the blueprint-pinned version; no 17670 probe, no gateway restart.)
+bash /opt/nemoclaw-src/scripts/install-openshell.sh   # -> openshell 0.0.85
+openshell --version; openshell-sandbox --version       # both new pin
+
+# 3d. Kill the old gateway + recreate/restore in one shot. This respawns a
+#     fresh new-version gateway and recreates EVERY non-Ready sandbox from
+#     its validated backup (fresh container + token + state), rebuilding
+#     version-moved agents. Detached — the base-image build is 10+ min.
+cat > /root/restore-upgrade.sh <<'S'
+#!/usr/bin/env bash
+export HOME=/root
+NODE=$(ls -d /root/.nvm/versions/node/*/bin | head -1); export PATH="$NODE:/root/.local/bin:/usr/local/bin:$PATH"
+pkill -f /usr/bin/openshell-gateway; sleep 3
+NEMOCLAW_RESTORE_LATEST_BACKUP_ON_RECREATE=1 \
+NEMOCLAW_CONFIRMED_LEGACY_MANAGED_SANDBOXES='["<legacy-sandbox>"]' \
+NEMOCLAW_CONFIRM_LEGACY_MANAGED_RECREATE='["<legacy-sandbox>"]' \
+  nemoclaw upgrade-sandboxes --auto --yes 2>&1
+echo "EXIT: $?"
+S
+chmod +x /root/restore-upgrade.sh
+nohup /root/restore-upgrade.sh > /tmp/restore-upgrade.log 2>&1 &
+tail -f /tmp/restore-upgrade.log
 ```
 
-**Immediately after 3a, do not dawdle** — every minute a
-not-being-rebuilt container sits Exited is TTL burned (Trap 2). If 3b
-is delayed, restart the survivors now:
+**Because both agents' file-tokens were already expired (Trap 2), the
+old containers can never restart — but that is fine here: step 3d
+*recreates* them (new tokens) and restores state. There is no TTL race
+to win; take your time.**
+
+### Gates in step 3d (each hit for real on 2026-07-24)
+
+- **Legacy OpenClaw row lacks `dashboardPort` → "the recorded recreate
+  target is invalid" / "Recorded recreate target is invalid."** OpenClaw
+  is a dashboard-managed agent; `buildRebuildRecreateOnboardOpts` throws
+  when the pre-fingerprint row has no `dashboardPort`. Hermes rows (post
+  the 2026-07 fingerprint era) already carry it. Fix — patch the row:
+  ```bash
+  cp ~/.nemoclaw/sandboxes.json{,.bak-$(date +%s)}
+  python3 - <<'PY'
+  import json; p="/root/.nemoclaw/sandboxes.json"; d=json.load(open(p))
+  d["sandboxes"]["<legacy-sandbox>"]["dashboardPort"]=18789
+  json.dump(d,open(p,"w"),indent=2)
+  PY
+  ```
+  then re-run `restore-upgrade.sh`. (18789 = NemoClaw's `DASHBOARD_PORT`
+  default, same value every sandbox uses.)
+- **Gate E — "Dashboard port 18789 belongs to sandbox '<sibling>'."**
+  The singleton host dashboard forward is held by the sandbox rebuilt
+  first. Fails safe (untouched). Free it, then re-run:
+  ```bash
+  OPENSHELL_GATEWAY=nemoclaw openshell forward stop 18789 <sibling>
+  ```
+- **`upgrade-sandboxes` exits 1 with "Post-upgrade structure check
+  skipped (doctor returned 255)" even though "rebuilt successfully."**
+  The rebuild itself succeeded; the non-zero is a transient post-rebuild
+  doctor probe (forward not yet re-spun). Confirm with `nemoclaw <name>
+  doctor` (→ "Summary: healthy") — do not re-run blindly.
+
+## Step 4 — post-restore fixups
+
+The recreate restores `/sandbox/.<agent>` state (workspace, policy
+presets, device pairing, gateway auth token). A couple of things it does
+NOT carry:
 
 ```bash
-OPENSHELL_GATEWAY=nemoclaw nemoclaw <any-sandbox> recover
+# Re-establish host forwards (recreate can leave 18790/18789 dead):
+OPENSHELL_GATEWAY=nemoclaw nemoclaw <name> recover
+
+# OpenClaw external clients (Android app, browser Control UI): the
+# recreate resets gateway.controlUi.allowedOrigins to localhost-only.
+# On a Pangolin-auth + IP-gated box the gateway still requires the token,
+# so re-apply the wildcard and restart the in-sandbox gateway (origins
+# are NOT hot-reloadable — see project_openclaw_gateway_origin_allowlist):
+OC=$(docker ps --format '{{.Names}}' | grep openshell-<name> | head -1)
+docker exec -u sandbox "$OC" python3 - <<'PY'
+import json; p="/sandbox/.openclaw/openclaw.json"; d=json.load(open(p))
+d.setdefault("gateway",{}).setdefault("controlUi",{})["allowedOrigins"]=["*"]
+json.dump(d,open(p,"w"),indent=2)
+PY
+OPENSHELL_GATEWAY=nemoclaw nemoclaw <name> recover   # restarts gateway
 ```
 
-Gates you may hit (full table in `live-vps-upgrades.md`):
-- **A. strict backup** — a sandbox not Ready, or state > cap. Fix
-  (raise cap / bring Ready) and re-run.
-- **B. legacy managed recreate** — pre-fingerprint row; verify it was a
-  managed create (its `nemoclaw-sandbox-local:<name>-<millis>` image
-  timestamp ≈ registry creation time) then pass
-  `NEMOCLAW_CONFIRM_LEGACY_MANAGED_RECREATE='["<name>"]'`.
-- **C. provider mismatch** — you omitted `NEMOCLAW_PROVIDER` (default
-  `vllm` is wrong).
-- **E. rebuild preflight: 18789 owned by another sandbox** —
-  `openshell forward stop 18789 <other>` and re-run.
-
-## Step 4 — recover any tokened-out survivor
-
-For each agent that was NOT rebuilt (already at target), check it came
-back:
-
-```bash
-OPENSHELL_GATEWAY=nemoclaw openshell sandbox list
-docker ps --format '{{.Names}}\t{{.Status}}' | grep '^openshell-'
-```
-
-- Ready → survived the TTL race. Done.
-- `invalid token: ExpiredSignature` in `docker logs` / never leaves
-  Exited → dead (Trap 2). It must be **deleted + recreated + restored**:
-  1. Delete via the controller (cleans the registry row).
-  2. Recreate the same agent/name via the controller.
-  3. Restore its state from the raw backup: with the new container up
-     but the agent gateway stopped, `docker cp
-     /root/sandbox-preserve/<name>-sandbox-<STAMP>/. <newcnt>:/sandbox`
-     then `chown -R sandbox:sandbox` inside, and `nemoclaw <name>
-     recover`. (Prefer restoring the NemoClaw backup via the sanctioned
-     rebuild path if it exists; `docker cp` is the last resort.)
+Files OUTSIDE the recorded managed state path (e.g. `/sandbox/user-data`)
+are NOT preserved by the recreate — that is what the Phase-0 `docker cp`
+of the whole `/sandbox` is for; copy anything extra back by hand.
 
 ## Step 5 — verify
 
@@ -292,6 +352,53 @@ the branch. Update this runbook's execution record.
   maintenance window — this is why the pin bump is one-way in practice.
   Running sandboxes rebuilt onto the new base stay there.
 
-## Execution record
+## Execution record — 2026-07-24, Oracle BYOVPS (130.61.64.124)
 
-_(appended after the live run — see below)_
+First end-to-end run of this procedure. **Both agents kept their data and
+came back Ready on the new pinned versions.**
+
+- **Start state:** controller `21bb737`, OpenShell **0.0.72**, NemoClaw
+  **v0.0.81** (`457311c`), OpenClaw agent **2026.6.10**, Hermes **0.18.0**.
+  Two live agents (`ivos-openclaw`, `ivos-hermes`). Provider
+  `compatible-endpoint` (entrim.ai / Qwen3.6-35B) → `NEMOCLAW_PROVIDER=custom`.
+- **End state:** controller `e642de7`, OpenShell **0.0.85**, NemoClaw
+  **v0.0.92** (`3ef2ca8`), OpenClaw **2026.7.1**, Hermes **0.18.0**. Both
+  Ready + `doctor: healthy`; Hermes inference route OK (no DNS-503 on this
+  box); controller `/login → 200`.
+- **The headline finding — both file-tokens were already dead.** Each
+  sandbox's bind-mounted `sandbox.jwt` has a **1-hour TTL** and both had
+  expired weeks earlier (OpenClaw ~18 days, Hermes ~13 days); the
+  containers only survived on in-memory refresh. So there was never a
+  "just restart Hermes" path — the OpenShell bump guaranteed both
+  containers would need recreate-with-restore, not restart. Decode with
+  `cut -d. -f2 sandbox.jwt | base64 -d` and check `exp`. This is why the
+  procedure above recreates both rather than racing a restart.
+- **Agent-state sizes drove the cap change:** `/sandbox/.openclaw` was
+  **1.8 GiB** (brushing the old 2 GiB cap; the raw `nemoclaw backup`
+  256 MiB cap is the "limited to 128 MB" the operator hit);
+  `/sandbox/.hermes` only 351 MiB. Raised the installer sed to 8 GiB
+  (commit `e642de7`) — `backup-all` then ran clean (`2 backed up, 0
+  failed`).
+- **Why the wrapper's OpenShell bump had to be decomposed:** the
+  `--skip-openshell` CLI-install run died exactly at "Could not retire
+  the legacy OpenShell gateway after backup" — v0.0.92 `install.sh`'s
+  `stop_legacy_openshell_gateway_process` refused (BYOVPS PID-file trust),
+  and the gateway/containers were left untouched. Finished by hand:
+  `install-openshell.sh` (0.0.85 binaries, non-destructive) →
+  `pkill openshell-gateway` → `upgrade-sandboxes --auto` with
+  `NEMOCLAW_RESTORE_LATEST_BACKUP_ON_RECREATE=1`.
+- **Restore results:** Hermes rebuilt first (15 dirs/4 files, presets incl.
+  telegram, new bearer token). OpenClaw failed twice before succeeding —
+  once on the missing `dashboardPort` (patched to 18789), once on Gate E
+  (18789 held by the just-rebuilt Hermes → `openshell forward stop 18789
+  ivos-hermes`) — then rebuilt to 2026.7.1 (12 dirs/1 file, presets incl.
+  openclaw-pricing). Device pairing (`identity/device.json`,
+  `devices/paired.json`) survived the restore; re-applied
+  `controlUi.allowedOrigins=["*"]` for the Android app.
+- **Three backups held throughout** (none needed as last resort, but the
+  `docker cp` is what makes the whole thing safe to attempt): raw
+  `docker cp /sandbox` → `/root/sandbox-preserve/`, the manual
+  `backup-all`, and the installer's own re-take.
+- **Total agent downtime ≈ 25 min** (from `pkill` to both Ready), driven
+  by two sequential base-image builds. Everything else ran with
+  containers Ready.

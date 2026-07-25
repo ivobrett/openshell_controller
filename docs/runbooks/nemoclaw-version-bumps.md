@@ -81,9 +81,15 @@ in the same change set.
 > doesn't write runtime env), the cloud template (version + digest, runtime
 > env), `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
 > `byovps_bootstrap.py` (BYOVPS phase 2, `NEMOCLAW_INSTALL_TAG` + digest in its
-> onboard export and `.env.local`). All four are at v0.0.92 / OpenClaw 2026.7.1
-> as of 2026-07-22; the digest freeze is wired into both manidae runtime-env
-> writers (cloud template + `byovps_bootstrap.py`). Full write-up:
+> onboard export and `.env.local`). **SPLIT STATE (2026-07-25):** the
+> controller installer is now at **v0.0.95** (NemoClaw-tag-only security bump,
+> #7524); the three manidae-cloud writers are still at **v0.0.92 / OpenClaw
+> 2026.7.1** and must be bumped to v0.0.95 + a refreshed digest to re-coheer.
+> Because OpenClaw stays 2026.7.1 across v0.0.92→v0.0.95, the existing digest
+> is NOT anti-downgrade-fatal (the base still carries the reviewed OpenClaw),
+> so the split is non-breaking — but refresh the digest with the recipe above
+> when you bump manidae-cloud. The digest freeze is wired into both manidae
+> runtime-env writers (cloud template + `byovps_bootstrap.py`). Full write-up:
 > `memory/project_openclaw_floating_base_image_skew.md`.
 
 > **Update (2026-07-11, first live instance of the trixie failure):**

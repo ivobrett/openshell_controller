@@ -10,35 +10,44 @@ NC='\033[0m'
 
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.85}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.92 (commit 3ef2ca87b; bumped from v0.0.88 on
-# 2026-07-22). Why the bump: upstream rebuilt the FLOATING base image
-# `ghcr.io/nvidia/nemoclaw/sandbox-base:latest` to carry OpenClaw 2026.7.1,
-# but v0.0.88 reviewed OpenClaw 2026.6.10. The per-sandbox build has an
-# anti-downgrade guard ("Base image has OpenClaw 2026.7.1, which is newer
-# than reviewed target 2026.6.10" → exit 1), so EVERY OpenClaw create started
-# failing at the base-image build with SandboxBaseImageResolutionError. The
-# fix is to move our reviewed pin up to match the floated base. v0.0.92
-# reviews OpenClaw 2026.7.1 (Node 22.23.1); see NVIDIA/NemoClaw#7393.
-# Pre-flight against the v0.0.88..v0.0.92 diff:
+# NemoClaw is pinned to TAG v0.0.95 (commit 64df93a9c; bumped from v0.0.92 on
+# 2026-07-25). Why the bump: routine security/lifecycle release
+# (NVIDIA/NemoClaw#7524) — hardened sandbox recovery, immutable base-image
+# digest enforcement (#6884), plus security refresh of npm packages, libexpat
+# + jq (#7503), and the sandbox Perl runtime (#7504). No OpenClaw/OpenShell
+# functional move for us; this is a NemoClaw-tag-only bump.
+# Pre-flight against the v0.0.92..v0.0.95 diff (all verified 2026-07-25):
 #   - blueprint min_openshell_version == max_openshell_version == "0.0.85"
-#     UNCHANGED from v0.0.88, so OPENSHELL_VERSION stays v0.0.85 and
-#     `--skip-openshell` is valid on a box already at 0.0.85.
-#   - OpenClaw reviewed default 2026.6.10 -> 2026.7.1 (matches the floated
-#     sandbox-base:latest; integrity pin OPENCLAW_2026_7_1_INTEGRITY ships in
-#     the v0.0.92 Dockerfile.base). Hermes base still v0.18.0 (remote-desktop
-#     semantics unchanged — HERMES_REMOTE_DESKTOP.md §1a stays valid).
-#   - Dockerfile.base STILL exact-pins Debian trixie packages (curl=
-#     8.14.1-2+deb13u4, git, python3, jq, gnupg, iproute2, iptables, nftables,
-#     libcap2-bin, openssh-sftp-server, ca-certificates…). Checked ALL 18 pins
-#     against live trixie (node:22-trixie-slim, Debian 13.6) on 2026-07-22 —
-#     every one still resolves, so NO new unpins needed; the
-#     curl/ripgrep/procps/e2fsprogs/tmux wildcard unpin below stays a
-#     defensive no-op.
-#   - `npm audit signatures` is STILL a hard `&&` gate (Dockerfile.base AND
-#     Dockerfile) — the best-effort wrap below is still required.
-#   - The 256 MiB backup maxBuffer bug is STILL present (3 sites) — the sed
-#     shim below still applies.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.92}}"
+#     UNCHANGED, so OPENSHELL_VERSION stays v0.0.85 and `--skip-openshell` is
+#     valid on a box already at 0.0.85 (NO destructive OpenShell window).
+#     min_openclaw_version still "2026.3.11".
+#   - OpenClaw reviewed default STILL 2026.7.1 (ARG OPENCLAW_VERSION=2026.7.1,
+#     integrity pin OPENCLAW_2026_7_1_INTEGRITY intact in Dockerfile.base).
+#     Hermes base STILL 0.18.0 (agents/hermes/manifest.yaml expected_version;
+#     remote-desktop semantics unchanged — HERMES_REMOTE_DESKTOP.md §1a valid).
+#     langchain-deepagents dcode STILL 0.1.34.
+#   - NEW base-image structure (#7503/#7504): Dockerfile.base now (a) builds
+#     Perl 5.44.0 from source in a `perl-builder` stage (SHA-pinned CPAN
+#     tarball from www.cpan.org) and (b) installs SHA-pinned libexpat/libjq/jq
+#     .debs from snapshot.debian.org (20260724T000000Z). These are NEW
+#     build-time network deps — if a cloud IP is blocked from cpan.org or
+#     snapshot.debian.org the base build fails (same failure CLASS as the
+#     Sigstore TUF gate below, but no shim: the artifacts are SHA-pinned and
+#     there's no evidence of blocking yet — watch-item, not a fix).
+#   - APT PINS: the exact-pinned trixie apt block grew 4 packages —
+#     build-essential=12.12, netbase=6.5, xz-utils=5.8.1-1+deb13u1 (all in the
+#     perl-builder stage) and libonig5=6.9.9-1+b1 (jq's oniguruma dep, main
+#     stage; the old jq= apt pin is replaced by the SHA-pinned .deb). Checked
+#     ALL 20 pins against live trixie (node:22-trixie-slim @sha256:e6d9a389,
+#     Debian 13) on 2026-07-25 — EVERY one still resolves, so NO new unpins
+#     needed; the curl/ripgrep/procps/e2fsprogs/tmux wildcard unpin below stays
+#     a defensive no-op. If a future point release supersedes any of the 4 new
+#     pins (build-essential/netbase/xz-utils/libonig5), add it to the unpin sed.
+#   - `npm audit signatures` is STILL a hard gate (Dockerfile.base:493 `&&`
+#     AND Dockerfile:487 `; \`) — the best-effort wrap below is still required.
+#   - The 256 MiB backup maxBuffer bug is STILL present (3 sites in
+#     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.95}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

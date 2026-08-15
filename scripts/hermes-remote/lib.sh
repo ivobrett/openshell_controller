@@ -45,9 +45,26 @@ sandbox_port() {
 
 # ── Discovery helpers (no hardcoded IPs/paths — the POC was burned by both) ──
 
+# OpenShell 0.0.101 inserted a WORKSPACE segment into sandbox container names:
+#   0.0.85 and earlier:  openshell-<sandbox>-<uuid>
+#   0.0.101 and later:   openshell-<workspace>--<sandbox>-<uuid>
+#                        e.g. openshell-default--my-first-openclaw-cb37162f-…
+# The old `^openshell-<name>-` grep stopped matching entirely on 0.0.101, so
+# BOTH remote-access paths broke the moment the NemoClaw v0.0.108 bump pulled
+# OpenShell 0.0.101 in: openclaw-remote/expose.sh and hermes-remote/expose.sh
+# both die with "no running container for sandbox '<name>'" while the container
+# is demonstrably Up and healthy. Observed 2026-08-15 on 178.105.141.65.
+#
+# Accept BOTH layouts (boxes still on 0.0.85 must keep working) by making the
+# `<workspace>--` prefix optional, and anchor on the start of the trailing UUID
+# so a sandbox named `foo` cannot match a container for `foo-bar`. Sandbox names
+# are constrained to [a-z0-9-] by the callers, so `$name` needs no regex
+# escaping here.
 find_sandbox_container() {
   local name="$1"
-  docker ps --format '{{.Names}}' 2>/dev/null | grep "^openshell-${name}-" | head -1
+  docker ps --format '{{.Names}}' 2>/dev/null \
+    | grep -E "^openshell-([a-z0-9][a-z0-9-]*--)?${name}-[0-9a-f]{8}-" \
+    | head -1
 }
 
 find_gateway_pid() {

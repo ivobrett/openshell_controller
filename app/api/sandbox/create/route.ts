@@ -382,9 +382,18 @@ async function getBaselineSandboxesStatus() {
 
 async function resolveSourceDockerImage(sandboxName: string): Promise<string | null> {
   try {
+    // OpenShell 0.0.101 inserted a WORKSPACE segment into sandbox container
+    // names (openshell-<workspace>--<sandbox>-<uuid>, was openshell-<sandbox>-
+    // <uuid>), so the old `name=openshell-<sandbox>` SUBSTRING filter matches
+    // nothing there — Quick Deploy silently lost the source image and fell back
+    // to null. Docker's name filter takes a REGEX, so anchor it and make the
+    // workspace prefix optional to keep 0.0.85 boxes working. Anchoring on the
+    // start of the trailing UUID stops `foo` matching `foo-bar`'s container.
+    // Mirrors resolveContainer() in app/lib/openclawPairing.ts and
+    // find_sandbox_container() in scripts/hermes-remote/lib.sh — keep in sync.
     const { stdout } = await execFileAsync(DOCKER_BIN, [
       "ps",
-      "--filter", `name=openshell-${sandboxName}`,
+      "--filter", `name=^openshell-([a-z0-9][a-z0-9-]*--)?${sandboxName}-[0-9a-f]{8}-`,
       "--format", "{{.Image}}",
     ], { env: hostCommandEnv(), timeout: 10000, maxBuffer: 1024 * 1024 })
     return String(stdout).trim().split(/\r?\n/)[0] || null

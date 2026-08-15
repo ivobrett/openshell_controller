@@ -106,12 +106,29 @@ function cleanOpenClawOutput(raw: string): string {
     .trim()
 }
 
+// OpenShell 0.0.101 inserted a WORKSPACE segment into sandbox container names:
+//   0.0.85 and earlier:  openshell-<sandbox>-<uuid>
+//   0.0.101 and later:   openshell-<workspace>--<sandbox>-<uuid>
+//                        e.g. openshell-default--my-first-openclaw-cb37162f-…
+// The old startsWith(`openshell-${name}-`) test stopped matching on 0.0.101, so
+// mobile-app pairing broke with "no running container for sandbox '<name>'"
+// while the container was Up and healthy. Observed 2026-08-15 on
+// 178.105.141.65, the moment the NemoClaw v0.0.108 bump pulled 0.0.101 in.
+// Keep BOTH layouts working (boxes still on 0.0.85) and anchor on the start of
+// the trailing UUID so a sandbox named `foo` cannot match `foo-bar`'s container.
+// Mirrors find_sandbox_container() in scripts/hermes-remote/lib.sh — keep in sync.
+function sandboxContainerPattern(sandboxName: string) {
+  const escaped = sandboxName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`^openshell-([a-z0-9][a-z0-9-]*--)?${escaped}-[0-9a-f]{8}-`)
+}
+
 async function resolveContainer(sandboxName: string): Promise<string> {
   const res = await runDocker(["ps", "--format", "{{.Names}}"])
+  const pattern = sandboxContainerPattern(sandboxName)
   const name = res.stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .find((line) => line.startsWith(`openshell-${sandboxName}-`))
+    .find((line) => pattern.test(line))
   if (!name) throw new Error(`no running container for sandbox '${sandboxName}'`)
   return name
 }

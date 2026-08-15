@@ -8,49 +8,71 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.85}"
+# *** OPENSHELL MOVED 0.0.85 -> 0.0.101 ON THE v0.0.96->v0.0.108 BUMP. ***
+# `--skip-openshell` is INVALID for this upgrade. On a live box this is the
+# DESTRUCTIVE maintenance window — follow
+# docs/runbooks/live-openshell-bump-with-agent-upgrade.md, NOT
+# byovps-controller-upgrade.md.
+OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.101}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.96 (commit 3d88c04; bumped from v0.0.95 on
-# 2026-07-28). Why the bump: routine security/lifecycle release
-# (NVIDIA/NemoClaw#7656) — inference-egress hardening (host-pinned HTTPS custom
-# endpoints with route-scoped sandbox creds #7188, keyless loopback OpenAI-
-# compatible endpoints #7427, provider-marker removal from URL-form requests
-# #7546), `policy exclude`/`policy restore` baseline entries that persist across
-# rebuilds (#7194), and a base-image refresh: checksum-bound Vim/jq/Oniguruma/
-# Expat/npm/Perl (#7563), BuildKit-only bind mounts removed from managed
-# Dockerfiles (#7622), and a fix for incompatible cached OpenClaw base images
-# (#7606). No OpenClaw/OpenShell/Hermes functional move for us; tag-only bump.
-# Pre-flight against the v0.0.95..v0.0.96 diff (all verified 2026-07-28 from
-# source at tag v0.0.96 / commit 3d88c04):
-#   - blueprint min_openshell_version == max_openshell_version == "0.0.85"
-#     UNCHANGED, so OPENSHELL_VERSION stays v0.0.85 and `--skip-openshell` is
-#     valid on a box already at 0.0.85 (NO destructive OpenShell window).
+# NemoClaw is pinned to TAG v0.0.108 (commit 9df101e; bumped from v0.0.96 on
+# 2026-08-14, spanning 12 upstream releases v0.0.97..v0.0.108). Headline changes
+# (NVIDIA/NemoClaw discussion #8944): read-only host mounts via `--host-mount`,
+# an experimental Muse Glimmer vLLM profile for DGX Spark, MCP registration
+# retargeted at OpenClaw workspace config, BuildKit attestation verification,
+# Sigstore auditing moved OUT of image builds, gateway credentials stripped from
+# descendant processes, managed state created owner-only, and legacy `gosu`
+# privilege transitions rejected. Node 22.23.2 in managed images.
+# Pre-flight against the v0.0.96..v0.0.108 diff (all verified 2026-08-14 from
+# source at tag v0.0.108 / commit 9df101e):
+#   - blueprint min_openshell_version == max_openshell_version == "0.0.101"
+#     (was "0.0.85") -> OPENSHELL_VERSION bumped in lockstep above. This is a
+#     COMPANION-VERSION MOVE, not a tag-only bump: the installer must actually
+#     install OpenShell, and every live sandbox gets backed up + recreated.
 #     min_openclaw_version still "2026.3.11".
+#   - HERMES MOVED 0.18.0 -> 0.19.0 (calver tag v2026.7.1 -> v2026.7.20;
+#     agents/hermes/manifest.yaml expected_version + Dockerfile.base
+#     ARG HERMES_VERSION/HERMES_SEMVER, HERMES_TARBALL_SHA256 changed to
+#     285f3fc134ff466a90065e1517801a68993733b807158ee8f32aa01613786990).
+#     Every running Hermes sandbox is therefore stale and WILL be rebuilt.
+#     REMOTE-DESKTOP RE-CHECK DONE (the 0.17->0.18 bump silently broke every
+#     exposure, so this is mandatory per docs/runbooks/nemoclaw-version-bumps.md):
+#     all four guards in hermes_cli/web_server.py — _is_accepted_host,
+#     _ws_host_origin_is_allowed, _ws_client_is_allowed, and the non-loopback
+#     bind auth-provider gate — are BYTE-IDENTICAL across 0.18.0..0.19.0
+#     (verified by extracting each function body from both tags and diffing;
+#     the file grew +6007 lines elsewhere). HERMES_REMOTE_DESKTOP.md §1a stays
+#     valid — no recalibration needed.
 #   - OpenClaw reviewed default STILL 2026.7.1 (ARG OPENCLAW_VERSION=2026.7.1,
 #     integrity pin OPENCLAW_2026_7_1_INTEGRITY byte-identical in Dockerfile.base).
-#     Hermes base STILL 0.18.0 (calver tag v2026.7.1; agents/hermes manifest;
-#     remote-desktop semantics unchanged — HERMES_REMOTE_DESKTOP.md §1a valid).
-#     langchain-deepagents dcode STILL 0.1.34.
-#   - INFERENCE/INGRESS/EGRESS (#7188/#7427/#7546/#7319): all internal to
-#     NemoClaw's agent->LLM egress + gateway-pairing subsystems (inference-set*,
-#     restore-gateway-pairing, public-route-metadata). NONE touch our dashboard-
-#     token chain, the OpenClaw gateway (still 18789), or auth. #7319 keeps the
-#     docker-driver gateway on port 8080 (DEFAULT_GATEWAY_PORT=8080) — only adds
-#     an internal packaged-service/standalone label, so manidae's :8080 ufw rule
-#     is unaffected. #7606 (cached-base fix) helps our floating-base-skew class.
-#   - NEW base-image pins (#7563): jq/libjq1=1.8.2-1, libexpat1=2.8.2-1,
-#     vim-common/vim-tiny=2:9.2.0782-1 — ALL downloaded as SHA256-pinned .debs
-#     from the FROZEN snapshot.debian.org/20260724T000000Z snapshot (immune to
-#     live-trixie point-release drift), so NO new unpins needed. Perl 5.44.0
-#     still built from a SHA-pinned CPAN tarball. Same build-time network deps
-#     (cpan.org + snapshot.debian.org, both SHA-pinned — watch-item, no shim).
-#     The curl/ripgrep/procps/e2fsprogs/tmux wildcard unpin below stays a
-#     defensive no-op; the live-index apt pins are unchanged from v0.0.95.
-#   - `npm audit signatures` is STILL a hard gate (Dockerfile.base:599 `&&`
-#     AND Dockerfile:518 `; \`) — the best-effort wrap below is still required.
+#     langchain-deepagents-code STILL 0.1.34.
+#   - `npm audit signatures` is GONE from BOTH Dockerfile and Dockerfile.base
+#     (upstream "Sigstore auditing moved outside image builds"). Our best-effort
+#     wrap is now OBSOLETE and has been REMOVED below — it had become a silent
+#     no-op. This also retires the TUF-403 failure class documented in
+#     memory/project_openclaw_build_audit_signatures_tuf_403.md.
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites in
-#     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.96}}"
+#     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies, and
+#     matters MORE now: scripts/install.sh grew +1204 lines adding an
+#     orchestrated pre-upgrade flow (run_preupgrade_backup ->
+#     `NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1 backup-all` -> retire gateway ->
+#     install OpenShell -> recreate), so backup-all is now ON the upgrade
+#     critical path rather than a side operation. Resume knob if it aborts
+#     mid-window: NEMOCLAW_OPENSHELL_UPGRADE_PREPARED=1.
+#   - NEW live-index apt pins in Dockerfile.base's `apt-get update && apt-get
+#     install` stages (these read the LIVE trixie index, so they are exposed to
+#     Debian point-release drift — the exit-100 failure class): libssl-dev,
+#     openssh-server, zlib1g-dev, util-linux. ALL 24 live-index pins were
+#     scanned against the trixie index on 2026-08-14 (apt-cache madison inside
+#     the pinned base digest) and every one still resolves — so this bump is
+#     NOT blocked on a stale pin.
+#     libexpat1 moved 2.8.2-1 -> 2.8.3-1 but is fetched as a SHA256-pinned .deb
+#     from a NEW frozen snapshot (20260811T082421Z, alongside the existing
+#     20260724T000000Z for jq/Vim) -> frozen, no unpin needed. The
+#     `+nemoclaw1`-suffixed packages (libssh2-1t64, perl/perl-base,
+#     nemoclaw-python3.13-htmlparser-fix) are built in-tree by
+#     scripts/security/build-*-security-packages.sh -> not index-resolved.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.108}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
@@ -229,6 +251,16 @@ install_nemoclaw() {
   # Debian shipped 8.14.1-2+deb13u4 and dropped the pinned deb13u3 from the
   # trixie index, killing every deepagents/hermes/openclaw base-image build
   # with apt exit 100 ("Sandbox creation command failed" in the UI).
+  # libssl-dev / openssh-server / zlib1g-dev / util-linux joined on the
+  # v0.0.96->v0.0.108 bump (2026-08-14): all four are NEW live-index pins added
+  # by NemoClaw's native-security-builder + runtime stages — the same
+  # drift-exposed class. All four RESOLVED on the day of the bump, so these
+  # unpins are pre-emptive, not a fix for an observed failure. Unpinning only
+  # ever selects apt's Candidate (>= the pinned version), so there is no
+  # downgrade or CVE-regression risk. NOTE the `openssh-server=` pattern
+  # deliberately does NOT match `openssh-sftp-server=` (different literal),
+  # which stays pinned — as do the SHA256-pinned snapshot .debs (expat/jq/Vim)
+  # and the in-tree-built `+nemoclaw1` packages, none of which are index-resolved.
   while IFS= read -r _dockerfile; do
     sed -i.bak \
       -e 's/procps=2:4\.0\.4-9/procps/g' \
@@ -236,37 +268,24 @@ install_nemoclaw() {
       -e 's/tmux=3\.5a-3/tmux/g' \
       -e 's/curl=[^[:space:]\\]*/curl/g' \
       -e 's/ripgrep=[^[:space:]\\]*/ripgrep/g' \
+      -e 's/libssl-dev=[^[:space:]\\]*/libssl-dev/g' \
+      -e 's/openssh-server=[^[:space:]\\]*/openssh-server/g' \
+      -e 's/zlib1g-dev=[^[:space:]\\]*/zlib1g-dev/g' \
+      -e 's/util-linux=[^[:space:]\\]*/util-linux/g' \
       "$_dockerfile" && rm -f "${_dockerfile}.bak"
   done < <(find "$source_dir" -name 'Dockerfile*' -not -path '*/node_modules/*' -type f)
 
-  # Same class of upstream-baked, moving-target network gate as the Debian
-  # pins above, but the failing dependency is Sigstore, not Debian. The
-  # OpenClaw base-image build ends with `npm ... mcporter-runtime audit
-  # signatures` (Dockerfile.base), which bootstraps the Sigstore trust root
-  # from https://tuf-repo-cdn.sigstore.dev via tuf-js. That CDN sits behind
-  # Google's edge and returns HTTP 403 to some cloud IP ranges (confirmed on
-  # a fresh Hetzner box 2026-07-15, IP-reputation block — persistent, not a
-  # UA quirk). tuf-js can't fetch the TUF timestamp -> `audit signatures`
-  # exits 1 -> the whole base-image `docker build` dies with exit 1, surfaced
-  # in the UI as the base-image-glibc-probe retry then "Sandbox creation
-  # command failed". Because it's IP-dependent, the same code "works" on one
-  # deploy and fails on the next. Make ONLY the signature-attestation step
-  # best-effort; keep `npm ci` and `npm audit --audit-level=low` (the real
-  # vuln gate) hard. Security loss is minimal: the exact mcporter bytes are
-  # already pinned two lines above by SRI integrity (sha512) + the committed
-  # lockfile sha256; `audit signatures` only adds Sigstore provenance on top.
-  # Guarded so re-extraction/re-run never double-wraps. Keep in sync with
-  # manidae-cloud startup_agentgateway.sh.j2.
-  # `/WARN…/b` makes it idempotent (never double-wraps a re-extracted tree);
-  # the `& ` in the replacement re-inserts the matched command verbatim, so it
-  # works for both the `&&`-joined form (Dockerfile.base) and the `; \`-joined
-  # form (top-level Dockerfile). BSD- and GNU-sed compatible.
-  while IFS= read -r _dockerfile; do
-    sed -i.bak \
-      -e '/WARN: audit signatures skipped/b' \
-      -e 's#npm --prefix /usr/local/lib/nemoclaw/mcporter-runtime audit signatures#{ & || echo "WARN: audit signatures skipped (Sigstore TUF unreachable from build host)" >\&2; }#' \
-      "$_dockerfile" && rm -f "${_dockerfile}.bak"
-  done < <(find "$source_dir" -name 'Dockerfile*' -not -path '*/node_modules/*' -type f)
+  # REMOVED 2026-08-14 on the v0.0.96->v0.0.108 bump: the `npm ...
+  # mcporter-runtime audit signatures` best-effort wrap. Upstream moved Sigstore
+  # auditing OUT of the image builds entirely (discussion #8944), so the command
+  # no longer appears in Dockerfile or Dockerfile.base and our sed had become a
+  # silent no-op. This retires the Sigstore-TUF-403 failure class (fresh cloud
+  # boxes failing base-image builds because tuf-repo-cdn.sigstore.dev returns
+  # 403 to some Hetzner IP ranges) — see
+  # memory/project_openclaw_build_audit_signatures_tuf_403.md. If a future tag
+  # reintroduces an in-build `audit signatures`, restore the wrap from git
+  # history (commit 6f366fc) rather than rewriting it. The parallel copy in
+  # manidae-cloud startup_agentgateway.sh.j2 is removed in lockstep.
 
   # NemoClaw's sandbox state backup (src/lib/state/sandbox.ts) buffers the
   # whole SSH+tar stream in memory via spawnSync with a hard-coded

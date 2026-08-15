@@ -448,6 +448,86 @@ Supported provider categories in the UI:
 - vLLM
 - external HTTP-compatible endpoints
 
+### Changing the inference provider for running sandboxes
+
+The UI options above apply at sandbox provisioning time. To repoint **already-running** Hermes/OpenClaw sandboxes at a different LLM backend — for example when an API key expires or a trial ends — change the **gateway inference route** with the OpenShell CLI instead. There is no controller UI for this.
+
+This works because NemoClaw-provisioned agents are not wired to a vendor endpoint at all. They are wired to the sandbox-local router:
+
+- OpenClaw `/sandbox/.openclaw/openclaw.json` → `models.providers.inference.baseUrl = https://inference.local/v1`, `apiKey: "unused"`
+- Hermes `/sandbox/.hermes/config.yaml` → `model.base_url = https://inference.local/v1`, `api_key: sk-OPENSHELL-PROXY-REWRITE`
+
+The real credential lives only in the gateway, which injects it at the boundary. So the backend is a single gateway-level setting shared by every sandbox on that gateway.
+
+**Do not edit the agent config inside the sandbox to change provider or model.** It is not where the credential lives, and the router overrides the model anyway (see below).
+
+Run these on the OpenShell host, with the gateway selected and `node` on `PATH`:
+
+```bash
+export PATH=/root/.nvm/versions/node/v22.22.3/bin:$PATH
+export HOME=/root
+export OPENSHELL_GATEWAY=nemoclaw
+
+# See where inference currently points, and what providers exist.
+openshell inference get
+openshell provider list
+openshell provider list-profiles   # valid --type values
+
+# 1. Create a provider to hold the backend credential.
+openshell provider create --name nvidia-prod --type nvidia \
+  --credential NVIDIA_API_KEY=nvapi-xxxxxxxx
+
+# 2. Point the gateway's inference route at it.
+openshell inference set --provider nvidia-prod \
+  --model nvidia/nemotron-3-super-120b-a12b --timeout 180
+
+# 3. Confirm.
+openshell inference get
+```
+
+`provider create --type` accepts the inference profiles reported by `openshell provider list-profiles` — currently `nvidia`, `openai`, `aws-bedrock`, `deepinfra`, and `google-vertex-ai`. For an OpenAI-compatible endpoint, supply the base URL as config rather than a credential alone:
+
+```bash
+openshell provider create --name my-endpoint --type openai \
+  --credential COMPATIBLE_API_KEY=sk-xxxxxxxx \
+  --config OPENAI_BASE_URL=https://api.example.com/v1
+```
+
+Notes on behaviour worth knowing before you rely on this:
+
+- **`--model` forces the model.** The router overwrites whatever model string the agent sends. A request carrying `{"model": "anything"}` still comes back as the configured model. This means agent-side model labels left over from a previous provider are cosmetic only — requests reach the new backend regardless, so there is no need to touch the sandbox to "fix" them.
+- **`inference set` validates the endpoint live** before saving and prints the validated URL, so a bad key or unreachable host fails immediately instead of at the next agent turn. `--no-verify` skips that check.
+- **Changes hot-reload in roughly five seconds, with no sandbox restart.** Confirm it landed by looking for `OCSF CONFIG:UPDATED ... Inference routes updated` in the sandbox container logs.
+- **Timeout defaults to 60s.** Raise it (`--timeout 180`) for reasoning models that spend a long time before first token.
+- Reasoning models such as Nemotron 3 return a non-standard `reasoning_content` field alongside `content`. Hermes and OpenClaw both ignore it, but it does count toward completion tokens.
+
+To verify end to end from inside a sandbox, stage the request body as a file rather than inlining JSON in a shell command:
+
+```bash
+printf '%s' '{"model":"anything","max_tokens":64,"messages":[{"role":"user","content":"Reply with exactly: ROUTE OK"}]}' > /tmp/req.json
+docker cp /tmp/req.json <container>:/tmp/req.json
+docker exec <container> sh -c '. /tmp/nemoclaw-proxy-env.sh; \
+  curl -s -k -X POST https://inference.local/v1/chat/completions \
+  -H "Content-Type: application/json" --data-binary @/tmp/req.json'
+```
+
+A healthy response echoes the model you configured on the gateway, not the one in the request.
+
+When checking container logs for authentication failures afterwards, anchor the window to a timestamp **after** the config update (`docker logs --since 2026-08-14T15:42:00Z <container>`). A relative window such as `--since 20m` will include the pre-change failures and make a working route look broken.
+
+Keep the previous provider defined so you can roll back in one command:
+
+```bash
+openshell inference set --provider compatible-endpoint \
+  --model Qwen/Qwen3.6-35B-A3B --timeout 180
+```
+
+To rotate a key without changing the route, update the provider in place:
+
+```bash
+openshell provider update nvidia-prod --credential NVIDIA_API_KEY=nvapi-xxxxxxxx
+```
+
 ## MCP Access Broker
 
 OpenShell Control can install and broker MCP servers without disclosing the full MCP inventory to sandboxes.

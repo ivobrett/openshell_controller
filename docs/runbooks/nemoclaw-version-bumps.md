@@ -66,14 +66,49 @@ in the same change set.
 > the digest pin makes impossible.
 >
 > **LOCKSTEP RULE for every future NemoClaw/OpenClaw bump:** when you move
-> `NEMOCLAW_INSTALL_REF` / `OPENCLAW_VERSION`, also refresh the digest so it
-> carries the new OpenClaw. Recipe:
+> `NEMOCLAW_INSTALL_REF` / `OPENCLAW_VERSION`, also refresh the digest.
+>
+> **PIN FROM THE RELEASE TAG, NEVER FROM `:latest`.** `sandbox-base:latest` is
+> rebuilt continuously and floats ahead of the NemoClaw tag you are installing.
+> Pin from `sandbox-base:v<NEMOCLAW_INSTALL_REF>` — the base that release was
+> cut against. Recipe:
 >
 > ```bash
-> docker pull -q ghcr.io/nvidia/nemoclaw/sandbox-base:latest
-> docker run --rm ghcr.io/nvidia/nemoclaw/sandbox-base:latest openclaw --version   # must equal OPENCLAW_VERSION
-> docker images --digests ghcr.io/nvidia/nemoclaw/sandbox-base | grep latest       # copy the sha256 into NEMOCLAW_SANDBOX_BASE_IMAGE_REF
+> TAG=v0.0.108   # == NEMOCLAW_INSTALL_REF
+> REF="ghcr.io/nvidia/nemoclaw/sandbox-base:$TAG"
+> docker pull -q "$REF"
+> # 1. anti-downgrade guard — must equal OPENCLAW_VERSION
+> docker run --rm --network none --entrypoint /bin/sh "$REF" -c 'openclaw --version'
+> # 2. security-package inventory — must be byte-identical to
+> #    SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY in NemoClaw's
+> #    src/lib/sandbox-base-image/security-inventory.ts at $TAG (and root:root 0444)
+> docker run --rm --network none --entrypoint /bin/sh "$REF" -c \
+>   'stat -c %u:%g:%a /usr/local/share/nemoclaw/security-packages.txt; \
+>    cat /usr/local/share/nemoclaw/security-packages.txt'
+> # 3. copy the sha256 into NEMOCLAW_SANDBOX_BASE_IMAGE_REF
+> docker inspect --format '{{index .RepoDigests 0}}' "$REF"
 > ```
+>
+> **Step 2 is NOT optional — skipping it caused a total fresh-deploy outage on
+> 2026-08-15.** NemoClaw v0.0.108 added `sandboxBaseImageHasSecurityInventory()`,
+> which execs into the base image and byte-compares
+> `/usr/local/share/nemoclaw/security-packages.txt` against a hard-coded list.
+> The digest refreshed from `:latest` on 2026-08-14 (`sha256:929a45a9…`) passed
+> the `openclaw --version` check (still 2026.7.1) but carried
+> `vim-common`/`vim-tiny` `2:9.2.0858-1` (expected `2:9.2.0782-1`) and
+> `libssh2-1t64 …+nemoclaw2` (expected `…+nemoclaw1`). Every OpenClaw and Hermes
+> create on a fresh box died with:
+>
+> ```
+> Warning: OpenClaw sandbox base image … lacks the immutable security package inventory.
+> Error: OpenClaw sandbox base image override '…' could not be resolved to an
+> immutable trusted digest or failed required compatibility checks.
+> ```
+>
+> Fixed by re-pinning to the `v0.0.108` release tag,
+> `sha256:7643e189773a01f12a1beacd3bbc0ef709d7ca748e10c9f00222039f4d4c6aac`.
+> Note the **controller's own installer is unaffected** — it *builds*
+> `Dockerfile.base` locally and tags it, rather than pulling the remote tag.
 >
 > Test guarding it: `backend/tests/test_startup_agentgateway_template.py::test_sandbox_base_image_frozen_to_digest`.
 > The pin lives in FOUR sync'd places (keep them coherent):
@@ -81,17 +116,74 @@ in the same change set.
 > doesn't write runtime env), the cloud template (version + digest, runtime
 > env), `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
 > `byovps_bootstrap.py` (BYOVPS phase 2, `NEMOCLAW_INSTALL_TAG` + digest in its
-> onboard export and `.env.local`). **COHERENT (2026-07-28):** all four writers
-> are at **v0.0.96 / OpenClaw 2026.7.1** (NemoClaw-tag-only bump #7656 —
-> inference-egress hardening + base-image refresh, no companion-version move).
-> The base-image digest was refreshed in lockstep to
-> `sha256:407edbbb074dda10ea90343369ddcbb400dfaad91128374672352aabaaffd9b1`
-> (:latest verified OpenClaw 2026.7.1). Because OpenClaw stayed 2026.7.1 across
-> v0.0.95→v0.0.96, even the OLD digest was NOT anti-downgrade-fatal — but always
-> refresh the digest with the recipe above when you bump manidae-cloud. The
-> digest freeze is wired into both manidae runtime-env writers (cloud template +
-> `byovps_bootstrap.py`). Full write-up:
-> `memory/project_openclaw_floating_base_image_skew.md`.
+> onboard export and `.env.local`). **COHERENT (2026-08-14):** all four writers
+> are at **v0.0.108 / OpenShell 0.0.101 / OpenClaw 2026.7.1 / Hermes 0.19.0**.
+> Unlike the previous several bumps this was **NOT tag-only** — two companion
+> versions moved (OpenShell 0.0.85→0.0.101 via the blueprint's min==max, and
+> Hermes 0.18.0→0.19.0 / calver v2026.7.1→v2026.7.20), so the OpenShell install
+> line had to move in all three manidae writers too, and `--skip-openshell` is
+> invalid for upgrading any live box still on 0.0.85.
+> The base-image digest is
+> `sha256:7643e189773a01f12a1beacd3bbc0ef709d7ca748e10c9f00222039f4d4c6aac`
+> — the **`sandbox-base:v0.0.108` release tag** (OpenClaw 2026.7.1, inventory
+> verified). It was corrected on 2026-08-15 from `sha256:929a45a9…`, which had
+> been taken from the floating `:latest` on 2026-08-14 and broke every create;
+> see the recipe above. The digest freeze is wired into both manidae runtime-env
+> writers (cloud template + `byovps_bootstrap.py`).
+> Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
+>
+> ### Second v0.0.108 fresh-deploy regression — the gateway placeholder
+>
+> Independent of the digest, v0.0.108 also broke fresh deploys via the
+> **`nemoclaw`@17670 gateway placeholder** that manidae's provisioning used to
+> register. v0.0.108's gateway-authority preflight resolves the managed gateway
+> name `nemoclaw` at its expected port 8080 and compares the registered
+> endpoint; `17670 != 8080` yields `endpointBinding = "mismatch"`, which with
+> `reuseState = "healthy"` becomes a **blocking** `gateway.port.owner_mismatch`
+> finding. `nemoclaw onboard` aborts in ~1.4s with "The gateway port is held by
+> an incompatible or ambiguous owner. / Gateway port 8080 is occupied by an
+> unknown listener" — the second line is misleading, nothing is on 8080. Our own
+> bootstrap placeholder blocked the onboarding that used to re-point it.
+>
+> It also **masked a second blocker**: NemoClaw only auto-remediates the Docker
+> containerd-snapshotter conflict (`host.docker.storage_incompatible`, hit on
+> Docker 26+ with no `/etc/docker/daemon.json`) when
+> `hasRemediableStorageConflict()` sees *exactly one* blocking finding.
+>
+> Fix: never pre-register `nemoclaw`; let `onboard` create it on 8080. Applied
+> in manidae-cloud (`startup_agentgateway.sh.j2`, `vps_validation.py`,
+> `byovps_bootstrap.py`) 2026-08-15. `nemoclaw host probe --json` is the
+> diagnostic — read `gateway.port_conflict` / `gateway.owner.port`, not the
+> user-facing message.
+>
+> ### Shim retired at v0.0.108 — `npm audit signatures`
+>
+> Upstream moved Sigstore auditing OUT of the image builds (discussion #8944),
+> so `npm --prefix … mcporter-runtime audit signatures` no longer appears in any
+> Dockerfile. Our best-effort wrap in **both** the controller installer and
+> `startup_agentgateway.sh.j2` had degraded to a silent no-op and has been
+> removed. This retires the Sigstore-TUF-403 failure class
+> (`memory/project_openclaw_build_audit_signatures_tuf_403.md`). The
+> manidae-cloud test `test_audit_signatures_made_best_effort` was **inverted**
+> to `test_audit_signatures_shim_removed_as_obsolete`, so a careless re-add is
+> still caught. If a future tag reintroduces the in-build command, invert the
+> test back and restore the wrap from history (controller `6f366fc`,
+> manidae-cloud `4d673add`).
+>
+> ### New live-index apt pins at v0.0.108
+>
+> `libssl-dev`, `openssh-server`, `zlib1g-dev`, `util-linux` are new pins in
+> `Dockerfile.base`'s `native-security-builder` and runtime stages. They read the
+> LIVE trixie index, so they carry the usual point-release drift risk; all four
+> were unpinned pre-emptively (controller installer + cloud template — **not**
+> `vps_validation.py`, which retains its known older three-package form).
+> All 24 live-index pins were scanned against the index on 2026-08-14 and every
+> one still resolved, so this bump was not blocked on a stale pin. Scan recipe:
+> run `apt-cache madison <pkg>` for each pin inside the exact base digest
+> (`node:22-trixie-slim@sha256:db8a96a6…`) and compare to the pinned string.
+> Note `libexpat1` moved 2.8.2-1→2.8.3-1 but is fetched as a SHA256-pinned .deb
+> from a NEW frozen snapshot (`20260811T082421Z`, alongside the existing
+> `20260724T000000Z` for jq/Vim) — frozen, so no unpin needed.
 
 > **Update (2026-07-11, first live instance of the trixie failure):**
 > Debian shipped curl `8.14.1-2+deb13u4` and dropped the pinned `deb13u3`
@@ -289,3 +381,23 @@ use; `git describe --tags` fails on our tag-less shallow clones, use
    non-loopback bind auth-provider gate. Our remote-desktop exposure is
    calibrated to their 0.18 semantics (HERMES_REMOTE_DESKTOP.md §1a);
    the 0.17→0.18 bump silently broke every exposure until adapted.
+
+   **How to actually run this check** (done for 0.18.0→0.19.0 on 2026-08-14):
+   shallow-fetch both calver tags from `NousResearch/hermes-agent`, extract each
+   function body from `hermes_cli/web_server.py` at both tags, and diff the
+   bodies — do NOT diff the whole file, which grew +6007 lines between those two
+   releases and buries the signal completely.
+
+   ```bash
+   git init -q hermes-src && cd hermes-src
+   git remote add origin https://github.com/NousResearch/hermes-agent.git
+   for t in v2026.7.1 v2026.7.20; do
+     git fetch -q --depth 1 origin "$t" && git tag -f "$t" FETCH_HEAD^{commit}
+   done
+   # then extract each `def <fn>` block at both tags and diff the two extracts
+   ```
+
+   **Result for 0.18.0→0.19.0: all four guards BYTE-IDENTICAL**, so
+   `HERMES_REMOTE_DESKTOP.md` needed no recalibration on the v0.0.108 bump.
+   Record the outcome here on every Hermes move so the next agent knows whether
+   the check was actually performed or merely intended.

@@ -116,21 +116,45 @@ in the same change set.
 > doesn't write runtime env), the cloud template (version + digest, runtime
 > env), `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
 > `byovps_bootstrap.py` (BYOVPS phase 2, `NEMOCLAW_INSTALL_TAG` + digest in its
-> onboard export and `.env.local`). **COHERENT (2026-08-14):** all four writers
-> are at **v0.0.108 / OpenShell 0.0.101 / OpenClaw 2026.7.1 / Hermes 0.19.0**.
-> Unlike the previous several bumps this was **NOT tag-only** — two companion
-> versions moved (OpenShell 0.0.85→0.0.101 via the blueprint's min==max, and
-> Hermes 0.18.0→0.19.0 / calver v2026.7.1→v2026.7.20), so the OpenShell install
-> line had to move in all three manidae writers too, and `--skip-openshell` is
-> invalid for upgrading any live box still on 0.0.85.
+> onboard export and `.env.local`). **COHERENT (2026-08-22):** all four writers
+> are at **v0.0.113 / OpenShell 0.0.106 / OpenClaw 2026.7.1 / Hermes 0.19.0**.
+> Like the previous bump this was **NOT tag-only**, but only ONE companion
+> version moved: OpenShell 0.0.101→0.0.106 via the blueprint's min==max, so the
+> OpenShell install line had to move in all three manidae writers too, and
+> `--skip-openshell` is invalid for upgrading any live box still on 0.0.101 (a
+> box still on 0.0.85 now crosses TWO destructive windows). Hermes stayed
+> 0.19.0 and OpenClaw stayed 2026.7.1, so the Hermes guard re-check below was
+> **not triggered**; `langchain-deepagents-code` moved 0.1.34→0.1.55 and two new
+> upstream agents (`pi` 0.84.1, `nemocua`) appeared, which the controller
+> deliberately does not surface.
 > The base-image digest is
-> `sha256:7643e189773a01f12a1beacd3bbc0ef709d7ca748e10c9f00222039f4d4c6aac`
-> — the **`sandbox-base:v0.0.108` release tag** (OpenClaw 2026.7.1, inventory
-> verified). It was corrected on 2026-08-15 from `sha256:929a45a9…`, which had
-> been taken from the floating `:latest` on 2026-08-14 and broke every create;
-> see the recipe above. The digest freeze is wired into both manidae runtime-env
-> writers (cloud template + `byovps_bootstrap.py`).
+> `sha256:31fcee7bb14d5e3e144ebe6e8ad59b26f966b3fc125609cf721607f8b346a7d8`
+> — the **`sandbox-base:v0.0.113` release tag** (OpenClaw 2026.7.1, inventory
+> verified byte-identical, root:root 0444).
+> **This bump proves why step 2 of the recipe is mandatory even when OpenClaw
+> does not move**: v0.0.113's expected inventory changed (vim-common/vim-tiny
+> `2:9.2.0782-1`→`2:9.2.0858-1`, libssh2-1t64 `+nemoclaw1`→`+nemoclaw2`), so
+> carrying v0.0.108's digest forward would have failed every create while
+> `openclaw --version` still read a reassuring 2026.7.1.
+> Digest history: `7643e189…` (v0.0.108, corrected 2026-08-15 from
+> `sha256:929a45a9…`, which had been taken from the floating `:latest` on
+> 2026-08-14 and broke every create — note that bad image was in fact carrying
+> the *future* v0.0.113 package set). The digest freeze is wired into both
+> manidae runtime-env writers (cloud template + `byovps_bootstrap.py`).
 > Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
+>
+> ### v0.0.108 → v0.0.113 pre-flight results (2026-08-22)
+>
+> No new apt pins — the pinned package SET is identical to v0.0.108, and the two
+> versions that moved are not index-resolved (vim from frozen snapshot
+> `20260727T143429Z`, libssh2 built in-tree), so the unpin sed list is
+> UNCHANGED. All 23 live-index pins re-scanned against trixie and every one
+> resolves. The `maxBuffer: 256` shim still anchors at 3 sites in
+> `src/lib/state/sandbox.ts`. `npm audit signatures` is still absent upstream, so
+> the shim retired at v0.0.108 stays retired. OpenShell's
+> `container_name_for_sandbox()` is **byte-identical** across 0.0.101→0.0.106, so
+> the workspace-qualified container-name resolvers (commit `2731e3d`,
+> `tests/sandbox-container-name-workspace-check.mjs`) need no change.
 >
 > ### Second v0.0.108 fresh-deploy regression — the gateway placeholder
 >

@@ -8,71 +8,81 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# *** OPENSHELL MOVED 0.0.85 -> 0.0.101 ON THE v0.0.96->v0.0.108 BUMP. ***
+# *** OPENSHELL MOVED 0.0.101 -> 0.0.106 ON THE v0.0.108->v0.0.113 BUMP. ***
 # `--skip-openshell` is INVALID for this upgrade. On a live box this is the
 # DESTRUCTIVE maintenance window — follow
 # docs/runbooks/live-openshell-bump-with-agent-upgrade.md, NOT
-# byovps-controller-upgrade.md.
-OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.101}"
+# byovps-controller-upgrade.md. (The previous bump moved 0.0.85 -> 0.0.101 for
+# the same reason, so a box still on 0.0.85 crosses TWO such windows in one go.)
+OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.106}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.108 (commit 9df101e; bumped from v0.0.96 on
-# 2026-08-14, spanning 12 upstream releases v0.0.97..v0.0.108). Headline changes
-# (NVIDIA/NemoClaw discussion #8944): read-only host mounts via `--host-mount`,
-# an experimental Muse Glimmer vLLM profile for DGX Spark, MCP registration
-# retargeted at OpenClaw workspace config, BuildKit attestation verification,
-# Sigstore auditing moved OUT of image builds, gateway credentials stripped from
-# descendant processes, managed state created owner-only, and legacy `gosu`
-# privilege transitions rejected. Node 22.23.2 in managed images.
-# Pre-flight against the v0.0.96..v0.0.108 diff (all verified 2026-08-14 from
-# source at tag v0.0.108 / commit 9df101e):
-#   - blueprint min_openshell_version == max_openshell_version == "0.0.101"
-#     (was "0.0.85") -> OPENSHELL_VERSION bumped in lockstep above. This is a
+# NemoClaw is pinned to TAG v0.0.113 (commit 34cad8f; bumped from v0.0.108 on
+# 2026-08-22, spanning 5 upstream releases v0.0.109..v0.0.113). Headline changes
+# (NVIDIA/NemoClaw discussion #9842): interactive connections no longer block
+# concurrent sandbox commands, explicit starts recover from transient OpenShell
+# errors, faster onboarding-failure detection with diagnostic state preserved,
+# default model moved to gemini-3.6-flash, safer local-inference (vLLM)
+# publication and validation, experimental Google Chat messaging via Pub/Sub
+# with keyless auth, authoritative policy preservation, credential-projection
+# hardening, and stronger release provenance.
+# Pre-flight against the v0.0.108..v0.0.113 diff (all verified 2026-08-22 from
+# source at tag v0.0.113 / commit 34cad8f):
+#   - blueprint min_openshell_version == max_openshell_version == "0.0.106"
+#     (was "0.0.101") -> OPENSHELL_VERSION bumped in lockstep above. This is a
 #     COMPANION-VERSION MOVE, not a tag-only bump: the installer must actually
 #     install OpenShell, and every live sandbox gets backed up + recreated.
-#     min_openclaw_version still "2026.3.11".
-#   - HERMES MOVED 0.18.0 -> 0.19.0 (calver tag v2026.7.1 -> v2026.7.20;
-#     agents/hermes/manifest.yaml expected_version + Dockerfile.base
-#     ARG HERMES_VERSION/HERMES_SEMVER, HERMES_TARBALL_SHA256 changed to
-#     285f3fc134ff466a90065e1517801a68993733b807158ee8f32aa01613786990).
-#     Every running Hermes sandbox is therefore stale and WILL be rebuilt.
-#     REMOTE-DESKTOP RE-CHECK DONE (the 0.17->0.18 bump silently broke every
-#     exposure, so this is mandatory per docs/runbooks/nemoclaw-version-bumps.md):
-#     all four guards in hermes_cli/web_server.py — _is_accepted_host,
-#     _ws_host_origin_is_allowed, _ws_client_is_allowed, and the non-loopback
-#     bind auth-provider gate — are BYTE-IDENTICAL across 0.18.0..0.19.0
-#     (verified by extracting each function body from both tags and diffing;
-#     the file grew +6007 lines elsewhere). HERMES_REMOTE_DESKTOP.md §1a stays
-#     valid — no recalibration needed.
-#   - OpenClaw reviewed default STILL 2026.7.1 (ARG OPENCLAW_VERSION=2026.7.1,
-#     integrity pin OPENCLAW_2026_7_1_INTEGRITY byte-identical in Dockerfile.base).
-#     langchain-deepagents-code STILL 0.1.34.
-#   - `npm audit signatures` is GONE from BOTH Dockerfile and Dockerfile.base
-#     (upstream "Sigstore auditing moved outside image builds"). Our best-effort
-#     wrap is now OBSOLETE and has been REMOVED below — it had become a silent
-#     no-op. This also retires the TUF-403 failure class documented in
-#     memory/project_openclaw_build_audit_signatures_tuf_403.md.
+#   - HERMES UNCHANGED at 0.19.0 (calver v2026.7.20; ARG HERMES_VERSION,
+#     HERMES_SEMVER, HERMES_TARBALL_SHA256 and HERMES_NPM_INTEGRITY are all
+#     byte-identical to v0.0.108). The mandatory remote-desktop guard re-check
+#     in docs/runbooks/nemoclaw-version-bumps.md is therefore NOT triggered — it
+#     fires only when the Hermes pin moves. HERMES_REMOTE_DESKTOP.md §1a stays
+#     valid as written. The ONLY Hermes change is HERMES_UV_EXTRAS gaining
+#     "acp" (Agent-Client-Protocol) — a dependency-surface addition, not a
+#     dashboard-guard change.
+#   - OpenClaw reviewed default STILL 2026.7.1 (ARG OPENCLAW_VERSION=2026.7.1 in
+#     both Dockerfile and Dockerfile.base).
+#   - langchain-deepagents-code MOVED 0.1.34 -> 0.1.55 (its manifest.yaml
+#     expected_version), so any running deepagents sandbox IS stale and will be
+#     rebuilt by the installer's upgrade-sandboxes pass. Hermes and OpenClaw
+#     sandboxes are NOT stale on agent version alone this time — but the
+#     OpenShell move above recreates them regardless.
+#   - TWO NEW AGENTS ship at v0.0.113: `pi` (expected_version 0.84.1, npm,
+#     terminal coding agent) and `nemocua` (experimental computer-use agent,
+#     install_method: external, no expected_version). The controller does not
+#     surface either — app/lib/sandboxCreate/agentFilter.ts models a closed
+#     "openclaw" | "hermes" union and maps anything else to "unknown", which is
+#     the correct conservative default. Exposing them is a deliberate future
+#     feature, NOT a requirement of this bump.
+#   - `npm audit signatures` is STILL absent from both Dockerfile and
+#     Dockerfile.base, so the shim retired on the v0.0.108 bump stays retired
+#     (see the REMOVED note below the unpin block).
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites in
 #     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies, and
-#     matters MORE now: scripts/install.sh grew +1204 lines adding an
-#     orchestrated pre-upgrade flow (run_preupgrade_backup ->
-#     `NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1 backup-all` -> retire gateway ->
-#     install OpenShell -> recreate), so backup-all is now ON the upgrade
-#     critical path rather than a side operation. Resume knob if it aborts
-#     mid-window: NEMOCLAW_OPENSHELL_UPGRADE_PREPARED=1.
-#   - NEW live-index apt pins in Dockerfile.base's `apt-get update && apt-get
-#     install` stages (these read the LIVE trixie index, so they are exposed to
-#     Debian point-release drift — the exit-100 failure class): libssl-dev,
-#     openssh-server, zlib1g-dev, util-linux. ALL 24 live-index pins were
-#     scanned against the trixie index on 2026-08-14 (apt-cache madison inside
-#     the pinned base digest) and every one still resolves — so this bump is
-#     NOT blocked on a stale pin.
-#     libexpat1 moved 2.8.2-1 -> 2.8.3-1 but is fetched as a SHA256-pinned .deb
-#     from a NEW frozen snapshot (20260811T082421Z, alongside the existing
-#     20260724T000000Z for jq/Vim) -> frozen, no unpin needed. The
-#     `+nemoclaw1`-suffixed packages (libssh2-1t64, perl/perl-base,
-#     nemoclaw-python3.13-htmlparser-fix) are built in-tree by
-#     scripts/security/build-*-security-packages.sh -> not index-resolved.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.108}}"
+#     still sits on the upgrade critical path via the orchestrated
+#     run_preupgrade_backup -> `NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1
+#     backup-all` -> retire gateway -> install OpenShell -> recreate flow.
+#     Resume knob if it aborts mid-window: NEMOCLAW_OPENSHELL_UPGRADE_PREPARED=1.
+#   - NO NEW apt pins. The pinned package SET is identical to v0.0.108; only two
+#     pinned VERSIONS moved, and NEITHER reads the live index:
+#     vim-common/vim-tiny 2:9.2.0782-1 -> 2:9.2.0858-1 (SHA256-pinned .debs from
+#     a NEW frozen snapshot 20260727T143429Z) and libssh2-1t64 +nemoclaw1 ->
+#     +nemoclaw2 (built in-tree by scripts/security/build-*-security-packages.sh).
+#     The unpin sed list below is therefore UNCHANGED. All 23 live-index pins
+#     were re-scanned against the trixie index on 2026-08-22 (apt-cache madison
+#     inside the pinned base node:22-trixie-slim@sha256:db8a96a6…) and every one
+#     still resolves — this bump is NOT blocked on a stale pin.
+#   - SECURITY INVENTORY MOVED, so the base-image digest MUST move in lockstep.
+#     NemoClaw's sandboxBaseImageHasSecurityInventory() byte-compares
+#     /usr/local/share/nemoclaw/security-packages.txt against
+#     SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY, which now expects the new
+#     vim/libssh2 versions above. A base image pinned for v0.0.108
+#     (sha256:7643e189…) FAILS that check on v0.0.113 and breaks every create —
+#     exactly the 2026-08-15 outage class. This file carries the version pin
+#     only; the digest lives in manidae-cloud's startup_agentgateway.sh.j2 and
+#     byovps_bootstrap.py, both moved to sha256:31fcee7b… in the same change
+#     set (the v0.0.113 RELEASE TAG, verified: OpenClaw 2026.7.1, inventory
+#     byte-identical, root:root 0444).
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.113}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

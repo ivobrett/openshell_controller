@@ -13,11 +13,13 @@ export function useInventory() {
     select: (data) => ({
       sandboxes: normalizeFromResponse(data),
       nemoclaw: data?.nemoclaw ?? null,
+      awaitingFirstSandbox: data?.awaitingFirstSandbox === true,
     }),
   })
   return {
     sandboxes: query.data?.sandboxes ?? [],
     nemoclaw: query.data?.nemoclaw ?? null,
+    awaitingFirstSandbox: query.data?.awaitingFirstSandbox ?? false,
     isLoading: query.isLoading,
     isReconnecting: query.isError && !!query.data,
     error: query.isError && !query.data ? (query.error as Error).message : null,

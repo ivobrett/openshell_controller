@@ -22,6 +22,13 @@ export interface InventoryResponse {
   sandboxes?: any[]
   pods?: { items?: any[] }
   nemoclaw?: NemoClawSummary | null
+  /**
+   * Set when the host has no managed NemoClaw gateway yet AND has never had a
+   * sandbox — a fresh box awaiting its first create, which is what actually
+   * registers the gateway. Expected state, not a fault; see the FRESH-BOX
+   * GATEWAY GAP note in app/api/telemetry/real/route.ts.
+   */
+  awaitingFirstSandbox?: boolean
 }
 
 function normalizeStatus(status: unknown): SandboxInventoryItem["status"] {

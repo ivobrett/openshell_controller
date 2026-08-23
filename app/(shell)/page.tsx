@@ -47,7 +47,7 @@ function ActivityDot({ status }: { status?: string }) {
 
 export default function DashboardPage() {
   const { me, can } = useAuth()
-  const { sandboxes, nemoclaw, isLoading, error, refetch } = useInventory()
+  const { sandboxes, nemoclaw, isLoading, error, refetch, awaitingFirstSandbox } = useInventory()
   const activityQuery = useActivity(5)
   const recentActivity = can("viewActivity") ? (activityQuery.data ?? []).slice(0, 5) : []
 
@@ -189,6 +189,18 @@ export default function DashboardPage() {
                   ? "Create your first sandbox to get started."
                   : "Ask your operator to grant you access to a sandbox."}
               </p>
+              {/*
+                Fresh box: the managed NemoClaw gateway does not exist until the
+                first `nemoclaw onboard` runs, i.e. until the first sandbox is
+                created. Explain that rather than leaving the host looking
+                half-broken. See the FRESH-BOX GATEWAY GAP note in
+                app/api/telemetry/real/route.ts.
+              */}
+              {awaitingFirstSandbox && (
+                <p className="text-[10px] text-muted-foreground" data-testid="awaiting-first-sandbox-note">
+                  The NemoClaw gateway is created automatically with your first sandbox.
+                </p>
+              )}
               {can("createSandbox") && (
                 <Button asChild size="sm">
                   <Link href="/sandboxes/new">New sandbox</Link>

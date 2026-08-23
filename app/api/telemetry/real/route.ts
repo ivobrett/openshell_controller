@@ -436,13 +436,46 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(payload)
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch live OpenShell sandbox inventory"
+
+    // FRESH-BOX GATEWAY GAP (see docs/runbooks/nemoclaw-version-bumps.md).
+    // On a newly provisioned box the managed gateway does not exist yet:
+    // manidae-cloud commit b6964b22 (2026-08-15) deliberately stopped
+    // pre-registering a `nemoclaw` placeholder, because on NemoClaw v0.0.108+
+    // a placeholder bound to the wrong port (17670 != DEFAULT_GATEWAY_PORT
+    // 8080) is a BLOCKING gateway.port.owner_mismatch finding that aborts
+    // `nemoclaw onboard` outright. The gateway is instead created by the first
+    // `nemoclaw onboard`, i.e. by the first sandbox create. Until then
+    // `openshell sandbox list` fails with "Unknown gateway 'nemoclaw'".
+    //
+    // That is an EXPECTED state, not a fault, and rendering it as a red error
+    // (with a repair button that runs `gateway start` on a gateway that was
+    // never registered, so cannot possibly work) is simply wrong. Report it as
+    // an empty inventory carrying a notice instead.
+    //
+    // Guard: this is only benign while the host has never had a sandbox. If
+    // the NemoClaw registry DOES list sandboxes but the gateway is gone, that
+    // is real breakage and must stay loud — fall through to the 500 below.
+    // The registry is read from disk and is gateway-independent, so it is
+    // still readable in exactly the situation where the gateway is missing.
+    if (/Unknown gateway/i.test(message)) {
+      const registry = readNemoClawRegistry()
+      const knownSandboxes = Object.keys(registry?.sandboxes ?? {})
+      if (knownSandboxes.length === 0) {
+        return NextResponse.json({
+          sandboxes: [],
+          pods: { items: [] },
+          nemoclaw: null,
+          count: 0,
+          awaitingFirstSandbox: true,
+          message:
+            "No sandboxes yet. The NemoClaw gateway is created when you create your first sandbox.",
+        })
+      }
+    }
+
     console.error("Error fetching real telemetry:", error)
 
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to fetch live OpenShell sandbox inventory",
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

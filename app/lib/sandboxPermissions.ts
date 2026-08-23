@@ -212,7 +212,32 @@ export async function resolveSandboxNetworkRule(sandboxId: string, action: strin
     if (chunk.rule && /^[\w.-]+$/.test(chunk.rule)) updateArgs.push("--rule-name", chunk.rule)
     updateArgs.push("--wait", "--timeout", "90")
 
-    const applied = await runOpenShell(updateArgs, 120000)
+    // `policy update --add-endpoint` cannot express `tls` or `allowed_ips`
+    // (its options segment accepts only websocket-credential/<IP>). If the
+    // overlapping preset endpoint sets a non-default tls — `brew`'s
+    // formulae.brew.sh uses tls: skip, for instance — the re-authored rule
+    // defaults to tls "auto" and trips the SAME validator on a different
+    // field. We cannot silently pick a tls mode on the operator's behalf, so
+    // surface an actionable message instead of a second raw CLI dump.
+    let applied: { stdout: string | Buffer; stderr: string | Buffer }
+    try {
+      applied = await runOpenShell(updateArgs, 120000)
+    } catch (updateError) {
+      const updateDetail = errorText(updateError)
+      const blocked = /tls=/.test(updateDetail) || /allowed_ips=/.test(updateDetail)
+      if (!blocked) throw updateError
+      const conflict = updateDetail.match(/conflicting metadata:\s*([\s\S]+?)"/)?.[1]?.replace(/\s+/g, " ").trim()
+      throw new Error(
+        `Cannot grant ${endpoints.join(", ")} to ${binaries.join(", ")} automatically: an existing ` +
+          `network policy already covers this endpoint with different connection settings` +
+          (conflict ? ` (${conflict})` : "") +
+          `. OpenShell rejects overlapping endpoints that disagree on tls/allowed_ips, and ` +
+          `\`openshell policy update --add-endpoint\` cannot set those fields. Grant it by editing ` +
+          `the sandbox policy directly with \`openshell policy set\` so the new endpoint matches the ` +
+          `existing one, or add ${binaries.join(", ")} to the policy that already owns this endpoint ` +
+          `if the wider access it carries is acceptable.`,
+      )
+    }
 
     // The grant is live; clear the chunk so the queue reflects reality.
     const cleared = await runOpenShell(

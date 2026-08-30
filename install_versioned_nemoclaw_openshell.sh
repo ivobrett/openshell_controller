@@ -8,81 +8,101 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# *** OPENSHELL MOVED 0.0.101 -> 0.0.106 ON THE v0.0.108->v0.0.113 BUMP. ***
-# `--skip-openshell` is INVALID for this upgrade. On a live box this is the
-# DESTRUCTIVE maintenance window — follow
-# docs/runbooks/live-openshell-bump-with-agent-upgrade.md, NOT
-# byovps-controller-upgrade.md. (The previous bump moved 0.0.85 -> 0.0.101 for
-# the same reason, so a box still on 0.0.85 crosses TWO such windows in one go.)
+# *** OPENSHELL DID NOT MOVE ON THE v0.0.113 -> v0.0.116 BUMP. ***
+# v0.0.116's blueprint still declares min==max_openshell_version == "0.0.106",
+# so this is a TAG-ONLY bump: `--skip-openshell` is VALID on any box already at
+# OpenShell 0.0.106, and no destructive maintenance window is required. Follow
+# docs/runbooks/byovps-controller-upgrade.md, NOT
+# live-openshell-bump-with-agent-upgrade.md. (A box still on 0.0.101 or 0.0.85
+# has NOT caught up — it still crosses the earlier destructive window(s) first.)
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.106}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.113 (commit 34cad8f; bumped from v0.0.108 on
-# 2026-08-22, spanning 5 upstream releases v0.0.109..v0.0.113). Headline changes
-# (NVIDIA/NemoClaw discussion #9842): interactive connections no longer block
-# concurrent sandbox commands, explicit starts recover from transient OpenShell
-# errors, faster onboarding-failure detection with diagnostic state preserved,
-# default model moved to gemini-3.6-flash, safer local-inference (vLLM)
-# publication and validation, experimental Google Chat messaging via Pub/Sub
-# with keyless auth, authoritative policy preservation, credential-projection
-# hardening, and stronger release provenance.
-# Pre-flight against the v0.0.108..v0.0.113 diff (all verified 2026-08-22 from
-# source at tag v0.0.113 / commit 34cad8f):
-#   - blueprint min_openshell_version == max_openshell_version == "0.0.106"
-#     (was "0.0.101") -> OPENSHELL_VERSION bumped in lockstep above. This is a
-#     COMPANION-VERSION MOVE, not a tag-only bump: the installer must actually
-#     install OpenShell, and every live sandbox gets backed up + recreated.
-#   - HERMES UNCHANGED at 0.19.0 (calver v2026.7.20; ARG HERMES_VERSION,
-#     HERMES_SEMVER, HERMES_TARBALL_SHA256 and HERMES_NPM_INTEGRITY are all
-#     byte-identical to v0.0.108). The mandatory remote-desktop guard re-check
-#     in docs/runbooks/nemoclaw-version-bumps.md is therefore NOT triggered — it
+# NemoClaw is pinned to TAG v0.0.116 (commit b12bede; bumped from v0.0.113 on
+# 2026-08-30, spanning 3 upstream releases v0.0.114..v0.0.116). Headline changes
+# (NVIDIA/NemoClaw discussion #10594): OpenClaw endpoint validation now works
+# from inside the sandbox without a messaging channel (#10458/#10531/#10540),
+# Hermes recovery manages only the published receipt-owned Portable Ollama
+# runner (#10505), sandbox identity/authority persists across retries and
+# process restarts (#10510/#10512), uninstall snapshots before deleting unless
+# --destroy-user-data (#10231/#10550/#10562), WSL credential-free Docker
+# fallback (#10470/#10554/#10561), re-onboarding preserves `brave` policy
+# presets (#10457), and OpenSSL 3.5.7 / libevent 2.1.13 security updates
+# (#10532/#10526).
+# Pre-flight against the v0.0.113..v0.0.116 diff (all verified 2026-08-30 from
+# source at tag v0.0.116 / commit b12bede):
+#   - blueprint.yaml is BYTE-IDENTICAL to v0.0.113 — min_openshell_version ==
+#     max_openshell_version == "0.0.106". OPENSHELL_VERSION stays v0.0.106 and
+#     the installer's OpenShell phase can be skipped on an up-to-date box.
+#   - HERMES UNCHANGED at 0.19.0 (calver v2026.7.20; ARG HERMES_VERSION is
+#     byte-identical). The mandatory remote-desktop guard re-check in
+#     docs/runbooks/nemoclaw-version-bumps.md is therefore NOT triggered — it
 #     fires only when the Hermes pin moves. HERMES_REMOTE_DESKTOP.md §1a stays
-#     valid as written. The ONLY Hermes change is HERMES_UV_EXTRAS gaining
-#     "acp" (Agent-Client-Protocol) — a dependency-surface addition, not a
-#     dashboard-guard change.
+#     valid as written. agents/hermes/start.sh did change, but only to add
+#     HERMES_LAZY_INSTALL_TARGET and an extra `refresh_hermes_runtime_config_
+#     hashes compat` reconciliation — no bind-address, Origin-allowlist or
+#     auth-provider semantics were touched.
 #   - OpenClaw reviewed default STILL 2026.7.1 (ARG OPENCLAW_VERSION=2026.7.1 in
-#     both Dockerfile and Dockerfile.base).
-#   - langchain-deepagents-code MOVED 0.1.34 -> 0.1.55 (its manifest.yaml
-#     expected_version), so any running deepagents sandbox IS stale and will be
-#     rebuilt by the installer's upgrade-sandboxes pass. Hermes and OpenClaw
-#     sandboxes are NOT stale on agent version alone this time — but the
-#     OpenShell move above recreates them regardless.
-#   - TWO NEW AGENTS ship at v0.0.113: `pi` (expected_version 0.84.1, npm,
-#     terminal coding agent) and `nemocua` (experimental computer-use agent,
-#     install_method: external, no expected_version). The controller does not
-#     surface either — app/lib/sandboxCreate/agentFilter.ts models a closed
-#     "openclaw" | "hermes" union and maps anything else to "unknown", which is
-#     the correct conservative default. Exposing them is a deliberate future
-#     feature, NOT a requirement of this bump.
-#   - `npm audit signatures` is STILL absent from both Dockerfile and
-#     Dockerfile.base, so the shim retired on the v0.0.108 bump stays retired
-#     (see the REMOVED note below the unpin block).
+#     both Dockerfile and Dockerfile.base; confirmed live in the release-tag
+#     image: `OpenClaw 2026.7.1 (2d2ddc4)`).
+#   - NO agent expected_version moved: hermes 0.19.0, openclaw 2026.7.1,
+#     langchain-deepagents-code 0.1.55, pi 0.84.1 are all byte-identical, and
+#     package.json stays "0.1.0". Combined with the unchanged blueprint this is
+#     a PURE TAG BUMP — `upgrade-sandboxes --auto` has nothing to rebuild and no
+#     running sandbox is recreated. src/lib/sandbox/version.ts (the staleness
+#     logic itself) is also unchanged.
+#   - `pi` and `nemocua` still ship and the controller still does not surface
+#     them — app/lib/sandboxCreate/agentFilter.ts models a closed
+#     "openclaw" | "hermes" union and maps anything else to "unknown".
+#   - `npm audit signatures` is STILL absent from every Dockerfile, so the shim
+#     retired on the v0.0.108 bump stays retired (see the REMOVED note below the
+#     unpin block).
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites in
-#     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies, and
-#     still sits on the upgrade critical path via the orchestrated
-#     run_preupgrade_backup -> `NEMOCLAW_REQUIRE_ALL_SANDBOX_BACKUPS=1
-#     backup-all` -> retire gateway -> install OpenShell -> recreate flow.
-#     Resume knob if it aborts mid-window: NEMOCLAW_OPENSHELL_UPGRADE_PREPARED=1.
-#   - NO NEW apt pins. The pinned package SET is identical to v0.0.108; only two
-#     pinned VERSIONS moved, and NEITHER reads the live index:
-#     vim-common/vim-tiny 2:9.2.0782-1 -> 2:9.2.0858-1 (SHA256-pinned .debs from
-#     a NEW frozen snapshot 20260727T143429Z) and libssh2-1t64 +nemoclaw1 ->
-#     +nemoclaw2 (built in-tree by scripts/security/build-*-security-packages.sh).
-#     The unpin sed list below is therefore UNCHANGED. All 23 live-index pins
-#     were re-scanned against the trixie index on 2026-08-22 (apt-cache madison
-#     inside the pinned base node:22-trixie-slim@sha256:db8a96a6…) and every one
-#     still resolves — this bump is NOT blocked on a stale pin.
+#     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies.
+#   - ONE NEW live-index apt pin: `libssl3t64=3.5.7-1~deb13u2` (OpenSSL 3.5.7,
+#     #10532), added to the main Dockerfile.base apt block alongside gnupg /
+#     ca-certificates / iproute2, and to Dockerfile, agents/hermes,
+#     agents/langchain-deepagents-code and agents/pi. It is DELIBERATELY NOT
+#     ADDED TO THE UNPIN LIST BELOW — unlike every other pin we unpin, this one
+#     is ALSO byte-verified by NemoClaw's frozen security inventory
+#     (`test "$(dpkg-query -W libssl3t64)" = "3.5.7-1~deb13u2"` plus the
+#     security-packages.txt line compared against
+#     SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY). Unpinning it would let apt
+#     select a newer OpenSSL and then fail the dpkg-query assertion and the
+#     inventory byte-compare — trading a recoverable apt exit 100 for an
+#     unrecoverable one. If Debian ever supersedes 3.5.7-1~deb13u2 in trixie,
+#     the ONLY fix is a NemoClaw tag bump; do not reach for the sed.
+#     `libssl-dev` moved 3.5.6-1~deb13u2 -> 3.5.7-1~deb13u2 in the same block
+#     but is already wildcard-unpinned (and is not inventory-verified), so it
+#     needs no change. `libevent-core-2.1-7t64=2.1.13-stable-1` (#10526) is a
+#     SHA256-pinned .deb from the frozen snapshot, installed with `dpkg -i` —
+#     frozen, so no unpin either. All 26 live-index pins were re-scanned against
+#     the trixie index on 2026-08-30 (apt-cache madison inside the pinned base
+#     node:22-trixie-slim@sha256:db8a96a6…, which itself is UNCHANGED) and every
+#     one still resolves — this bump is NOT blocked on a stale pin.
 #   - SECURITY INVENTORY MOVED, so the base-image digest MUST move in lockstep.
-#     NemoClaw's sandboxBaseImageHasSecurityInventory() byte-compares
-#     /usr/local/share/nemoclaw/security-packages.txt against
-#     SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY, which now expects the new
-#     vim/libssh2 versions above. A base image pinned for v0.0.108
-#     (sha256:7643e189…) FAILS that check on v0.0.113 and breaks every create —
-#     exactly the 2026-08-15 outage class. This file carries the version pin
-#     only; the digest lives in manidae-cloud's startup_agentgateway.sh.j2 and
-#     byovps_bootstrap.py, both moved to sha256:31fcee7b… in the same change
-#     set (the v0.0.113 RELEASE TAG, verified: OpenClaw 2026.7.1, inventory
-#     byte-identical, root:root 0444).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.113}}"
+#     v0.0.116 adds "libssl3t64=3.5.7-1~deb13u2" to
+#     SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY and introduces a SECOND, wider
+#     list — OPENCLAW_SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY = the base list
+#     plus "libevent-core-2.1-7t64=2.1.13-stable-1" — checked by the new
+#     openClawSandboxBaseImageHasSecurityInventory() that src/lib/onboard/
+#     base-image.ts uses for the digest-pinned sandbox-base override. A base
+#     image pinned for v0.0.113 (sha256:31fcee7b…) FAILS that check on v0.0.116
+#     and breaks every create — exactly the 2026-08-15 outage class, and the
+#     THIRD consecutive bump where the inventory moved while `openclaw
+#     --version` stayed reassuringly at 2026.7.1. This file carries the version
+#     pin only; the digest lives in manidae-cloud's startup_agentgateway.sh.j2,
+#     startup_nemoclaw.sh.j2 and byovps_bootstrap.py, all moved to
+#     sha256:03a1a319… in the same change set (the v0.0.116 RELEASE TAG,
+#     verified 2026-08-30: OpenClaw 2026.7.1, security-packages.txt
+#     byte-identical to the OpenClaw inventory, root:root 0444).
+#   - BEHAVIOUR CHANGE on the upgrade path (#10211): `upgrade-sandboxes --check`
+#     now `process.exit(1)` when it finds stale, unknown, orphaned or
+#     recovery-candidate sandboxes; it used to return 0 and only print. Our
+#     pre-flight green light in docs/runbooks/byovps-controller-upgrade.md is
+#     still "All sandboxes are up to date", but a non-zero exit is now the
+#     NORMAL signal for "there is work to do" — do not run it under `set -e`
+#     and do not read exit 1 as a broken CLI.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.116}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
@@ -271,6 +291,15 @@ install_nemoclaw() {
   # deliberately does NOT match `openssh-sftp-server=` (different literal),
   # which stays pinned — as do the SHA256-pinned snapshot .debs (expat/jq/Vim)
   # and the in-tree-built `+nemoclaw1` packages, none of which are index-resolved.
+  # THE ONE INDEX-RESOLVED PIN WE DELIBERATELY LEAVE ALONE is
+  # `libssl3t64=3.5.7-1~deb13u2` (new at v0.0.116, #10532). It is also frozen
+  # into NemoClaw's security inventory — a `dpkg-query` assertion AND the
+  # security-packages.txt byte-compare against
+  # SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY. Unpinning it would let apt pick a
+  # newer OpenSSL and fail BOTH of those, turning a recoverable apt exit 100
+  # into an unrecoverable one. If trixie ever supersedes it, the fix is a
+  # NemoClaw tag bump, not a sed. (`libssl-dev` in the same apt block is NOT
+  # inventory-verified, so its wildcard unpin above stays correct.)
   while IFS= read -r _dockerfile; do
     sed -i.bak \
       -e 's/procps=2:4\.0\.4-9/procps/g' \

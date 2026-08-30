@@ -418,6 +418,13 @@ unless a manifest `expected_version` moved.
      will be a no-op. Run this in pre-flight; if it reports a stale
      sandbox, expect an interruption for that one (Policy in
      `live-vps-upgrades.md`).
+   - **Read the message, not just the exit code — and never run this
+     under `set -e`.** As of NemoClaw **v0.0.116** (#10211)
+     `upgrade-sandboxes --check` calls `process.exit(1)` whenever it
+     finds stale, unknown, orphaned or recovery-candidate sandboxes; it
+     used to exit 0 and only print. Non-zero is now the NORMAL "there is
+     work to do" signal, not a broken CLI. Only the literal "All
+     sandboxes are up to date" path still exits 0.
 
 2. **Clear orphan registry rows BEFORE the installer or Gate A fails.**
    `sandboxes.json` carried a phantom row `my-hermes-new` (a failed

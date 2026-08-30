@@ -45,11 +45,13 @@ It is currently built for active development and lab use. It includes a simple p
 
 ## Compatibility Targets
 
-This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`, not the older April 2026 point releases. NemoClaw `v0.0.78` (the first release tag carrying the OpenClaw 2026.6.10 upgrade) pins OpenShell exactly to `0.0.72`, so the bundled refresh helper defaults to:
+This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`. NemoClaw `v0.0.116` pins OpenShell exactly to `0.0.106` (blueprint `min_openshell_version == max_openshell_version`), so the bundled refresh helper defaults to:
 
-- OpenShell installer release: `v0.0.72` (`OPENSHELL_VERSION=v0.0.72`)
-- NemoClaw source ref: tag `v0.0.78` (`NEMOCLAW_INSTALL_REF`) — keeps the Hermes v0.17.0 base
-- OpenClaw base-image build target: `2026.6.10` (`OPENCLAW_VERSION=2026.6.10`) unless overridden — required for current OpenClaw mobile apps to pair
+- OpenShell installer release: `v0.0.106` (`OPENSHELL_VERSION=v0.0.106`)
+- NemoClaw source ref: tag `v0.0.116` (`NEMOCLAW_INSTALL_REF`) — carries the Hermes 0.19.0 base
+- OpenClaw base-image build target: `2026.7.1` (`OPENCLAW_VERSION=2026.7.1`) unless overridden — required for current OpenClaw mobile apps to pair
+
+See `docs/runbooks/nemoclaw-version-bumps.md` before changing any of these — the sandbox-base digest in manidae-cloud must move in lockstep.
 
 Runtime/toolchain versions used during development:
 
@@ -98,7 +100,7 @@ Install or refresh the locked OpenShell/NemoClaw pair first:
 ./install_versioned_nemoclaw_openshell.sh
 ```
 
-That helper defaults to `OPENSHELL_VERSION=v0.0.72`, `NEMOCLAW_INSTALL_REF=v0.0.78`, and `OPENCLAW_VERSION=2026.6.10`.
+That helper defaults to `OPENSHELL_VERSION=v0.0.106`, `NEMOCLAW_INSTALL_REF=v0.0.116`, and `OPENCLAW_VERSION=2026.7.1`.
 
 Then install the dashboard from the repository root:
 

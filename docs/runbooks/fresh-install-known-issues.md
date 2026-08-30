@@ -6,7 +6,10 @@
 
 Baseline validated end-to-end on a fresh Hetzner box (`49.13.144.137`) on
 **2026-08-23** at NemoClaw **v0.0.113** / OpenShell **0.0.106** / OpenClaw
-2026.7.1 / Hermes 0.19.0. Both an OpenClaw (`smoke`) and a Hermes
+2026.7.1 / Hermes 0.19.0. The pin has since moved to NemoClaw **v0.0.116**
+(2026-08-30) — a pure tag-only bump: OpenShell, OpenClaw and Hermes all stayed
+put, so this baseline still describes the box, with only the sandbox-base digest
+refreshed (see "What a fresh AgentGateway install pulls" below). Both an OpenClaw (`smoke`) and a Hermes
 (`my-hermes`) sandbox reached **Ready**, inference served real completions,
 and network-policy grants applied.
 
@@ -142,29 +145,32 @@ share mount`, or containers nested inside a sandbox).
 
 ---
 
-## 4. OPEN — the standalone **NemoClaw** package is pinned at v0.0.73
+## 4. FIXED — the standalone **NemoClaw** package pin (was stuck at v0.0.73)
 
-`startup_nemoclaw.sh.j2` line 2 hardcodes:
+`startup_nemoclaw.sh.j2` line 2 used to hardcode
+`{%- set nemoclaw_install_tag = "v0.0.73" %}` — 40 releases stale and almost
+certainly already broken, because v0.0.73 reviews OpenClaw **2026.5.27** while
+`sandbox-base:latest` carries **2026.7.1**, which trips NemoClaw's
+anti-downgrade guard ("Base image has OpenClaw 2026.7.1, which is newer than
+reviewed target 2026.5.27").
 
-```jinja
-{%- set nemoclaw_install_tag = "v0.0.73" %}
-```
+**Fixed in manidae-cloud on 2026-08-23** (bumped to `v0.0.113`, then to
+`v0.0.116` on 2026-08-30). The template now also exports
+`NEMOCLAW_SANDBOX_BASE_IMAGE_REF` frozen to the release-tag digest, which is
+what actually closes the float. It still pins no `OPENSHELL_VERSION`, and it
+does not need one: unlike the AgentGateway path this template neither
+pre-installs OpenShell nor pre-registers a gateway, so `nemoclaw onboard`
+installs the blueprint's own OpenShell with no downgrade conflict — and it is
+immune to the v0.0.108 `nemoclaw`@17670 placeholder fatality (§1).
 
-That is 40 releases stale and **almost certainly already broken**: v0.0.73
-reviews OpenClaw **2026.5.27**, while `sandbox-base:latest` carries
-**2026.7.1** today. The template pins no digest, so it tracks the floating tag
-straight into NemoClaw's anti-downgrade guard — "Base image has OpenClaw
-2026.7.1, which is newer than reviewed target 2026.5.27". It also pins no
-`OPENSHELL_VERSION` while its blueprint demands min==max==0.0.71.
-
-**Does not affect AgentGateway.** It is guarded by
+**Never affected AgentGateway.** It is guarded by
 `{% if package == "NemoClaw" %}`, a different package from
 `{% if is_agentgateway %}`. Every template is concatenated into one startup
 script and the guards select the path.
 
-Not fixed because bumping it is not a one-liner: it would need an
-`OPENSHELL_VERSION` pin and a digest to match, on a path we have never
-exercised. Decide whether that package is still offered before investing.
+**Still unexercised.** The pin is now coherent, but we have never run a real
+deploy of this package. Treat a first NemoClaw-package deploy as a validation
+run, not a routine one.
 
 ---
 
@@ -174,7 +180,7 @@ exercised. Decide whether that package is still offered before investing.
   https://github.com/ivobrett/openshell_controller.git`
   (`OPENSHELL_CONTROLLER_REPO` / `_BRANCH`, `backend/app/core/config.py`) — so
   fixes 1 and 2 land automatically once pushed to `gatewaydashboard`.
-- NemoClaw: `NEMOCLAW_INSTALL_REF="v0.0.113"` from the cloud template.
+- NemoClaw: `NEMOCLAW_INSTALL_REF="v0.0.116"` from the cloud template.
 - OpenShell: `OPENSHELL_VERSION=v0.0.106`, matching the blueprint's
   min==max==0.0.106 so `onboard` cannot silently downgrade the gateway.
-- sandbox base: frozen digest `sha256:31fcee7b…` (the v0.0.113 release tag).
+- sandbox base: frozen digest `sha256:03a1a319…` (the v0.0.116 release tag).

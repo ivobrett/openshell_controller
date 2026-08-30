@@ -74,14 +74,18 @@ in the same change set.
 > cut against. Recipe:
 >
 > ```bash
-> TAG=v0.0.108   # == NEMOCLAW_INSTALL_REF
+> TAG=v0.0.116   # == NEMOCLAW_INSTALL_REF
 > REF="ghcr.io/nvidia/nemoclaw/sandbox-base:$TAG"
 > docker pull -q "$REF"
 > # 1. anti-downgrade guard — must equal OPENCLAW_VERSION
 > docker run --rm --network none --entrypoint /bin/sh "$REF" -c 'openclaw --version'
-> # 2. security-package inventory — must be byte-identical to
-> #    SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY in NemoClaw's
-> #    src/lib/sandbox-base-image/security-inventory.ts at $TAG (and root:root 0444)
+> # 2. security-package inventory — must be byte-identical to the inventory in
+> #    NemoClaw's src/lib/sandbox-base-image/security-inventory.ts at $TAG
+> #    (and root:root 0444). SINCE v0.0.116 THERE ARE TWO LISTS: use the LONGER
+> #    OPENCLAW_SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY — that is the one
+> #    openClawSandboxBaseImageHasSecurityInventory() applies to this
+> #    digest-pinned sandbox-base override. (The shorter
+> #    SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY covers the per-agent base images.)
 > docker run --rm --network none --entrypoint /bin/sh "$REF" -c \
 >   'stat -c %u:%g:%a /usr/local/share/nemoclaw/security-packages.txt; \
 >    cat /usr/local/share/nemoclaw/security-packages.txt'
@@ -111,37 +115,102 @@ in the same change set.
 > `Dockerfile.base` locally and tags it, rather than pulling the remote tag.
 >
 > Test guarding it: `backend/tests/test_startup_agentgateway_template.py::test_sandbox_base_image_frozen_to_digest`.
-> The pin lives in FOUR sync'd places (keep them coherent):
+> The pin lives in **FIVE** sync'd places (keep them coherent):
 > `install_versioned_nemoclaw_openshell.sh` (controller, version pin only —
-> doesn't write runtime env), the cloud template (version + digest, runtime
-> env), `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
+> doesn't write runtime env), the cloud AgentGateway template
+> `startup_agentgateway.sh.j2` (version + digest, runtime env),
+> `startup_nemoclaw.sh.j2` (cloud **NemoClaw package** path, version + digest —
+> joined the set on 2026-08-23 when it was un-stranded from `v0.0.73`),
+> `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
 > `byovps_bootstrap.py` (BYOVPS phase 2, `NEMOCLAW_INSTALL_TAG` + digest in its
-> onboard export and `.env.local`). **COHERENT (2026-08-22):** all four writers
-> are at **v0.0.113 / OpenShell 0.0.106 / OpenClaw 2026.7.1 / Hermes 0.19.0**.
-> Like the previous bump this was **NOT tag-only**, but only ONE companion
-> version moved: OpenShell 0.0.101→0.0.106 via the blueprint's min==max, so the
-> OpenShell install line had to move in all three manidae writers too, and
-> `--skip-openshell` is invalid for upgrading any live box still on 0.0.101 (a
-> box still on 0.0.85 now crosses TWO destructive windows). Hermes stayed
-> 0.19.0 and OpenClaw stayed 2026.7.1, so the Hermes guard re-check below was
-> **not triggered**; `langchain-deepagents-code` moved 0.1.34→0.1.55 and two new
-> upstream agents (`pi` 0.84.1, `nemocua`) appeared, which the controller
-> deliberately does not surface.
+> onboard export and `.env.local`). **COHERENT (2026-08-30):** all five writers
+> are at **v0.0.116 / OpenShell 0.0.106 / OpenClaw 2026.7.1 / Hermes 0.19.0**.
+> Unlike the previous two bumps this one **IS tag-only** — nothing companion
+> moved, so `--skip-openshell` is VALID for a live box already at 0.0.106 (a box
+> still on 0.0.101, or 0.0.85, has not caught up and still crosses the earlier
+> destructive window(s) first).
 > The base-image digest is
-> `sha256:31fcee7bb14d5e3e144ebe6e8ad59b26f966b3fc125609cf721607f8b346a7d8`
-> — the **`sandbox-base:v0.0.113` release tag** (OpenClaw 2026.7.1, inventory
-> verified byte-identical, root:root 0444).
-> **This bump proves why step 2 of the recipe is mandatory even when OpenClaw
-> does not move**: v0.0.113's expected inventory changed (vim-common/vim-tiny
-> `2:9.2.0782-1`→`2:9.2.0858-1`, libssh2-1t64 `+nemoclaw1`→`+nemoclaw2`), so
-> carrying v0.0.108's digest forward would have failed every create while
-> `openclaw --version` still read a reassuring 2026.7.1.
-> Digest history: `7643e189…` (v0.0.108, corrected 2026-08-15 from
-> `sha256:929a45a9…`, which had been taken from the floating `:latest` on
-> 2026-08-14 and broke every create — note that bad image was in fact carrying
-> the *future* v0.0.113 package set). The digest freeze is wired into both
-> manidae runtime-env writers (cloud template + `byovps_bootstrap.py`).
+> `sha256:03a1a319e019e7f5947ce918cbbed5bd07baa7717e6d947d83f0f6356436712f`
+> — the **`sandbox-base:v0.0.116` release tag** (OpenClaw 2026.7.1 `(2d2ddc4)`,
+> inventory verified byte-identical, root:root 0444).
+> **The digest still had to move — for the THIRD consecutive bump — while
+> `openclaw --version` stayed at 2026.7.1.** This is now the rule, not the
+> exception: treat step 2 of the recipe as the load-bearing check and
+> `openclaw --version` as the cheap one.
+> Digest history: `31fcee7b…` (v0.0.113, 2026-08-22); `7643e189…` (v0.0.108,
+> corrected 2026-08-15 from `sha256:929a45a9…`, which had been taken from the
+> floating `:latest` on 2026-08-14 and broke every create — note that bad image
+> was in fact carrying the *future* v0.0.113 package set). The digest freeze is
+> wired into all three manidae runtime-env writers (both cloud templates +
+> `byovps_bootstrap.py`).
 > Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
+>
+> ### v0.0.113 → v0.0.116 pre-flight results (2026-08-30)
+>
+> Discussion NVIDIA/NemoClaw#10594, 3 releases (v0.0.114..v0.0.116), tag
+> `v0.0.116` = commit `b12bede`. **A pure tag-only bump on every axis that
+> matters:** `nemoclaw-blueprint/blueprint.yaml` is byte-identical
+> (min==max_openshell_version stays `0.0.106`), `ARG OPENCLAW_VERSION` stays
+> `2026.7.1`, `ARG HERMES_VERSION` stays `v2026.7.20` (0.19.0), and **no agent
+> `expected_version` moved** (hermes 0.19.0, openclaw 2026.7.1,
+> langchain-deepagents-code 0.1.55, pi 0.84.1) with `package.json` still
+> `0.1.0`. `src/lib/sandbox/version.ts` — the staleness logic itself — is also
+> unchanged. So `upgrade-sandboxes --auto` has nothing to rebuild and no running
+> sandbox is recreated. The Hermes guard re-check below is **not triggered**
+> (`agents/hermes/start.sh` did change, but only to add
+> `HERMES_LAZY_INSTALL_TARGET` and one extra config-hash reconciliation — no
+> bind-address, Origin-allowlist or auth-provider semantics moved).
+> The `maxBuffer: 256` shim still anchors at 3 sites in
+> `src/lib/state/sandbox.ts`; `npm audit signatures` is still absent upstream,
+> so the shim retired at v0.0.108 stays retired; `node:22-trixie-slim@sha256:db8a96a6…`
+> is unchanged. OpenShell did not move, so the workspace-qualified container-name
+> resolvers (commit `2731e3d`) need no re-check either.
+>
+> **ONE NEW live-index apt pin — and it is the FIRST one we must NOT unpin.**
+> `libssl3t64=3.5.7-1~deb13u2` (OpenSSL 3.5.7, #10532) joins the main
+> `Dockerfile.base` apt block and `Dockerfile`, `agents/hermes`,
+> `agents/langchain-deepagents-code`, `agents/pi`. Every other pin we unpin is
+> "just" an apt pin; this one is **also byte-verified by NemoClaw's frozen
+> security inventory** — a `test "$(dpkg-query -W libssl3t64)" = "3.5.7-1~deb13u2"`
+> assertion AND a `security-packages.txt` line compared against
+> `SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY`. Unpinning it would let apt select a
+> newer OpenSSL and fail both, trading a recoverable apt exit 100 for an
+> unrecoverable inventory failure. **If trixie ever supersedes it, the only fix
+> is a NemoClaw tag bump — do not reach for the sed.** `libssl-dev` moved
+> `3.5.6-1~deb13u2`→`3.5.7-1~deb13u2` in the same block but is already
+> wildcard-unpinned and is *not* inventory-verified, so it needed no change.
+> `libevent-core-2.1-7t64=2.1.13-stable-1` (#10526) is a SHA256-pinned
+> frozen-snapshot `.deb` installed with `dpkg -i` — frozen, so no unpin either.
+> All 26 live-index pins were re-scanned against trixie on 2026-08-30 (via
+> `apt-cache madison` inside the pinned base) and every one resolves.
+>
+> **The security inventory grew a SECOND list.** v0.0.116 adds
+> `libssl3t64=3.5.7-1~deb13u2` to `SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY`, and
+> introduces `OPENCLAW_SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY` = that list plus
+> `libevent-core-2.1-7t64=2.1.13-stable-1`. The old
+> `sandboxBaseImageHasSecurityInventory()` now covers only the *agent* base
+> images (`src/lib/agent/base-image.ts`,
+> `src/lib/agent/deep-agents-code-base-image.ts`); the new
+> `openClawSandboxBaseImageHasSecurityInventory()` in `src/lib/onboard/base-image.ts`
+> is what validates **our digest-pinned `NEMOCLAW_SANDBOX_BASE_IMAGE_REF`**. So
+> when you run step 2 of the recipe, the `sandbox-base` image's
+> `security-packages.txt` must match the **OpenClaw** (longer) list — 12 package
+> lines plus the leading `architecture=<arch>`.
+>
+> **BEHAVIOUR CHANGE on the upgrade path (#10211):**
+> `upgrade-sandboxes --check` now `process.exit(1)` when it finds stale,
+> unknown, orphaned or recovery-candidate sandboxes; it used to exit 0 and only
+> print. Non-zero is the NORMAL "there is work to do" signal — do not run it
+> under `set -e`, and do not read exit 1 as a broken CLI. Only the literal "All
+> sandboxes are up to date" path exits 0. See
+> `docs/runbooks/byovps-controller-upgrade.md` step 1.
+>
+> Other upstream changes reviewed and found not to touch us: uninstall now
+> snapshots before deleting unless `--destroy-user-data` (#10231/#10550/#10562)
+> — the controller never invokes `nemoclaw uninstall`; a new
+> `--defer-onboarding` install flag (Hermes-only, hosted-inference-only) which
+> we do not use; and `scripts/install.sh` now hard-errors instead of skipping
+> the nvm integrity check when no `sha256sum`/`shasum` exists.
 >
 > ### v0.0.108 → v0.0.113 pre-flight results (2026-08-22)
 >

@@ -307,17 +307,26 @@ export async function resolveOpenClawDashboardBootstrap(instanceId?: string | nu
 
   if (sandboxInstance) {
     try {
-      const { stdout, stderr } = await execSandboxSsh(sandboxInstance.sandboxId, 'openclaw dashboard --no-open', 15000)
+      // `openclaw dashboard --no-open`'s own "Gateway probe" authenticates
+      // via the CLI's paired-device session, not the raw gateway.auth.token
+      // our WS proxy actually uses — it fails with "unauthorized: gateway
+      // token mismatch" whenever no device has been paired, even when the
+      // token our proxy needs is valid and gateway-accepted. So treat a
+      // failed/tokenless CLI probe as "no URL extracted" (fall back to the
+      // known instance dashboardUrl) rather than giving up on a token
+      // entirely, and always read the token straight out of openclaw.json
+      // via readSandboxOpenClawDashboardToken — that reads the file
+      // directly and does not depend on the CLI's device-pairing probe.
+      const { stdout, stderr } = await execSandboxSsh(sandboxInstance.sandboxId, 'openclaw dashboard --no-open', 15000).catch(() => ({ stdout: '', stderr: '' }))
       const combined = `${stdout}\n${stderr}`
       const rawBootstrapUrl = normalizeDashboardBootstrapUrl(combined)
       const bootstrapUrl = rawBootstrapUrl
         ? rewriteDashboardBootstrapOrigin(rawBootstrapUrl, instance.dashboardUrl)
-        : null
+        : instance.dashboardUrl
       let tokenizedBootstrapUrl = bootstrapUrl
       let bootstrapTokenPresent = hasDashboardToken(tokenizedBootstrapUrl)
 
-      if (tokenizedBootstrapUrl && !bootstrapTokenPresent) {
-        await execSandboxSsh(sandboxInstance.sandboxId, 'openclaw dashboard', 15000).catch(() => null)
+      if (!bootstrapTokenPresent) {
         const token = await readSandboxOpenClawDashboardToken(sandboxInstance.sandboxId).catch(() => null)
         tokenizedBootstrapUrl = withDashboardToken(tokenizedBootstrapUrl, token)
         bootstrapTokenPresent = hasDashboardToken(tokenizedBootstrapUrl)

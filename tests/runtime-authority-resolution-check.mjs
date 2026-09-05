@@ -60,7 +60,17 @@ assert.match(openshellHostSource, /const OPENSHELL_GATEWAY = process\.env\.OPENS
 assert.match(sandboxHealthSource, /stripAnsi/, 'sandbox health must strip OpenShell ANSI styling before parsing fields such as Phase')
 assert.match(openshellHostSource, /const canMintBootstrapFromCli = instance\.id === defaultInstance\.id/, 'bootstrap minting should only use CLI for the default OpenClaw instance')
 assert.match(openshellHostSource, /readSandboxOpenClawDashboardToken/, 'sandbox dashboard bootstrap must fall back to the sandbox OpenClaw token when CLI output is bare')
-assert.match(openshellHostSource, /openclaw dashboard', 15000\)\.catch/, 'sandbox dashboard bootstrap should let OpenClaw initialize before reading the fallback token')
+// `openclaw dashboard --no-open`'s own "Gateway probe" authenticates via the
+// CLI's paired-device session, not the raw gateway.auth.token our WS proxy
+// uses — it reliably fails with "unauthorized: gateway token mismatch" when
+// no device is paired, even when the underlying token is valid and
+// gateway-accepted (reproduced live 2026-09-05). A prior revision tried to
+// paper over that by re-running plain `openclaw dashboard` and hoping it
+// would populate a token as a side effect; it never does, so that call was
+// removed. The fallback must instead trigger on `!bootstrapTokenPresent`
+// unconditionally, not `tokenizedBootstrapUrl && !bootstrapTokenPresent`.
+assert.match(openshellHostSource, /if \(!bootstrapTokenPresent\) \{\s*\n\s*const token = await readSandboxOpenClawDashboardToken/, 'sandbox dashboard bootstrap must read the fallback token whenever no token is present, not only when the CLI happened to mint a URL')
+assert.doesNotMatch(openshellHostSource, /tokenizedBootstrapUrl && !bootstrapTokenPresent/, 'the fallback-token read must not be gated behind a truthy CLI-derived URL — the CLI probe fails independently of token validity')
 assert.match(openshellHostSource, /withDashboardToken\(tokenizedBootstrapUrl, token\)/, 'sandbox dashboard bootstrap should synthesize a tokenized launch URL from the fallback token')
 assert.match(openshellConfigSource, /openshellGatewayAddressEnv/, 'OpenShell config route must expose controller gateway override diagnostics')
 assert.match(openshellConfigSource, /gatewayOverrideActive/, 'OpenShell config route must report whether gateway overrides are active')

@@ -7,8 +7,8 @@ import path from 'node:path'
 //
 // The client capability model + server-side inventory filtering both key off
 // this route's shape. If someone drops the legacy `operator:` boolean,
-// ShieldsPanel + setup-account break; if the OAUTH_CAPS accidentally grant a
-// write capability, the UI would render operator controls for IdP users whose
+// setup-account breaks; if the OAUTH_CAPS accidentally grant a write
+// capability, the UI would render operator controls for IdP users whose
 // requests then 403 (the exact bad UX this phase removes).
 
 const root = process.cwd()
@@ -25,7 +25,7 @@ assert.match(source, /allowedSandboxes:\s*["']all["']/, 'operator must get allow
 assert.match(
   source,
   /operator:\s*true/,
-  'route must keep the legacy operator:true field (ShieldsPanel + setup-account read it)',
+  'route must keep the legacy operator:true field (setup-account reads it)',
 )
 // Both branches return their base caps through applyProfileCaps(), which is an
 // identity in the default `full` profile and only strips NemoClaw/OpenClaw-
@@ -87,7 +87,7 @@ for (const [key, value] of Object.entries(OPERATOR_CAPS)) {
 // the UI just mirrors it).
 for (const key of [
   'createSandbox', 'deleteSandbox', 'restartSandbox', 'manageFiles',
-  'manageInference', 'manageMcp', 'approvePermissions', 'manageShields',
+  'manageInference', 'manageMcp', 'approvePermissions',
   'backupRestore', 'manageSecurity', 'manageNodes', 'viewWizards',
 ]) {
   assert.equal(OAUTH_CAPS[key], false, `OAUTH_CAPS.${key} must be false`)

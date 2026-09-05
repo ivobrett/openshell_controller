@@ -33,7 +33,6 @@ import SandboxHealthPanel from "@/app/components/SandboxHealthPanel"
 import SandboxFilesPanel from "@/app/components/SandboxFilesPanel"
 import SandboxInferencePanel from "@/app/components/SandboxInferencePanel"
 import SandboxArchivePanel from "@/app/components/SandboxArchivePanel"
-import ShieldsPanel from "@/app/components/ShieldsPanel"
 import ConfigurationPanel from "@/app/components/ConfigurationPanel"
 import HermesRemotePanel from "@/app/components/HermesRemotePanel"
 import OpenClawRemotePanel from "@/app/components/OpenClawRemotePanel"
@@ -271,7 +270,6 @@ function SandboxDetailInner({ name }: { name: string }) {
     { key: "mcp", label: "MCP", show: can("manageMcp") },
     { key: "policy", label: "Policy", show: can("approvePermissions"), badge: pendingCount },
     { key: "backup", label: "Backup", show: can("backupRestore") },
-    { key: "shields", label: "Shields", show: isOpenClaw && can("manageShields") },
   ]
   const visibleTabs = tabs.filter((t) => t.show)
   const currentTab = visibleTabs.some((t) => t.key === activeTab) ? activeTab : "overview"
@@ -540,19 +538,6 @@ function SandboxDetailInner({ name }: { name: string }) {
         {can("backupRestore") && (
           <TabsContent value="backup">
             <SandboxArchivePanel sandbox={sandbox} onRestoreComplete={() => { refetch() }} />
-          </TabsContent>
-        )}
-
-        {/* OpenClaw only: Hermes `shields up` is broken in NemoClaw
-            v0.0.73 — the config-lock step reverts the config parent dir
-            to 755 root:root while its own verify demands 1775 root:sandbox
-            ("Config not locked: parent dir mode=755 (expected 1775)"),
-            and it can't be pre-fixed (the lock reverts manual perms) or
-            rebuilt away (fresh sandboxes fail identically). Re-enable for
-            Hermes once NemoClaw fixes it. */}
-        {isOpenClaw && can("manageShields") && (
-          <TabsContent value="shields">
-            <ShieldsPanel sandboxName={sandbox.name} />
           </TabsContent>
         )}
       </Tabs>

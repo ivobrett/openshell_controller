@@ -8,8 +8,8 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# *** OPENSHELL DID NOT MOVE ON THE v0.0.113 -> v0.0.116 BUMP. ***
-# v0.0.116's blueprint still declares min==max_openshell_version == "0.0.106",
+# *** OPENSHELL DID NOT MOVE ON THE v0.0.116 -> v0.0.120 BUMP. ***
+# v0.0.120's blueprint still declares min==max_openshell_version == "0.0.106",
 # so this is a TAG-ONLY bump: `--skip-openshell` is VALID on any box already at
 # OpenShell 0.0.106, and no destructive maintenance window is required. Follow
 # docs/runbooks/byovps-controller-upgrade.md, NOT
@@ -17,92 +17,100 @@ NC='\033[0m'
 # has NOT caught up — it still crosses the earlier destructive window(s) first.)
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.106}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.116 (commit b12bede; bumped from v0.0.113 on
-# 2026-08-30, spanning 3 upstream releases v0.0.114..v0.0.116). Headline changes
-# (NVIDIA/NemoClaw discussion #10594): OpenClaw endpoint validation now works
-# from inside the sandbox without a messaging channel (#10458/#10531/#10540),
-# Hermes recovery manages only the published receipt-owned Portable Ollama
-# runner (#10505), sandbox identity/authority persists across retries and
-# process restarts (#10510/#10512), uninstall snapshots before deleting unless
-# --destroy-user-data (#10231/#10550/#10562), WSL credential-free Docker
-# fallback (#10470/#10554/#10561), re-onboarding preserves `brave` policy
-# presets (#10457), and OpenSSL 3.5.7 / libevent 2.1.13 security updates
-# (#10532/#10526).
-# Pre-flight against the v0.0.113..v0.0.116 diff (all verified 2026-08-30 from
-# source at tag v0.0.116 / commit b12bede):
-#   - blueprint.yaml is BYTE-IDENTICAL to v0.0.113 — min_openshell_version ==
-#     max_openshell_version == "0.0.106". OPENSHELL_VERSION stays v0.0.106 and
-#     the installer's OpenShell phase can be skipped on an up-to-date box.
-#   - HERMES UNCHANGED at 0.19.0 (calver v2026.7.20; ARG HERMES_VERSION is
-#     byte-identical). The mandatory remote-desktop guard re-check in
-#     docs/runbooks/nemoclaw-version-bumps.md is therefore NOT triggered — it
-#     fires only when the Hermes pin moves. HERMES_REMOTE_DESKTOP.md §1a stays
-#     valid as written. agents/hermes/start.sh did change, but only to add
-#     HERMES_LAZY_INSTALL_TARGET and an extra `refresh_hermes_runtime_config_
-#     hashes compat` reconciliation — no bind-address, Origin-allowlist or
-#     auth-provider semantics were touched.
-#   - OpenClaw reviewed default STILL 2026.7.1 (ARG OPENCLAW_VERSION=2026.7.1 in
-#     both Dockerfile and Dockerfile.base; confirmed live in the release-tag
-#     image: `OpenClaw 2026.7.1 (2d2ddc4)`).
-#   - NO agent expected_version moved: hermes 0.19.0, openclaw 2026.7.1,
+# NemoClaw is pinned to TAG v0.0.120 (bumped from v0.0.116 on 2026-09-05,
+# spanning 4 upstream releases v0.0.117..v0.0.120; NVIDIA/NemoClaw discussion
+# #11104). Headline changes: secret-free `nemoclaw config export`, a
+# host/gateway `nemoclaw doctor`, managed dashboard/messaging/MCP forwarding
+# moved from ambient SSH-forwarding receipts to detached `openshell forward
+# service` processes (NemoClaw-internal to its own `nemoclaw <sb> dashboard`
+# CLI path — NOT our hand-rolled `ssh -N -L` tunnel in
+# app/lib/openshellHost.ts, which execs `openclaw gateway run` over our own
+# ProxyCommand and never touches NemoClaw's forwarding machinery), Hermes
+# bumped to the supported 0.20.6 runtime, and **Shields removed entirely from
+# NemoClaw core** (see the dedicated note below — this is the one change that
+# required code changes on our side, not just a pin bump).
+# Pre-flight against the v0.0.116..v0.0.120 diff (all verified 2026-09-05 from
+# source at tag v0.0.120, diffed directly against v0.0.116):
+#   - blueprint.yaml min/max_openshell_version unchanged at "0.0.106".
+#     OPENSHELL_VERSION stays v0.0.106 and the installer's OpenShell phase can
+#     be skipped on an up-to-date box.
+#   - HERMES MOVED 0.19.0 -> 0.20.6 (calver v2026.7.20 -> v2026.8.27). Ran the
+#     mandatory remote-desktop guard re-check from
+#     docs/runbooks/nemoclaw-version-bumps.md against hermes_cli/web_server.py
+#     at both calver tags: `_ws_host_origin_is_allowed` and
+#     `_ws_client_is_allowed` are BYTE-IDENTICAL. `_is_accepted_host` gained an
+#     opt-in `trusted_public_hosts` parameter sourced from
+#     `dashboard.public_url` / `HERMES_DASHBOARD_PUBLIC_URL` (both unset
+#     anywhere in this repo, confirmed by grep) — default empty set, so
+#     behaviour is unchanged for us. The non-loopback bind auth-provider gate
+#     also picked up a NEW trigger: a *loopback* bind now hard-refuses to start
+#     if `dashboard.public_url` is set (previously only non-loopback binds were
+#     gated) — again inert for us since we never set that value, but worth
+#     knowing if anyone ever wires Hermes' own public-URL feature in instead of
+#     our Host/Origin rewrite hack. Net: HERMES_REMOTE_DESKTOP.md §1a stays
+#     valid as written, no recalibration needed. Record kept here per the
+#     runbook's "record the outcome on every Hermes move" instruction.
+#   - OpenClaw reviewed default STILL 2026.7.1, but its npm lockfile SHA
+#     changed (OPENCLAW_LOCK_SHA256 60f816dc… -> 248d881c… in Dockerfile.base)
+#     — the digest still moves even though `openclaw --version` doesn't.
+#   - NO other agent expected_version moved: openclaw 2026.7.1,
 #     langchain-deepagents-code 0.1.55, pi 0.84.1 are all byte-identical, and
-#     package.json stays "0.1.0". Combined with the unchanged blueprint this is
-#     a PURE TAG BUMP — `upgrade-sandboxes --auto` has nothing to rebuild and no
-#     running sandbox is recreated. src/lib/sandbox/version.ts (the staleness
-#     logic itself) is also unchanged.
+#     package.json stays "0.1.0". Only Hermes sandboxes have a stale
+#     fingerprint under this bump — `upgrade-sandboxes --auto` will rebuild
+#     Hermes sandboxes and leave OpenClaw sandboxes untouched.
 #   - `pi` and `nemocua` still ship and the controller still does not surface
 #     them — app/lib/sandboxCreate/agentFilter.ts models a closed
 #     "openclaw" | "hermes" union and maps anything else to "unknown".
-#   - `npm audit signatures` is STILL absent from every Dockerfile, so the shim
-#     retired on the v0.0.108 bump stays retired (see the REMOVED note below the
-#     unpin block).
+#   - SECURITY PACKAGE INVENTORY UNCHANGED: src/lib/sandbox-base-image/
+#     security-inventory.ts is byte-identical between v0.0.116 and v0.0.120 —
+#     no new apt pins, nothing new to unpin. The 26 live-index pins from the
+#     v0.0.116 bump still resolve; this bump adds none.
 #   - The 256 MiB backup maxBuffer bug is STILL present (3 sites in
 #     src/lib/state/sandbox.ts) — the 8 GiB sed shim below still applies.
-#   - ONE NEW live-index apt pin: `libssl3t64=3.5.7-1~deb13u2` (OpenSSL 3.5.7,
-#     #10532), added to the main Dockerfile.base apt block alongside gnupg /
-#     ca-certificates / iproute2, and to Dockerfile, agents/hermes,
-#     agents/langchain-deepagents-code and agents/pi. It is DELIBERATELY NOT
-#     ADDED TO THE UNPIN LIST BELOW — unlike every other pin we unpin, this one
-#     is ALSO byte-verified by NemoClaw's frozen security inventory
-#     (`test "$(dpkg-query -W libssl3t64)" = "3.5.7-1~deb13u2"` plus the
-#     security-packages.txt line compared against
-#     SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY). Unpinning it would let apt
-#     select a newer OpenSSL and then fail the dpkg-query assertion and the
-#     inventory byte-compare — trading a recoverable apt exit 100 for an
-#     unrecoverable one. If Debian ever supersedes 3.5.7-1~deb13u2 in trixie,
-#     the ONLY fix is a NemoClaw tag bump; do not reach for the sed.
-#     `libssl-dev` moved 3.5.6-1~deb13u2 -> 3.5.7-1~deb13u2 in the same block
-#     but is already wildcard-unpinned (and is not inventory-verified), so it
-#     needs no change. `libevent-core-2.1-7t64=2.1.13-stable-1` (#10526) is a
-#     SHA256-pinned .deb from the frozen snapshot, installed with `dpkg -i` —
-#     frozen, so no unpin either. All 26 live-index pins were re-scanned against
-#     the trixie index on 2026-08-30 (apt-cache madison inside the pinned base
-#     node:22-trixie-slim@sha256:db8a96a6…, which itself is UNCHANGED) and every
-#     one still resolves — this bump is NOT blocked on a stale pin.
-#   - SECURITY INVENTORY MOVED, so the base-image digest MUST move in lockstep.
-#     v0.0.116 adds "libssl3t64=3.5.7-1~deb13u2" to
-#     SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY and introduces a SECOND, wider
-#     list — OPENCLAW_SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY = the base list
-#     plus "libevent-core-2.1-7t64=2.1.13-stable-1" — checked by the new
-#     openClawSandboxBaseImageHasSecurityInventory() that src/lib/onboard/
-#     base-image.ts uses for the digest-pinned sandbox-base override. A base
-#     image pinned for v0.0.113 (sha256:31fcee7b…) FAILS that check on v0.0.116
-#     and breaks every create — exactly the 2026-08-15 outage class, and the
-#     THIRD consecutive bump where the inventory moved while `openclaw
-#     --version` stayed reassuringly at 2026.7.1. This file carries the version
-#     pin only; the digest lives in manidae-cloud's startup_agentgateway.sh.j2,
-#     startup_nemoclaw.sh.j2 and byovps_bootstrap.py, all moved to
-#     sha256:03a1a319… in the same change set (the v0.0.116 RELEASE TAG,
-#     verified 2026-08-30: OpenClaw 2026.7.1, security-packages.txt
-#     byte-identical to the OpenClaw inventory, root:root 0444).
-#   - BEHAVIOUR CHANGE on the upgrade path (#10211): `upgrade-sandboxes --check`
-#     now `process.exit(1)` when it finds stale, unknown, orphaned or
-#     recovery-candidate sandboxes; it used to return 0 and only print. Our
-#     pre-flight green light in docs/runbooks/byovps-controller-upgrade.md is
-#     still "All sandboxes are up to date", but a non-zero exit is now the
-#     NORMAL signal for "there is work to do" — do not run it under `set -e`
-#     and do not read exit 1 as a broken CLI.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.116}}"
+#   - DIGEST STILL MOVES despite the unchanged inventory, because the OpenClaw
+#     lockfile SHA (above) and other Docker-layer content (a new opt-in
+#     mcporter-audit-receipt cache mechanism, CI-only, harmless to us) changed.
+#     This file carries the version pin only; the digest lives in
+#     manidae-cloud's startup_agentgateway.sh.j2, startup_nemoclaw.sh.j2 and
+#     byovps_bootstrap.py, all moved from sha256:03a1a319… (v0.0.116) to
+#     sha256:58a88e885f2b9df7334d5b6246dc2aed9bfb0a7effe943fc0e044da88a6c5863
+#     (v0.0.120 — verified 2026-09-05 directly against the GHCR release-tag
+#     manifest via `docker buildx imagetools inspect
+#     ghcr.io/nvidia/nemoclaw/sandbox-base:v0.0.120`).
+#   - SHIELDS REMOVED FROM NEMOCLAW CORE (#10722): every file under
+#     src/lib/shields/ and the `nemoclaw <sandbox> shields up|down|status`
+#     CLI subcommands are GONE at v0.0.120 — confirmed by diffing the tag's
+#     file tree, not just the changelog prose. Our fork had a first-class
+#     Shields feature built on top of it (ShieldsPanel, the shields API route,
+#     and getShieldsStatus/getShieldsAudit/runShieldsAction in nemoclawCli.ts),
+#     which is now REMOVED in this same change set:
+#       - deleted: app/components/ShieldsPanel.tsx,
+#         app/api/sandbox/[sandboxId]/shields/route.ts,
+#         tests/shields-panel-check.mjs
+#       - trimmed: the Shields section of app/lib/nemoclawCli.ts, the
+#         "shields" tab + import in app/(shell)/sandboxes/[name]/page.tsx, the
+#         `manageShields` capability in app/api/auth/me/route.ts (+ its
+#         assertions in tests/auth-me-capabilities-check.mjs), and the
+#         Hermes-inference "shields are up" detection in
+#         app/lib/sandboxInferenceApply.ts (that CLI output string can no
+#         longer occur).
+#     Separately, `upgrade-sandboxes` now calls
+#     enforceRemovedImmutabilityMigrationBoundary() before rebuilding a stale
+#     sandbox: if that sandbox still has an in-flight Shields-transition
+#     artifact (a `shields-timer-*` / `shields-transition-*` marker from an
+#     unfinished up/down cycle on the OLD NemoClaw binary), the rebuild throws
+#     and demands a host reboot + manual quarantine before retrying — it does
+#     NOT block a plain "state record" of past Shields use (allowStateRecord:
+#     true), only a live in-flight transition. Under this bump that check can
+#     only fire on the Hermes sandboxes actually being rebuilt (OpenClaw
+#     sandboxes don't rebuild). Before running `upgrade-sandboxes --auto` on
+#     any live box that ever used the Shields feature, confirm no Hermes
+#     sandbox has a pending shields transition first.
+#   - Default Model Router pool swapped `nemotron-3-nano-reasoning` ->
+#     `gpt-oss-20b-high` in nemoclaw-blueprint/router/pool-config.yaml. Does
+#     not affect us — our deployments pin nvidia-prod/nemotron-3-super-120b-a12b
+#     directly, not the router pool.
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.120}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

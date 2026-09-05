@@ -7,7 +7,7 @@ const source = await readFile(path.join(root, 'app/lib/activityLog.ts'), 'utf8')
 
 // Rotation must be ARCHIVAL, not lossy: the hot activity log is capped for fast
 // rendering, but entries trimmed out are appended to a durable archive so the
-// sandbox lifecycle / shields audit history survives rotation and is backed up.
+// sandbox lifecycle history survives rotation and is backed up.
 assert.match(source, /activity-log\.archive\.jsonl/, 'must define a durable archive path next to the hot log')
 assert.match(source, /async function archiveOverflow/, 'must archive overflow rather than discard it')
 assert.match(source, /appendFile\(ARCHIVE_LOG_PATH/, 'archive must be append-only (never overwritten)')

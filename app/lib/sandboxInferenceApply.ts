@@ -237,9 +237,9 @@ async function runNemoClaw(args: string[], timeoutMs = 180000) {
     let stdout = ""
     let stderr = ""
     let timedOut = false
-    // Escalate to SIGKILL after SIGTERM: a nemoclaw process wedged inside a
-    // shields transition can be job-control-stopped (SIGSTOP), which ignores
-    // SIGTERM — SIGKILL guarantees the HTTP request returns instead of hanging.
+    // Escalate to SIGKILL after SIGTERM: a wedged nemoclaw process can be
+    // job-control-stopped (SIGSTOP), which ignores SIGTERM — SIGKILL
+    // guarantees the HTTP request returns instead of hanging.
     const killTimer = setTimeout(() => {
       timedOut = true
       child.kill("SIGTERM")
@@ -253,12 +253,10 @@ async function runNemoClaw(args: string[], timeoutMs = 180000) {
 }
 
 // Hermes sandboxes have no /sandbox/.openclaw/openclaw.json — their model route
-// lives in /sandbox/.hermes/config.yaml, written by NemoClaw's config guard under
-// the shields transition lock. The OpenClaw JSON-patch path above can't touch it,
-// so we delegate to `nemoclaw inference set`, which is agent-aware and also points
-// the gateway route. Only the primary route applies (Hermes runs a single model).
-const HERMES_SHIELDS_BLOCK = /shields are up|shields down first|config writes are unavailable/i
-
+// lives in /sandbox/.hermes/config.yaml, written by NemoClaw's config guard.
+// The OpenClaw JSON-patch path above can't touch it, so we delegate to
+// `nemoclaw inference set`, which is agent-aware and also points the gateway
+// route. Only the primary route applies (Hermes runs a single model).
 async function applyHermesInferenceProfile(
   sandboxName: string,
   primary: SandboxInferenceRoute,
@@ -271,18 +269,9 @@ async function applyHermesInferenceProfile(
     "--model", primary.model,
     "--no-verify",
   ])
-  const combined = `${result.stdout}\n${result.stderr}`
   if (result.timedOut) {
     throw new Error(
-      "nemoclaw inference set timed out for the Hermes sandbox (the shields transition may be stuck). Verify shields are down and the sandbox is healthy, then retry.",
-    )
-  }
-  // A shields-up run can print a warning and still exit 0 while leaving the
-  // in-sandbox config unwritten — surface that as a hard failure so the UI
-  // never reports a false success.
-  if (HERMES_SHIELDS_BLOCK.test(combined)) {
-    throw new Error(
-      "Hermes inference apply is blocked while shields are up. Drop shields for this sandbox (SHIELDS panel) and retry.",
+      "nemoclaw inference set timed out for the Hermes sandbox. Verify the sandbox is healthy, then retry.",
     )
   }
   if (result.code !== 0) {

@@ -7,8 +7,8 @@ const MAX_ACTIVITY_ENTRIES = Number.parseInt(process.env.OPENSHELL_ACTIVITY_LOG_
 const MAX_ACTIVITY_BYTES = Number.parseInt(process.env.OPENSHELL_ACTIVITY_LOG_MAX_BYTES || String(1024 * 1024), 10)
 
 // Durable audit archive: entries trimmed out of the "hot" activity log are
-// APPENDED here rather than discarded, so the full sandbox lifecycle / shields
-// history survives rotation. Lives alongside the hot log under .runtime/ (which
+// APPENDED here rather than discarded, so the full sandbox lifecycle history
+// survives rotation. Lives alongside the hot log under .runtime/ (which
 // the manidae backup-job stages), and is size-bounded on disk by host logrotate
 // (installed by the AgentGateway deploy). Set path to "" (or "off") to opt out.
 const ARCHIVE_LOG_PATH_RAW = process.env.OPENSHELL_ACTIVITY_ARCHIVE_PATH

@@ -128,7 +128,13 @@ you ever rewrite that route, this is the constraint that forced the design.
   semantics. Any future Hermes bump must re-check `web_server.py`'s
   `_is_accepted_host` / `_ws_host_origin_is_allowed` / `_ws_client_is_allowed`
   before assuming the exposure still works (add it to the version-bump
-  pre-flight).
+  pre-flight). Re-checked at 0.19.0→0.20.6 (2026-09-05,
+  `docs/runbooks/nemoclaw-version-bumps.md` step 5): no recalibration needed,
+  but 0.20.6 added a new gate to watch for — a *loopback* bind now also
+  hard-refuses to start (not just a non-loopback one) if
+  `dashboard.public_url` / `HERMES_DASHBOARD_PUBLIC_URL` is set. We never set
+  either, so it's inert today, but don't wire Hermes' own public-URL feature
+  in as a shortcut without re-reading this section first.
 
 ### Failure signatures (all observed live 2026-07-11)
 
@@ -138,6 +144,7 @@ you ever rewrite that route, this is the constraint that forced the design.
 | Browser/desktop: `{"detail":"Invalid Host header. Dashboard requests must use the hostname the server was bound to."}` | A proxy hop is leaking a non-loopback `Host` — check the three rewrite points above; remember the undici trap. |
 | WS connects then drops immediately, HTTP fine | `Origin` rewrite missing on the WS path (server.mjs tunnel or Traefik for the public path). |
 | Dashboard up on internal port but public probe dead | The socat publisher died — `launch.sh` restarts it; check `/tmp/hermes-dashboard-socat.log` in the sandbox. |
+| In-sandbox log: `Refusing to bind dashboard to 127.0.0.1 — dashboard.public_url is set to …` (Hermes ≥0.20.6) | Something set `dashboard.public_url` or `HERMES_DASHBOARD_PUBLIC_URL` in the sandbox's Hermes config/env. We never do this deliberately — unset it to restore the unauthenticated loopback mode this whole exposure depends on. |
 
 ## 2. Components
 

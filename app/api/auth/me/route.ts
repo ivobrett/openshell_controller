@@ -13,7 +13,6 @@ export type Capabilities = {
   manageInference: boolean
   manageMcp: boolean
   approvePermissions: boolean
-  manageShields: boolean
   backupRestore: boolean
   manageSecurity: boolean
   manageNodes: boolean
@@ -26,7 +25,7 @@ const OPERATOR_CAPS: Capabilities = {
   createSandbox: true, deleteSandbox: true, restartSandbox: true,
   openTerminal: true, openDashboard: true, manageFiles: true,
   manageInference: true, manageMcp: true, approvePermissions: true,
-  manageShields: true, backupRestore: true, manageSecurity: true,
+  backupRestore: true, manageSecurity: true,
   manageNodes: true, viewActivity: true, viewWizards: true,
   viewSkills: true,
 }
@@ -38,7 +37,7 @@ const OAUTH_CAPS: Capabilities = {
   createSandbox: false, deleteSandbox: false, restartSandbox: false,
   openTerminal: true, openDashboard: true, manageFiles: false,
   manageInference: false, manageMcp: false, approvePermissions: false,
-  manageShields: false, backupRestore: false, manageSecurity: false,
+  backupRestore: false, manageSecurity: false,
   manageNodes: false, viewActivity: true, viewWizards: false,
   viewSkills: true,   // setup prompts are read-only and secret-free (§13.2)
 }
@@ -74,7 +73,7 @@ export async function GET(request: NextRequest) {
   if (ctx.kind === "operator" || ctx.kind === "disabled") {
     return NextResponse.json({
       role: "operator",
-      operator: true,               // legacy field — keep, ShieldsPanel + setup-account read it
+      operator: true,               // legacy field — keep, setup-account reads it
       configured,
       email: null,
       capabilities: applyProfileCaps(OPERATOR_CAPS),

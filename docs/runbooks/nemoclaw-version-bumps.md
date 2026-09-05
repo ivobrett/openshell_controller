@@ -123,27 +123,78 @@ in the same change set.
 > joined the set on 2026-08-23 when it was un-stranded from `v0.0.73`),
 > `vps_validation.py` (BYOVPS AgentGateway phase 1, version pin), and
 > `byovps_bootstrap.py` (BYOVPS phase 2, `NEMOCLAW_INSTALL_TAG` + digest in its
-> onboard export and `.env.local`). **COHERENT (2026-08-30):** all five writers
-> are at **v0.0.116 / OpenShell 0.0.106 / OpenClaw 2026.7.1 / Hermes 0.19.0**.
-> Unlike the previous two bumps this one **IS tag-only** — nothing companion
-> moved, so `--skip-openshell` is VALID for a live box already at 0.0.106 (a box
-> still on 0.0.101, or 0.0.85, has not caught up and still crosses the earlier
-> destructive window(s) first).
+> onboard export and `.env.local`). **COHERENT (2026-09-05):** all five writers
+> are at **v0.0.120 / OpenShell 0.0.106 / OpenClaw 2026.7.1 / Hermes 0.20.6**.
+> This bump **IS tag-only** on the OpenShell/OpenClaw/pi/langchain axes —
+> `--skip-openshell` is VALID for a live box already at 0.0.106 (a box still on
+> 0.0.101, or 0.0.85, has not caught up and still crosses the earlier
+> destructive window(s) first). Hermes DID move (0.19.0 → 0.20.6), so
+> `upgrade-sandboxes --auto` will rebuild Hermes sandboxes only.
 > The base-image digest is
-> `sha256:03a1a319e019e7f5947ce918cbbed5bd07baa7717e6d947d83f0f6356436712f`
-> — the **`sandbox-base:v0.0.116` release tag** (OpenClaw 2026.7.1 `(2d2ddc4)`,
-> inventory verified byte-identical, root:root 0444).
-> **The digest still had to move — for the THIRD consecutive bump — while
+> `sha256:58a88e885f2b9df7334d5b6246dc2aed9bfb0a7effe943fc0e044da88a6c5863`
+> — the **`sandbox-base:v0.0.120` release tag** (OpenClaw 2026.7.1, security
+> inventory byte-identical to v0.0.116's, root:root 0444).
+> **The digest still had to move — for the FOURTH consecutive bump — while
 > `openclaw --version` stayed at 2026.7.1.** This is now the rule, not the
 > exception: treat step 2 of the recipe as the load-bearing check and
-> `openclaw --version` as the cheap one.
-> Digest history: `31fcee7b…` (v0.0.113, 2026-08-22); `7643e189…` (v0.0.108,
-> corrected 2026-08-15 from `sha256:929a45a9…`, which had been taken from the
-> floating `:latest` on 2026-08-14 and broke every create — note that bad image
-> was in fact carrying the *future* v0.0.113 package set). The digest freeze is
-> wired into all three manidae runtime-env writers (both cloud templates +
-> `byovps_bootstrap.py`).
+> `openclaw --version` as the cheap one. This time the trigger wasn't the
+> security inventory (byte-identical to v0.0.116) but the OpenClaw npm
+> lockfile SHA (`OPENCLAW_LOCK_SHA256` in `Dockerfile.base`) plus other
+> Docker-layer content — verify the digest by inspecting the GHCR manifest
+> directly (`docker buildx imagetools inspect
+> ghcr.io/nvidia/nemoclaw/sandbox-base:v<TAG>`) rather than assuming "no
+> inventory change" means "no digest change".
+> Digest history: `03a1a319…` (v0.0.116, 2026-08-30); `31fcee7b…` (v0.0.113,
+> 2026-08-22); `7643e189…` (v0.0.108, corrected 2026-08-15 from
+> `sha256:929a45a9…`, which had been taken from the floating `:latest` on
+> 2026-08-14 and broke every create — note that bad image was in fact carrying
+> the *future* v0.0.113 package set). The digest freeze is wired into all three
+> manidae runtime-env writers (both cloud templates + `byovps_bootstrap.py`).
 > Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
+>
+> ### v0.0.116 → v0.0.120 pre-flight results (2026-09-05)
+>
+> Discussion NVIDIA/NemoClaw#11104, 4 releases (v0.0.117..v0.0.120).
+> `nemoclaw-blueprint/blueprint.yaml` OpenShell bound is byte-identical
+> (min==max stays `0.0.106`), `ARG OPENCLAW_VERSION` stays `2026.7.1`, `pi`
+> (0.84.1) and `langchain-deepagents-code` (0.1.55) are unchanged, and
+> `package.json` stays `0.1.0`. **Hermes moved 0.19.0 → 0.20.6** — the guard
+> re-check is logged in step 5 below (result: no recalibration needed). The
+> security package inventory (`SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY` /
+> `OPENCLAW_SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY`) is byte-identical to
+> v0.0.116 — no new apt pins, nothing new to unpin, all 26 live-index pins from
+> the v0.0.116 scan still resolve. `maxBuffer: 256` shim still anchors at 3
+> sites in `src/lib/state/sandbox.ts`.
+>
+> **Shields removed from NemoClaw core (#10722).** Every file under
+> `src/lib/shields/` and the `nemoclaw <sandbox> shields up|down|status` CLI
+> subcommands are gone at v0.0.120 (verified by diffing the tag's file tree).
+> This fork had a first-class feature built on that CLI surface —
+> `app/components/ShieldsPanel.tsx`, `app/api/sandbox/[sandboxId]/shields/route.ts`,
+> and the Shields functions in `app/lib/nemoclawCli.ts` — which is REMOVED in
+> the same commit as this bump (see `install_versioned_nemoclaw_openshell.sh`'s
+> header comment for the full file list). `upgrade-sandboxes` also gained
+> `enforceRemovedImmutabilityMigrationBoundary()`, which throws and demands a
+> host reboot + manual quarantine if a sandbox being rebuilt still has an
+> in-flight Shields-transition marker (`shields-timer-*` etc.) from the old
+> binary — it tolerates a plain past-use "state record" but not a live
+> transition. Under this bump it can only fire on the Hermes sandboxes that
+> actually rebuild.
+>
+> Managed dashboard/messaging/MCP forwarding moved from ambient
+> NemoClaw-owned SSH-forwarding receipts to detached `openshell forward
+> service` processes — this is internal to NemoClaw's own `nemoclaw <sb>
+> dashboard`/messaging/MCP CLI paths and does not touch our own SSH tunnel in
+> `app/lib/openshellHost.ts` (`ensureSandboxOpenClawDashboardTunnel`), which
+> execs `openclaw gateway run` directly over our own `openshell ssh-proxy`
+> ProxyCommand and never calls into NemoClaw's forwarding machinery.
+> `nemoclaw <sandbox> recover` (CLAUDE.md §3) is unaffected as a black-box CLI
+> invocation.
+>
+> The default Model Router pool swapped `nemotron-3-nano-reasoning` for
+> `gpt-oss-20b-high` in `nemoclaw-blueprint/router/pool-config.yaml` — no
+> impact, our deployments pin `nvidia-prod`/`nemotron-3-super-120b-a12b`
+> directly rather than using the router pool.
 >
 > ### v0.0.113 → v0.0.116 pre-flight results (2026-08-30)
 >
@@ -494,3 +545,16 @@ use; `git describe --tags` fails on our tag-less shallow clones, use
    `HERMES_REMOTE_DESKTOP.md` needed no recalibration on the v0.0.108 bump.
    Record the outcome here on every Hermes move so the next agent knows whether
    the check was actually performed or merely intended.
+
+   **Result for 0.19.0→0.20.6 (NemoClaw v0.0.116→v0.0.120, 2026-09-05):**
+   `_ws_host_origin_is_allowed` and `_ws_client_is_allowed` BYTE-IDENTICAL.
+   `_is_accepted_host` gained a new `trusted_public_hosts` parameter (default
+   empty, sourced from `dashboard.public_url` / `HERMES_DASHBOARD_PUBLIC_URL`,
+   neither of which this repo ever sets — confirmed by grep) and the
+   non-loopback-bind auth gate gained a companion trigger: a *loopback* bind
+   now also hard-refuses to start if `dashboard.public_url` is set, not just a
+   non-loopback bind as before. Both changes are no-ops for us today because we
+   never populate that config key, but if a future change ever wires Hermes'
+   own public-URL feature in (instead of our Host/Origin rewrite hack), this is
+   the gate that would engage. `HERMES_REMOTE_DESKTOP.md` §1a needed no
+   recalibration on this bump.

@@ -17,7 +17,7 @@ import { forwardToHermesDashboard, hermesDashboardProxyPrefix } from '@/app/lib/
 // X-Forwarded-Prefix. That 404s against the controller's own root and the
 // resulting uncaught error blanks the whole page (confirmed live 2026-09-06:
 // "Open dashboard" works, but clicking Chat renders nothing). The
-// `app/api/assets/[...path]/route.ts` fallback catches those absolute
+// `app/assets/[...path]/route.ts` fallback catches those absolute
 // requests via Referer and forwards them here too — see that file.
 
 function proxyPrefix(sandboxId: string) {

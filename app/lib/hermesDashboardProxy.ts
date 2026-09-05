@@ -32,7 +32,7 @@ function upstreamBase(access: { bridgeIp?: string; port: number }) {
 }
 
 // Forwards a single HTTP request to the in-sandbox Hermes dashboard. Shared by
-// the sandbox-prefixed proxy route and the bare /api/assets/* fallback (see
+// the sandbox-prefixed proxy route and the bare /assets/* fallback (see
 // that route for why it exists): both just need to hand off a request and an
 // already-resolved upstream path.
 export async function forwardToHermesDashboard(

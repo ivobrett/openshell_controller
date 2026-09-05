@@ -981,7 +981,15 @@ async function ensureOpenClawGatewayToken(sandboxName: string) {
     '  sleep 1.5',
     'done',
     'printf "%s\\n%s" "$token" "$gw_accepted"',
-  ].join("; ")
+    // Joined with real newlines, not "; " — several lines above end with a
+    // trailing "\" for shell line-continuation (the curl invocation), which
+    // only works before an actual newline. Semicolon-joining turns that
+    // continuation into a literal "\;" and turns "for ...; do" into
+    // "do;" (dash: `Syntax error: ";" unexpected`), so the WHOLE script
+    // fails to parse and `openclaw doctor --generate-gateway-token` never
+    // runs — every fresh sandbox is left with an empty gateway.auth.token
+    // and the dashboard fails with "unauthorized: gateway token missing".
+  ].join("\n")
 
   const result = await runCreateCommandBounded(OPENSHELL_BIN, [
     "sandbox",

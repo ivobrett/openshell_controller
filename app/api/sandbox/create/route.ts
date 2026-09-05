@@ -176,7 +176,26 @@ function applyCompatibleEndpointEnv(env: NodeJS.ProcessEnv, settings: CreateInfe
 }
 
 function applyCreateInferenceEnv(env: NodeJS.ProcessEnv, settings: CreateInferenceSettings, body: any) {
-  if (settings.mode === "auto") return settings
+  if (settings.mode === "auto") {
+    // OpenClaw sandboxes route inference through the gateway's already-registered
+    // provider (e.g. `openshell provider create nvidia-prod`) and never hit this
+    // path at all, so "auto" mode being a no-op is invisible for them. Hermes
+    // configures its own inference credential AT ONBOARD TIME instead, and its
+    // non-interactive onboarding defaults to the hosted "build" provider, which
+    // hard-requires NVIDIA_INFERENCE_API_KEY (or NEMOCLAW_PROVIDER_KEY) even
+    // though the operator never touched "Inference at create" and left it on
+    // AUTO. It does NOT fall back to the legacy NVIDIA_API_KEY name already set
+    // globally in .env.local for the gateway provider, so a fresh Hermes sandbox
+    // fails onboarding with "NVIDIA_INFERENCE_API_KEY ... is required" even
+    // though a usable key has been configured on this box the whole time.
+    // Alias it under the name onboard checks for without forcing a provider
+    // choice or otherwise touching "auto" mode's semantics for OpenClaw.
+    if (!env.NVIDIA_INFERENCE_API_KEY && env.NVIDIA_API_KEY) {
+      env.NVIDIA_INFERENCE_API_KEY = env.NVIDIA_API_KEY
+      settings.envSummary.push("NVIDIA_INFERENCE_API_KEY=<aliased-from-NVIDIA_API_KEY>")
+    }
+    return settings
+  }
 
   const apiKey = typeof body?.createInference?.apiKey === "string" ? body.createInference.apiKey.trim() : ""
 
@@ -253,7 +272,7 @@ function openShellGpuArgs(mode: CreateGpuMode) {
   return mode === "required" ? ["--gpu"] : []
 }
 
-function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent, sandboxName?: string, freshSession = false): NemoClawCreateCommand {
+function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent, sandboxName?: string): NemoClawCreateCommand {
   if (NEMOCLAW_BIN && commandExists(NEMOCLAW_BIN)) {
     // Forward the operator-supplied sandbox name to `nemoclaw onboard --name`.
     // Without this, nemoclaw silently picks its default (`my-assistant`),
@@ -263,10 +282,19 @@ function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent
     const args = [
       "onboard",
       "--non-interactive",
-      // Explicit inference selection must not be vetoed by a stale onboarding
-      // session: without --fresh, nemoclaw aborts with "Resumable state recorded
-      // provider X" when the previous onboard used a different provider.
-      ...(freshSession ? ["--fresh"] : []),
+      // Always ignore any saved onboarding session. `nemoclaw` tracks at most
+      // one resumable session GLOBALLY (not per sandbox name), so a prior
+      // create that got SIGKILLed after its sandbox reached Ready (see
+      // ready-command handling below) can leave that slot occupied. Without
+      // --fresh, onboarding a DIFFERENT sandbox name then aborts with
+      // "Resumable state belongs to sandbox '<other>', not '<this-one>'" (or,
+      // for the same name with a different inference provider, "Resumable
+      // state recorded provider X") before nemoclaw ever touches this
+      // sandbox. This create flow always means "build this sandbox now" —
+      // resuming someone else's interrupted session is never the right
+      // semantic here, and --recreate-sandbox below already implies
+      // start-over rather than resume.
+      "--fresh",
       "--recreate-sandbox",
       "--yes-i-accept-third-party-software",
       ...nameArgs,
@@ -1187,7 +1215,7 @@ export async function POST(request: Request) {
     if (isNemoClawOnboardBlueprint(blueprint)) {
       const agent = nemoClawAgentForBlueprint(blueprint)
       const isOpenClawAgent = agent === "openclaw"
-      const createCommand = buildNemoClawCreateCommand(gpuMode, agent, sandboxName, createInference.mode !== "auto")
+      const createCommand = buildNemoClawCreateCommand(gpuMode, agent, sandboxName)
       const env: NodeJS.ProcessEnv = hostCommandEnv({
         NEMOCLAW_SANDBOX_NAME: sandboxName,
         NEMOCLAW_AGENT: agent,

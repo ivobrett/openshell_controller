@@ -101,7 +101,8 @@ assert.match(mcpBrokerUrlSource, /discoverSandboxProxyOrigin/, 'MCP broker URL g
 assert.match(mcpBrokerUrlSource, /HTTP_PROXY/, 'MCP broker URL generation must use the sandbox proxy environment when available')
 assert.match(mcpBrokerClientSource, /PATH: HOST_PATH/, 'MCP stdio broker launches must inherit the shared host PATH')
 
-assert.match(createRouteSource, /buildNemoClawCreateCommand\(gpuMode, agent, sandboxName, createInference\.mode !== "auto"\)/, 'NemoClaw blueprint create must resolve a current CLI command with the selected GPU mode, agent, sandbox name, and fresh-session flag (explicit inference modes need onboard --fresh)')
+assert.match(createRouteSource, /buildNemoClawCreateCommand\(gpuMode, agent, sandboxName\)/, 'NemoClaw blueprint create must resolve a current CLI command with the selected GPU mode, agent, and sandbox name')
+assert.match(createRouteSource, /"onboard",\s*\n\s*"--non-interactive",\s*\n[\s\S]*?"--fresh",/, 'NemoClaw blueprint create must ALWAYS pass --fresh: nemoclaw tracks at most one resumable onboarding session globally (not per sandbox name), so a prior create SIGKILLed after Ready can leave a stale session that blocks onboarding a different sandbox name ("Resumable state belongs to sandbox X, not Y") unless --fresh is unconditional')
 assert.match(createRouteSource, /"onboard",[\s\S]*"--non-interactive"/, 'NemoClaw blueprint create must use the supported onboard CLI flow')
 assert.match(createRouteSource, /NEMOCLAW_SANDBOX_NAME: sandboxName/, 'NemoClaw blueprint create must pass the requested sandbox name to onboard')
 assert.match(createRouteSource, /NEMOCLAW_AGENT: agent/, 'NemoClaw blueprint create must pass the requested agent to onboard')

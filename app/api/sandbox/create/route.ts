@@ -954,22 +954,40 @@ async function approveOpenClawDeviceRequests(sandboxName: string) {
 // the OpenClaw gateway token at sandbox creation. Verification logic added on
 // top of that to close the doctor-rotation race documented in §11.
 async function ensureOpenClawGatewayToken(sandboxName: string) {
-  // 1. Run doctor (may rotate the JSON token + trigger gateway restart)
-  // 2. Read the token from JSON
+  // 1. Run doctor (rotates the JSON token). Its own comment claims this "may
+  //    trigger a gateway restart", but that restart goes through
+  //    `openclaw gateway restart`, which only knows how to bounce a
+  //    launchd/systemd/schtasks-managed service — our sandboxes have none of
+  //    those (the gateway runs as a bare `openclaw gateway run` process with
+  //    no supervisor), so doctor's restart is silently a no-op here and the
+  //    already-running gateway (started during `nemoclaw onboard`, before
+  //    any token existed) never sees the new token written to
+  //    openclaw.json. Force our own restart so a fresh process reads the
+  //    token from disk on its very first launch. Confirmed live 2026-09-05:
+  //    without this, the dashboard fails with "unauthorized: gateway token
+  //    mismatch" indefinitely even though the JSON token is correct and
+  //    correctly forwarded — the file value and the live process's
+  //    in-memory value had simply diverged.
+  // 2. Read the token from JSON.
   // 3. Verify the token is accepted by the live gateway via a WS handshake
   //    against the gateway's in-sandbox port (18789). Retry up to 10× over
-  //    ~15 s to cover the gateway-restart window. If the gateway never
-  //    accepts the JSON token, the dashboard would fail with "Auth did not
-  //    match" — surface that here so the caller can react (eg log + alert)
-  //    instead of letting the user discover it in the browser.
+  //    ~15 s to cover the restart window. If the gateway never accepts the
+  //    JSON token, the dashboard would fail with "Auth did not match" —
+  //    surface that here so the caller can react (eg log + alert) instead
+  //    of letting the user discover it in the browser.
   // The verification is harmless when the gateway already accepts the token
   // (single WS handshake, ~50 ms). The retry only fires on the slow path.
   const script = [
     "openclaw doctor --generate-gateway-token >/dev/null 2>&1 || true",
     'token=$(node -e \'const fs=require("fs"); try { const c=JSON.parse(fs.readFileSync("/sandbox/.openclaw/openclaw.json","utf8")); process.stdout.write(String(c?.gateway?.auth?.token||c?.gateway?.token||"")); } catch(e) {}\')',
-    // Poll the gateway WS handshake up to 10× to confirm the JSON token is live.
-    // The gateway's in-sandbox port is OPENCLAW_GATEWAY_PORT (default 18789).
     'gw_port="${OPENCLAW_GATEWAY_PORT:-18789}"',
+    // --force kills any existing listener on gw_port first, so this is safe
+    // to run unconditionally even if a gateway is already up. Detached via
+    // nohup + disown so it outlives this exec session.
+    'nohup openclaw gateway run --allow-unconfigured --force --bind loopback --port "${gw_port}" >/tmp/openclaw-gateway-token-restart.log 2>&1 &',
+    'disown 2>/dev/null || true',
+    'sleep 2',
+    // Poll the gateway WS handshake up to 10× to confirm the JSON token is live.
     'gw_accepted=0',
     'for _i in $(seq 1 10); do',
     '  code=$(curl -sf -m 2 -o /dev/null -w "%{http_code}" \\',

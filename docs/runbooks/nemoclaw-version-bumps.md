@@ -152,6 +152,58 @@ in the same change set.
 > manidae runtime-env writers (both cloud templates + `byovps_bootstrap.py`).
 > Full write-up: `memory/project_openclaw_floating_base_image_skew.md`.
 >
+> ### v0.0.120 → v0.0.123 pre-flight results (2026-09-13)
+>
+> Discussions NVIDIA/NemoClaw#11278 (v0.0.121), #11408 (v0.0.122), #11537
+> (v0.0.123) — 3 releases. **Clean tag-only bump on every axis this fork
+> depends on** — the first bump since v0.0.108 that required zero code
+> changes, only pin/digest edits. `nemoclaw-blueprint/blueprint.yaml` OpenShell
+> bound is byte-identical (min==max stays `0.0.106`; v0.0.121's #11253
+> "reviewed OpenShell 0.0.116 replacement identities" is confirmed
+> test-fixture-only plumbing, not an active pin change — watch for it to go
+> live in a future bump). `ARG OPENCLAW_VERSION` stays `2026.7.1`, `ARG
+> HERMES_VERSION` stays `v2026.8.27` (0.20.6, UNCHANGED this bump — no
+> upstream hermes-agent diff exists, so the mandatory
+> `hermes_cli/web_server.py` guard re-check is a no-op and
+> `HERMES_REMOTE_DESKTOP.md` §1a needs no recalibration). `pi` (0.84.1) and
+> `langchain-deepagents-code` (0.1.55) are unchanged, `package.json` stays
+> `0.1.0` — `upgrade-sandboxes --auto` has nothing stale to rebuild. The
+> security package inventory (both `SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY`
+> and `OPENCLAW_SANDBOX_BASE_SECURITY_PACKAGE_INVENTORY`) is byte-identical to
+> v0.0.120 — no new apt pins beyond the three known ones (`procps`,
+> `e2fsprogs`, `tmux`), nothing new to unpin. `maxBuffer: 256` shim still
+> anchors at 3 sites in `src/lib/state/sandbox.ts`. `npm audit signatures`
+> stays retired. Shields stay removed (only retirement-workflow test files
+> remain at v0.0.123).
+>
+> Two v0.0.123 features were checked and confirmed inert for us: the
+> experimental external-host-component registration
+> (`src/lib/onboard/external-component/index.ts`) only activates if
+> `~/.config/nemoclaw/external-component.json` exists, which nothing in this
+> fork ever creates — even though we always pass `--fresh` to onboarding
+> (commit `ef6733c`); and the stopped-sandbox status change
+> (`status-preflight.ts`, #11211/#11091) only engages when a sandbox's
+> registry row has `stopped === true`, which a gateway-death scenario
+> (CLAUDE.md §3) never sets, so normal `nemoclaw <sandbox> recover` still
+> triggers as documented. The v0.0.122 remote-dashboard-bind refactor
+> (`resolveDashboardPlatformHints()`, #10931) touches only NemoClaw's own
+> `nemoclaw <sandbox> dashboard` forwarding and `NEMOCLAW_DASHBOARD_BIND` /
+> `CHAT_UI_URL`, both of which already existed at v0.0.120 and which this fork
+> never sets — confirmed by grep, distinct from our own SSH-tunnel-based
+> OpenClaw dashboard-token architecture (CLAUDE.md §10).
+>
+> The digest still had to move despite the unchanged pins and byte-identical
+> inventory — same pattern as every bump since v0.0.108. New digest:
+> `sha256:2f3c8820fd355b337631e060d80ed8d85236aa3bc96db6ce3cdd212eb2af975c`
+> (the `sandbox-base:v0.0.123` release tag's multi-arch manifest index,
+> verified 2026-09-13 via `docker buildx imagetools inspect
+> ghcr.io/nvidia/nemoclaw/sandbox-base:v0.0.123`; `openclaw --version` inside
+> confirms 2026.7.1). Pushed to all five sync'd locations: this repo's
+> `install_versioned_nemoclaw_openshell.sh` (pin only), and manidae-cloud's
+> `startup_agentgateway.sh.j2`, `startup_nemoclaw.sh.j2`, `vps_validation.py`
+> (pin only, no digest — same as the controller), and `byovps_bootstrap.py`
+> (pin + digest).
+>
 > ### v0.0.116 → v0.0.120 pre-flight results (2026-09-05)
 >
 > Discussion NVIDIA/NemoClaw#11104, 4 releases (v0.0.117..v0.0.120).
@@ -558,3 +610,9 @@ use; `git describe --tags` fails on our tag-less shallow clones, use
    own public-URL feature in (instead of our Host/Origin rewrite hack), this is
    the gate that would engage. `HERMES_REMOTE_DESKTOP.md` §1a needed no
    recalibration on this bump.
+
+   **Result for v0.0.120→v0.0.123 (2026-09-13): HERMES_VERSION DID NOT MOVE**
+   (stays `v2026.8.27` / 0.20.6 in both `agents/hermes/Dockerfile.base` trees) —
+   no upstream `hermes-agent` diff exists, so this check is a no-op this bump.
+   Recorded per the "record the outcome on every Hermes move" instruction even
+   when the outcome is "nothing to check."

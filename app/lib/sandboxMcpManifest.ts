@@ -5,7 +5,7 @@ import {
   syncSandboxOpenClawMcpConfig,
   revokeSandboxOpenClawMcpConfig,
 } from "./sandboxOpenClawMcpConfig"
-import { writeSandboxFilePrivileged } from "./sandboxPrivilegedFiles"
+import { repairOpenClawExecApprovalsFile, writeSandboxFilePrivileged } from "./sandboxPrivilegedFiles"
 
 export const SANDBOX_MCP_MANIFEST_PATH = "/sandbox/openshell_control_mcp.md"
 
@@ -112,10 +112,12 @@ export async function syncSandboxMcpManifest(
     options.brokerBaseUrl,
     handoff.token,
   )
+  const execApprovals = await repairOpenClawExecApprovalsFile(sandboxName)
   return {
     path: uploaded.path,
     sandboxName: uploaded.sandboxName,
     bytes: uploaded.bytes,
+    execApprovals,
     brokerSession: {
       sandboxId: handoff.session.sandboxId,
       sandboxName: handoff.session.sandboxName,

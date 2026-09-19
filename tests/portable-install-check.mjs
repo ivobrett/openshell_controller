@@ -54,10 +54,10 @@ assert.match(installSource, /python3 -m venv "\$PROJECT_VENV"/, 'installer must 
 assert.match(installSource, /\$venv_python" -m pip install --upgrade uv/, 'installer must install uvx into the virtual environment')
 assert.match(installSource, /set_env "OPENSHELL_CONTROL_VENV"/, 'installer must persist the virtual environment path for runtime MCP launches')
 
-assert.match(versionedInstallSource, /OPENSHELL_VERSION="\$\{OPENSHELL_VERSION:-v0\.0\.116\}"/, 'versioned installer must default to the OpenShell release required by pinned NemoClaw v0.0.127 (blueprint min==max==0.0.116, raised from 0.0.106 at v0.0.124)')
-assert.match(versionedInstallSource, /NEMOCLAW_INSTALL_REF="\$\{NEMOCLAW_INSTALL_REF:-\$\{NEMOCLAW_INSTALL_TAG:-e38726c8d792dc99c03ce3a29619ed21f7d32d34\}\}"/, 'versioned installer must pin NemoClaw to the main SHA carrying OpenClaw 2026.9.1')
+assert.match(versionedInstallSource, /OPENSHELL_VERSION="\$\{OPENSHELL_VERSION:-v0\.0\.106\}"/, 'versioned installer must default to the OpenShell release required by pinned NemoClaw v0.0.123 (blueprint min==max==0.0.106)')
+assert.match(versionedInstallSource, /NEMOCLAW_INSTALL_REF="\$\{NEMOCLAW_INSTALL_REF:-\$\{NEMOCLAW_INSTALL_TAG:-v0\.0\.123\}\}"/, 'versioned installer must pin NemoClaw to tag v0.0.123')
 assert.match(versionedInstallSource, /NEMOCLAW_SOURCE_URL="\$\{NEMOCLAW_SOURCE_URL:-https:\/\/github\.com\/NVIDIA\/NemoClaw\.git\}"/, 'versioned installer must use the NemoClaw source repository URL')
-assert.match(versionedInstallSource, /OPENCLAW_VERSION="\$\{OPENCLAW_VERSION:-2026\.9\.1\}"/, 'versioned installer must default to NemoClaw main\'s current OpenClaw build target')
+assert.match(versionedInstallSource, /OPENCLAW_VERSION="\$\{OPENCLAW_VERSION:-2026\.7\.1\}"/, 'versioned installer must default to NemoClaw main\'s current OpenClaw build target')
 assert.match(versionedInstallSource, /https:\/\/raw\.githubusercontent\.com\/NVIDIA\/OpenShell\/main\/install\.sh/, 'versioned installer must use the OpenShell installer URL')
 assert.match(versionedInstallSource, /git -C "\$source_dir" fetch[\s\S]*"\$NEMOCLAW_INSTALL_REF"/, 'versioned installer must fetch NemoClaw from the selected git ref')
 assert.match(versionedInstallSource, /Requested NemoClaw install ref/, 'versioned installer must fail clearly when the selected NemoClaw ref is unavailable')

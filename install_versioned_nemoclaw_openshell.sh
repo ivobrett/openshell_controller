@@ -8,33 +8,43 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# *** OPENSHELL MOVES ON THE v0.0.123 -> v0.0.127 BUMP: 0.0.106 -> 0.0.116. ***
-# NemoClaw raised the blueprint floor at v0.0.124 (min==max_openshell_version
-# == "0.0.116", unchanged through v0.0.127), almost certainly to pick up
-# OpenShell v0.0.111's "canonical main process" (NVIDIA/OpenShell#2726) — the
-# PID-1 shape NemoClaw's OpenShell-managed gateway topology now depends on.
-# Intervening OpenShell releases: 0.0.109, .110, .111, .113, .115, .116; none
-# declares a breaking change in its notes, and 0.0.116 is the newest release.
+# *** REVERTED 2026-09-19 — DO NOT RE-BUMP WITHOUT READING THIS. ***
+# We bumped to NemoClaw main@e38726c8d7 + OpenShell 0.0.116 + OpenClaw 2026.9.1
+# and it FAILED LIVE on a GPU-less Hetzner agent gateway. Two independent,
+# upstream-caused blockers, both reproduced repeatedly:
 #
-# CONSEQUENCE: `--skip-openshell` is NOT valid on a box at 0.0.106. An
-# OpenShell reinstall is unavoidable, and it takes EVERY sandbox container
-# down (Trap 1 in docs/runbooks/live-vps-upgrades.md). Follow
-# docs/runbooks/live-openshell-bump-with-agent-upgrade.md, NOT
-# byovps-controller-upgrade.md.
+#  1. SANDBOX CREATE IS ~78% BROKEN. selectedDockerMode() in NemoClaw's
+#     src/lib/onboard/managed-bootstrap/docker-runtime.ts is unconditional for
+#     GPU-less sandboxes:
+#         if (route !== "compatibility" || !sandboxGpuEnabled)
+#             return buildDockerGpuMode("startup-command");
+#     so NemoClaw ALWAYS recreates the OpenShell container to persist the
+#     startup command ("Docker GPU patch" is a misnomer — that mode carries
+#     device:"" and args:[], no GPU involvement, and no env var disables it;
+#     NEMOCLAW_DOCKER_GPU_PATCH=0 is a NO-OP, it means the same as unset).
+#     OpenShell 0.0.116 destroys the replacement mid-commit: docker events show
+#     the new container reach health_status:healthy and then be killed and
+#     destroyed, after which OpenShell has nothing to start and reports Error.
+#     Almost certainly OpenShell v0.0.111's canonical main process (#2726) /
+#     reject-stale-exit (#2857) refusing NemoClaw's rename-based swap.
+#     Measured: 9 create attempts, 2 succeeded.
 #
-# NOTE — this bump is NOT the exact case that runbook was written for. Its
-# condition 3 ("at least one agent's pinned version moves, so you WANT
-# upgrade-sandboxes --auto to rebuild it") does NOT hold here: OpenClaw stays
-# 2026.7.1 and Hermes stays 0.20.6. So nothing is rebuilt automatically, and
-# EVERY sandbox is merely restarted through the destructive window — i.e.
-# every sandbox races the sandbox-token TTL (Trap 2) with no rebuild to dodge
-# it. Minimise the Exited window and keep the docker cp backup. Conversely,
-# NemoClaw v0.0.124+ images carry a materially rewritten agent entrypoint
-# (agents/hermes/start.sh lost ~1100 lines to #11792, which returned gateway
-# lifecycle authority to OpenClaw/Hermes), so `upgrade-sandboxes --check` may
-# still report existing sandboxes as stale and want a rebuild. Run it FIRST
-# and let its answer, not this comment, decide the plan.
-OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
+#  2. CHAT IS BROKEN EVEN WHEN CREATE SUCCEEDS. NemoClaw onboarding writes a
+#     legacy /sandbox/.openclaw/agents/main/agent/auth-profiles.json; OpenClaw
+#     2026.9.1 refuses it with AuthProfileMigrationRequiredError and every
+#     chat.send fails. The documented remedy (`openclaw doctor --fix`) CANNOT
+#     run: it needs maintenance mode, and the in-sandbox supervisor owns
+#     gateway-lifecycle, so doctor exits with
+#     StateDatabaseCoordinatorContentionError. `openclaw gateway stop` is a
+#     launchd/systemd command and there is no service manager in the sandbox.
+#
+# Both live inside a NemoClaw main commit that adopted OpenClaw 2026.9.1
+# (#11105) ONE DAY before we pinned it, without the matching migration and
+# lifecycle work. Nothing in this repo can fix either. Re-attempt only when a
+# NemoClaw TAG ships 2026.9.1 and a fresh create + chat passes end-to-end.
+#
+# Restored pins below are the combination proven working on 2026-09-13.
+OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.106}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
 # NemoClaw is pinned to the main-branch COMMIT e38726c8d792dc99c03ce3a29619ed21f7d32d34
 # (2026-09-18, 28 commits past tag v0.0.127), bumped from tag v0.0.123 on
@@ -126,9 +136,9 @@ OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.co
 #    route in favour of `nemoclaw sandbox gateway restart` (their #49).
 #    Its code comment claiming "no supervisor" is already stale. Verify
 #    with a live create.
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-e38726c8d792dc99c03ce3a29619ed21f7d32d34}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.123}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.1}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE="${NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE:-1}"
 NEMOCLAW_NON_INTERACTIVE="${NEMOCLAW_NON_INTERACTIVE:-1}"

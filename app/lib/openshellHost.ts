@@ -476,15 +476,19 @@ async function resolveSandboxGatewayPort(sandboxName: string) {
   // constant — which then sent the readiness probe at a dead port and cost
   // ~75s per dashboard open. NemoClaw exports the port it allocated as
   // OPENCLAW_GATEWAY_PORT, and it matches gateway.port in openclaw.json.
-  const script = 'printf %s "${OPENCLAW_GATEWAY_PORT:-}"'
+  // Use execSandboxSsh (ssh via `openshell ssh-proxy`), the same mechanism
+  // readSandboxOpenClawDashboardToken already relies on. An earlier version
+  // shelled out to `openshell sandbox exec` instead; that call never returned
+  // from inside the controller and was killed by its own 20s timeout, so the
+  // helper silently fell back to the wrong constant — which is precisely the
+  // bug it exists to prevent. The same command runs in ~0.08s from a shell,
+  // so this is about how the controller invokes it, not the sandbox.
   try {
-    const { stdout } = await execFileAsync(OPENSHELL_BIN, [
-      "sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", script,
-    ], {
-      env: hostCommandEnv({ OPENSHELL_GATEWAY: OPENSHELL_GATEWAY || "nemoclaw" }),
-      timeout: 20000,
-      maxBuffer: 1024 * 1024,
-    })
+    const { stdout } = await execSandboxSsh(
+      sandboxName,
+      'printf %s "${OPENCLAW_GATEWAY_PORT:-}"',
+      10000,
+    )
     const port = Number.parseInt(String(stdout).trim(), 10)
     if (Number.isFinite(port) && port > 0) {
       sandboxGatewayPortCache.set(sandboxName, port)

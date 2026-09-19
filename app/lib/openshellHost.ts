@@ -470,7 +470,13 @@ async function resolveSandboxGatewayPort(sandboxName: string) {
   // openclaw.json is authoritative; OPENCLAW_GATEWAY_PORT is the same value
   // exported into the sandbox environment. Fall back to the constant so a
   // sandbox we cannot read still behaves exactly as before.
-  const script = 'node -e \'try{const c=JSON.parse(require("fs").readFileSync("/sandbox/.openclaw/openclaw.json","utf8"));process.stdout.write(String(c?.gateway?.port||""))}catch(e){process.stdout.write("")}\' 2>/dev/null || printf %s "${OPENCLAW_GATEWAY_PORT:-}"'
+  // PLAIN shell read on purpose. An earlier version embedded a `node -e '...'`
+  // one-liner here; its nested quoting did not survive the argv round-trip, so
+  // every call timed out after 20s and silently fell back to the wrong
+  // constant — which then sent the readiness probe at a dead port and cost
+  // ~75s per dashboard open. NemoClaw exports the port it allocated as
+  // OPENCLAW_GATEWAY_PORT, and it matches gateway.port in openclaw.json.
+  const script = 'printf %s "${OPENCLAW_GATEWAY_PORT:-}"'
   try {
     const { stdout } = await execFileAsync(OPENSHELL_BIN, [
       "sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", script,

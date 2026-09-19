@@ -448,9 +448,55 @@ export async function prebuildHermesDashboardWebUi(sandboxName: string): Promise
   }
 }
 
-async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string) {
+
+// FORK FIX 2026-09-19 — the in-sandbox OpenClaw gateway port is NOT fixed.
+// NemoClaw allocates it per sandbox: the first sandbox on a host gets 18789,
+// the next free one gets 18790, and so on (it also records the choice in the
+// sandbox's OPENCLAW_GATEWAY_PORT env and gateway.port in openclaw.json).
+// Assuming the SANDBOX_DASHBOARD_REMOTE_PORT constant for every sandbox meant
+// the dashboard worked for whichever sandbox happened to own 18789 and timed
+// out for every other one: the readiness curl hit a dead port, which then
+// triggered the expensive `nemoclaw sandbox gateway restart` fallback
+// (~30-40s) followed by 16 further failing retries against the same wrong
+// port, so /api/openshell/dashboard/open took ~55s and the launch page gave
+// up at its 45s client timeout. Measured on a live box: t127b was on 18790
+// while the constant said 18789.
+const sandboxGatewayPortCache = new Map<string, number>()
+
+async function resolveSandboxGatewayPort(sandboxName: string) {
+  const cached = sandboxGatewayPortCache.get(sandboxName)
+  if (cached) return cached
+
+  // openclaw.json is authoritative; OPENCLAW_GATEWAY_PORT is the same value
+  // exported into the sandbox environment. Fall back to the constant so a
+  // sandbox we cannot read still behaves exactly as before.
+  const script = 'node -e \'try{const c=JSON.parse(require("fs").readFileSync("/sandbox/.openclaw/openclaw.json","utf8"));process.stdout.write(String(c?.gateway?.port||""))}catch(e){process.stdout.write("")}\' 2>/dev/null || printf %s "${OPENCLAW_GATEWAY_PORT:-}"'
   try {
-    await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${SANDBOX_DASHBOARD_REMOTE_PORT}/ >/dev/null`, 5000)
+    const { stdout } = await execFileAsync(OPENSHELL_BIN, [
+      "sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", script,
+    ], {
+      env: hostCommandEnv({ OPENSHELL_GATEWAY: OPENSHELL_GATEWAY || "nemoclaw" }),
+      timeout: 20000,
+      maxBuffer: 1024 * 1024,
+    })
+    const port = Number.parseInt(String(stdout).trim(), 10)
+    if (Number.isFinite(port) && port > 0) {
+      sandboxGatewayPortCache.set(sandboxName, port)
+      return port
+    }
+  } catch {
+    // fall through to the default below
+  }
+  return SANDBOX_DASHBOARD_REMOTE_PORT
+}
+
+export function forgetSandboxGatewayPort(sandboxName: string) {
+  sandboxGatewayPortCache.delete(sandboxName)
+}
+
+async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string, remotePort: number) {
+  try {
+    await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${remotePort}/ >/dev/null`, 5000)
     return true
   } catch {
     const restart = await restartSandboxGatewayWithNemoClaw(sandboxName)
@@ -459,7 +505,7 @@ async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string) {
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
     try {
-      await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${SANDBOX_DASHBOARD_REMOTE_PORT}/ >/dev/null`, 5000)
+      await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${remotePort}/ >/dev/null`, 5000)
       return true
     } catch {
       await sleep(500)
@@ -476,11 +522,12 @@ async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
   const initial = await inspectListeningPort(port)
   if (initial.listenerPresent) return initial
 
-  if (!await ensureRemoteSandboxOpenClawDashboard(sandboxName)) return initial
+  const remotePort = await resolveSandboxGatewayPort(sandboxName)
+  if (!await ensureRemoteSandboxOpenClawDashboard(sandboxName, remotePort)) return initial
 
   const child = spawn("ssh", buildSandboxSshArgs(sandboxName, [
     "-N",
-    "-L", `127.0.0.1:${port}:127.0.0.1:${SANDBOX_DASHBOARD_REMOTE_PORT}`,
+    "-L", `127.0.0.1:${port}:127.0.0.1:${remotePort}`,
   ]), {
     detached: true,
     env: buildOpenClawEnv(),

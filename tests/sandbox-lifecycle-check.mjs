@@ -121,15 +121,22 @@ assert.match(createRouteSource, /NEMOCLAW_ENDPOINT_URL = settings\.endpointUrl/,
 assert.match(createRouteSource, /COMPATIBLE_API_KEY = apiKey \|\| "dummy"/, 'OpenAI-compatible onboarding must pass COMPATIBLE_API_KEY or a no-auth placeholder')
 assert.match(createRouteSource, /NEMOCLAW_PROVIDER_KEY = env\.COMPATIBLE_API_KEY/, 'OpenAI-compatible onboarding must bridge the provider key without printing secrets')
 assert.match(createRouteSource, /Hosted NVIDIA Build onboarding requires an nvapi-\*/, 'blueprint create must reject non-nvapi keys for the hosted NVIDIA build provider')
-assert.match(versionedInstallerSource, /OPENSHELL_VERSION="\$\{OPENSHELL_VERSION:-v0\.0\.106\}"/, 'versioned installer must default to the OpenShell release required by pinned NemoClaw v0.0.116 (blueprint min==max==0.0.106)')
-assert.match(versionedInstallerSource, /NEMOCLAW_INSTALL_REF="\$\{NEMOCLAW_INSTALL_REF:-\$\{NEMOCLAW_INSTALL_TAG:-v0\.0\.116\}\}"/, 'versioned installer must pin NemoClaw to tag v0.0.116 while preserving the legacy tag override')
-assert.match(versionedInstallerSource, /OPENCLAW_VERSION="\$\{OPENCLAW_VERSION:-2026\.7\.1\}"/, 'versioned installer must pin the current NemoClaw-compatible OpenClaw base image version')
+assert.match(versionedInstallerSource, /OPENSHELL_VERSION="\$\{OPENSHELL_VERSION:-v0\.0\.116\}"/, 'versioned installer must default to the OpenShell release required by pinned NemoClaw v0.0.127 (blueprint min==max==0.0.116)')
+assert.match(versionedInstallerSource, /NEMOCLAW_INSTALL_REF="\$\{NEMOCLAW_INSTALL_REF:-\$\{NEMOCLAW_INSTALL_TAG:-e38726c8d792dc99c03ce3a29619ed21f7d32d34\}\}"/, 'versioned installer must pin NemoClaw to the main SHA carrying OpenClaw 2026.9.1 (no tag carries it) while preserving the legacy tag override')
+assert.match(versionedInstallerSource, /OPENCLAW_VERSION="\$\{OPENCLAW_VERSION:-2026\.9\.1\}"/, 'versioned installer must pin OpenClaw 2026.9.1 — the NemoClaw ref and OPENCLAW_VERSION are a package deal (Dockerfile.base carries a per-version integrity hash)')
 assert.match(versionedInstallerSource, /git -C "\$source_dir" fetch[\s\S]*"\$NEMOCLAW_INSTALL_REF"/, 'versioned installer must fetch NemoClaw by git ref so branch heads and tags both work')
 assert.match(versionedInstallerSource, /docker build[\s\S]*Dockerfile\.base[\s\S]*--build-arg "OPENCLAW_VERSION=\$OPENCLAW_VERSION"[\s\S]*"\$source_dir"/, 'versioned installer must rebuild the stock NemoClaw base image with the pinned OpenClaw version')
 assert.doesNotMatch(createRouteSource, /repairOpenClawRuntimePolicy|runtimePolicyRepair/, 'sandbox create must not mutate OpenShell filesystem policy for OpenClaw')
 assert.doesNotMatch(createRouteSource, /stabilizeOpenClawGatewayConfig|gatewayConfigRepair|repairOpenClawWorkspacePermissions|workspaceRepair/, 'sandbox create must not patch OpenClaw internals after the Monday rollback')
-assert.match(createRouteSource, /repairOpenClawExecApprovalsFile/, 'sandbox create may apply the narrow exec approvals symlink compatibility repair')
-assert.match(createRouteSource, /execApprovalsRepair/, 'sandbox create response must report the narrow exec approvals compatibility repair')
+// RETIRED 2026-09-19 with the OpenClaw 2026.7.1 -> 2026.9.1 bump. The repair
+// rewrote /sandbox/.openclaw/exec-approvals.json to replace a symlink older
+// OpenClaw builds left there. 2026.9.1 writes a real sandbox-owned file
+// itself, so the repair is not just redundant — it deletes and rewrites live
+// approvals state on every create. Upstream removed it in the same 2026.9.1
+// sync (mmckeen-nv#50). These assertions now guard the REMOVAL, same pattern
+// as the NEMOCLAW_SANDBOX_BASE_IMAGE_REF retirement.
+assert.doesNotMatch(createRouteSource, /repairOpenClawExecApprovalsFile/, 'sandbox create must not run the retired OpenClaw exec-approvals repair on OpenClaw 2026.9.1+')
+assert.doesNotMatch(createRouteSource, /execApprovalsRepair/, 'sandbox create response must not report the retired exec-approvals repair')
 assert.match(createRouteSource, /created && isOpenClawAgent \? await repairOpenClawExecApprovalsFile/, 'Hermes create must skip OpenClaw-only exec approvals repair')
 assert.match(createRouteSource, /created && isOpenClawAgent \? await approveOpenClawDeviceRequests/, 'Hermes create must skip OpenClaw-only device approval')
 assert.doesNotMatch(sandboxPrivilegedFilesSource, /openshell-openclaw-policy-|"policy", "set"|withoutReadOnlyOpenClaw/, 'OpenClaw repair must not mutate OpenShell filesystem policy')

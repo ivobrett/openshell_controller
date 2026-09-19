@@ -7,7 +7,6 @@ import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from 
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
 import { recordActivity } from "@/app/lib/activityLog"
 import { clearSandboxCreateInFlight, markSandboxCreateInFlight } from "@/app/lib/sandboxCreateState.mjs"
-import { repairOpenClawExecApprovalsFile } from "@/app/lib/sandboxPrivilegedFiles"
 import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
 import { planRouteMetadataPatch } from "@/app/lib/sandboxCreate/registryRouteMetadata"
@@ -1367,11 +1366,6 @@ export async function POST(request: Request) {
         }, { status: 500 })
       }
 
-      const execApprovalsRepair = created && isOpenClawAgent ? await repairOpenClawExecApprovalsFile(sandboxName).catch((error) => ({
-        sandboxName,
-        path: "/sandbox/.openclaw/exec-approvals.json",
-        error: error instanceof Error ? error.message : "Failed to repair OpenClaw exec approvals file",
-      })) : null
       const deviceApproval = created && isOpenClawAgent ? await approveOpenClawDeviceRequests(sandboxName) : null
       const gatewayToken = created && isOpenClawAgent ? await ensureOpenClawGatewayToken(sandboxName).catch((error) => ({
         attempted: true,
@@ -1467,7 +1461,6 @@ export async function POST(request: Request) {
           attempts: readiness.attempts,
           elapsedMs: readiness.elapsedMs,
         },
-        execApprovalsRepair,
         deviceApproval,
         gatewayToken,
         autoApproveNodes,
@@ -1490,8 +1483,6 @@ export async function POST(request: Request) {
                 : gpuMode === "required"
                   ? "GPU passthrough was required for this create run."
                   : "NemoClaw chose GPU passthrough automatically for this create run.",
-              execApprovalsRepair && "note" in execApprovalsRepair ? execApprovalsRepair.note : false,
-              execApprovalsRepair && "error" in execApprovalsRepair ? `OpenClaw exec approvals repair failed: ${execApprovalsRepair.error}` : false,
               deviceApproval?.note,
             )
           : "Blueprint command reported success, but the sandbox never reached a ready verification state afterward.",
@@ -1533,11 +1524,6 @@ export async function POST(request: Request) {
         error: "Sandbox readiness polling produced no verification result.",
       }
       const created = readiness.verified
-      const execApprovalsRepair = created ? await repairOpenClawExecApprovalsFile(sandboxName).catch((error) => ({
-        sandboxName,
-        path: "/sandbox/.openclaw/exec-approvals.json",
-        error: error instanceof Error ? error.message : "Failed to repair OpenClaw exec approvals file",
-      })) : null
       const deviceApproval = created ? await approveOpenClawDeviceRequests(sandboxName) : null
       const gatewayToken = created ? await ensureOpenClawGatewayToken(sandboxName).catch(() => null) : null
       const policyPrepared = Boolean(policy)
@@ -1576,7 +1562,6 @@ export async function POST(request: Request) {
           attempts: readiness.attempts,
           elapsedMs: readiness.elapsedMs,
         },
-        execApprovalsRepair,
         deviceApproval,
         gatewayToken,
         policyPrepared,
@@ -1590,8 +1575,6 @@ export async function POST(request: Request) {
               gpuMode === "required"
                 ? "GPU passthrough was requested for this create run."
                 : false,
-              execApprovalsRepair && "note" in execApprovalsRepair ? execApprovalsRepair.note : false,
-              execApprovalsRepair && "error" in execApprovalsRepair ? `OpenClaw exec approvals repair failed: ${execApprovalsRepair.error}` : false,
               deviceApproval?.note,
             )
           : "Create command started, but the sandbox never reached a ready verification state afterward.",
@@ -1679,11 +1662,6 @@ export async function POST(request: Request) {
       })()
       const effectiveAgent: QuickDeployAgent = requestedAgent ?? sourceAgent
       const isOpenClawAgent = effectiveAgent === "openclaw"
-      const execApprovalsRepair = created && isOpenClawAgent ? await repairOpenClawExecApprovalsFile(sandboxName).catch((error) => ({
-        sandboxName,
-        path: "/sandbox/.openclaw/exec-approvals.json",
-        error: error instanceof Error ? error.message : "Failed to repair OpenClaw exec approvals file",
-      })) : null
       const deviceApproval = created && isOpenClawAgent ? await approveOpenClawDeviceRequests(sandboxName) : null
       const gatewayToken = created && isOpenClawAgent ? await ensureOpenClawGatewayToken(sandboxName).catch(() => null) : null
       console.log(
@@ -1733,7 +1711,6 @@ export async function POST(request: Request) {
           elapsedMs: readiness.elapsedMs,
         },
         registry,
-        execApprovalsRepair,
         deviceApproval,
         gatewayToken,
         note: created
@@ -1749,8 +1726,6 @@ export async function POST(request: Request) {
                 ? "The OpenShell create command stayed attached after the sandbox reached Ready, so the dashboard stopped waiting for the local command."
                 : false,
               registry && !registry.ok ? `NemoClaw registry update failed: ${registry.error}` : false,
-              execApprovalsRepair && "note" in execApprovalsRepair ? execApprovalsRepair.note : false,
-              execApprovalsRepair && "error" in execApprovalsRepair ? `OpenClaw exec approvals repair failed: ${execApprovalsRepair.error}` : false,
               deviceApproval?.note,
             )
           : createFailed

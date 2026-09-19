@@ -35,6 +35,21 @@ repo's `OPENSHELL_VERSION` pin **equals** the box's `openshell
    any already-at-target agent (Hermes here) must merely survive the
    window.
 
+> **Variant seen on the v0.0.123 → v0.0.127 bump (2026-09-19): conditions
+> 1 and 2 held but condition 3 did NOT.** OpenShell moved 0.0.106 → 0.0.116
+> while *neither* agent version moved (OpenClaw stayed 2026.7.1, Hermes
+> stayed 0.20.6). Use this runbook anyway — condition 1 is what makes the
+> window unavoidable — but note the risk profile inverts: with no
+> version-driven rebuild, **no** sandbox gets the fresh container + fresh
+> token that a rebuild grants, so **every** sandbox races the token TTL in
+> Trap 2 below rather than just the already-at-target one. Step 3d's
+> "recreate every non-Ready sandbox from its validated backup" is then doing
+> all the work, and the `docker cp` safety net matters more, not less.
+> Run `upgrade-sandboxes --check` first regardless: a NemoClaw release can
+> rewrite the agent images without moving the agent version (#11792 did), in
+> which case it will ask for rebuilds anyway. See
+> `nemoclaw-version-bumps.md` §"v0.0.123 → v0.0.127".
+
 ## The two things that make this dangerous
 
 - **Trap 2 — sandbox-token TTL.** When the OpenShell gateway is killed,

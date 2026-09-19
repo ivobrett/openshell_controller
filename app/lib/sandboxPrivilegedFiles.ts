@@ -48,44 +48,6 @@ async function sandboxHasOpenClaw(sandboxName: string) {
   return probe.code === 0
 }
 
-export async function repairOpenClawExecApprovalsFile(sandboxName: string) {
-  if (!(await sandboxHasOpenClaw(sandboxName))) {
-    return {
-      sandboxName,
-      path: "/sandbox/.openclaw/exec-approvals.json",
-      skipped: true,
-      reason: "OpenClaw is not installed in this sandbox; nothing to repair.",
-    }
-  }
-  const normalizeScript = [
-    `const fs = require("fs")`,
-    `const approval = "/sandbox/.openclaw/exec-approvals.json"`,
-    `const tmp = process.argv[1]`,
-    `let source = ""`,
-    `try { source = fs.readFileSync(approval, "utf8") } catch {}`,
-    `const trimmed = source.trim()`,
-    `let payload = "{}\\n"`,
-    `if (trimmed) { try { payload = JSON.stringify(JSON.parse(trimmed), null, 2) + "\\n" } catch {} }`,
-    `fs.writeFileSync(tmp, payload)`,
-  ].join("; ")
-  const script = [
-    `mkdir -p /sandbox/.openclaw`,
-    `tmp="/sandbox/.openclaw/.exec-approvals.json.$$"`,
-    `node -e ${shellQuote(normalizeScript)} "$tmp"`,
-    `rm -f /sandbox/.openclaw/exec-approvals.json`,
-    `mv "$tmp" /sandbox/.openclaw/exec-approvals.json`,
-    `chown sandbox:sandbox /sandbox/.openclaw/exec-approvals.json 2>/dev/null || chown 998:998 /sandbox/.openclaw/exec-approvals.json`,
-    `chmod 0600 /sandbox/.openclaw/exec-approvals.json`,
-  ].join(" && ")
-  const result = await runSandboxExec(sandboxName, ["sh", "-lc", script])
-  if (result.code !== 0) throw new Error(result.stderr || "failed to repair OpenClaw exec approvals file")
-  return {
-    sandboxName,
-    path: "/sandbox/.openclaw/exec-approvals.json",
-    note: "Replaced OpenClaw exec approvals symlink with a real sandbox-owned file for newer OpenClaw versions.",
-  }
-}
-
 export async function stabilizeOpenClawGatewayConfig(sandboxName: string) {
   const patchConfig = [
     `const fs = require("fs")`,

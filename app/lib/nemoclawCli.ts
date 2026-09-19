@@ -3,7 +3,7 @@ import { promisify } from "node:util"
 import { NEMOCLAW_BIN, NODE_BIN, commandExists, hostCommandEnv } from "./hostCommands"
 
 const execFileAsync = promisify(execFile)
-const NEMOCLAW_RECOVERY_MIN_VERSION = "0.0.37"
+const NEMOCLAW_LIFECYCLE_MIN_VERSION = "0.0.37"
 
 type NemoClawInvocation = {
   file: string
@@ -98,7 +98,7 @@ async function runNemoClaw(args: string[], timeout = 30000): Promise<NemoClawRun
   try {
     const { stdout, stderr } = await execFileAsync(invocation.file, invocation.args, {
       env: hostCommandEnv({
-        OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw",
+        OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY?.trim() || undefined,
         NO_COLOR: "1",
         CLICOLOR: "0",
         CLICOLOR_FORCE: "0",
@@ -143,8 +143,8 @@ async function hasModernNemoClawSurface() {
   const version = await getNemoClawVersion()
   return {
     ...version,
-    supported: version.version ? versionGte(version.version, NEMOCLAW_RECOVERY_MIN_VERSION) : false,
-    minimumVersion: NEMOCLAW_RECOVERY_MIN_VERSION,
+    supported: version.version ? versionGte(version.version, NEMOCLAW_LIFECYCLE_MIN_VERSION) : false,
+    minimumVersion: NEMOCLAW_LIFECYCLE_MIN_VERSION,
   }
 }
 
@@ -182,7 +182,7 @@ export async function getNemoClawDoctorReport(sandboxName: string) {
   }
 }
 
-export async function recoverSandboxWithNemoClaw(sandboxName: string) {
+export async function restartSandboxGatewayWithNemoClaw(sandboxName: string) {
   const capability = await hasModernNemoClawSurface()
   if (!capability.supported) {
     return {
@@ -196,12 +196,12 @@ export async function recoverSandboxWithNemoClaw(sandboxName: string) {
       stderr: "",
       exitCode: null as number | null,
       error: capability.available
-        ? `NemoClaw ${capability.version || "unknown"} does not expose sandbox recover`
+        ? `NemoClaw ${capability.version || "unknown"} does not expose sandbox gateway restart`
         : capability.error || "NemoClaw CLI is not available",
     }
   }
 
-  const result = await runNemoClaw([sandboxName, "recover"], 90000)
+  const result = await runNemoClaw(["sandbox", "gateway", "restart", sandboxName], 90000)
   return {
     available: true,
     supported: true,

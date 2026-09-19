@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 import { HOST_PATH, OPENCLAW_BIN, OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
 import { getDefaultOpenClawInstance, getOpenClawDashboardPortForSandbox, resolveOpenClawInstance } from "./openclawInstances"
+import { restartSandboxGatewayWithNemoClaw } from "./nemoclawCli"
 
 const execFileAsync = promisify(execFile)
 const OPENSHELL_GATEWAY = process.env.OPENSHELL_GATEWAY?.trim() || undefined
@@ -406,6 +407,11 @@ function resolveSandboxInstanceId(instanceId: string) {
 }
 
 function buildSandboxSshArgs(sandboxName: string, extraArgs: string[]) {
+  // FORK INVARIANT (tests/minimal-profile-check.mjs): always pass
+  // --gateway-name, defaulting to "nemoclaw". Upstream omits the flag entirely
+  // when OPENSHELL_GATEWAY is unset so OpenShell picks its active gateway
+  // (their #46). On our boxes the active gateway is not necessarily "nemoclaw",
+  // so omitting it breaks sandbox SSH in full mode. Do not "simplify" back.
   return [
     "-o", "BatchMode=yes",
     "-o", "StrictHostKeyChecking=no",
@@ -443,13 +449,13 @@ export async function prebuildHermesDashboardWebUi(sandboxName: string): Promise
 }
 
 async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string) {
-  const command = [
-    `curl -fsS --max-time 2 http://127.0.0.1:${SANDBOX_DASHBOARD_REMOTE_PORT}/ >/dev/null 2>&1`,
-    "||",
-    `(nohup /usr/local/bin/openclaw gateway run --allow-unconfigured --bind loopback --port ${SANDBOX_DASHBOARD_REMOTE_PORT} >/tmp/gateway.log 2>&1 &)`
-  ].join(" ")
-
-  await execSandboxSsh(sandboxName, command).catch(() => null)
+  try {
+    await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${SANDBOX_DASHBOARD_REMOTE_PORT}/ >/dev/null`, 5000)
+    return true
+  } catch {
+    const restart = await restartSandboxGatewayWithNemoClaw(sandboxName)
+    if (!restart.ok) return false
+  }
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
     try {
@@ -470,7 +476,7 @@ async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
   const initial = await inspectListeningPort(port)
   if (initial.listenerPresent) return initial
 
-  await ensureRemoteSandboxOpenClawDashboard(sandboxName)
+  if (!await ensureRemoteSandboxOpenClawDashboard(sandboxName)) return initial
 
   const child = spawn("ssh", buildSandboxSshArgs(sandboxName, [
     "-N",

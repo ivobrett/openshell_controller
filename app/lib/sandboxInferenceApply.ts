@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { promisify } from "node:util"
 import { NEMOCLAW_BIN, NODE_BIN, OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
+import { restartSandboxGatewayWithNemoClaw } from "./nemoclawCli"
 import { getSandboxInferenceConfig, type SandboxInferenceRoute } from "./sandboxInferenceStore"
 
 const execFileAsync = promisify(execFile)
@@ -169,7 +170,7 @@ function buildOpenClawConfig(current: any, routes: SandboxInferenceRoute[], prim
 async function runOpenShell(args: string[]) {
   const { stdout, stderr } = await execFileAsync(OPENSHELL_BIN, args, {
     env: hostCommandEnv({
-      OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw",
+      OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY?.trim() || undefined,
     }),
     timeout: 60000,
     maxBuffer: 20 * 1024 * 1024,
@@ -177,10 +178,12 @@ async function runOpenShell(args: string[]) {
   return { stdout: String(stdout).trim(), stderr: String(stderr).trim() }
 }
 
-async function runSandboxExec(sandboxName: string, command: string[], input?: string) {
+async function runOpenShellExec(sandboxName: string, script: string, input?: string) {
   return await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
-    const child = spawn(OPENSHELL_BIN, ["sandbox", "exec", "-n", sandboxName, "--", ...command], {
-      env: hostCommandEnv({ OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw" }),
+    const child = spawn(OPENSHELL_BIN, ["sandbox", "exec", "-n", sandboxName, "--", "sh", "-lc", script], {
+      env: hostCommandEnv({
+        OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY?.trim() || undefined,
+      }),
       stdio: ["pipe", "pipe", "pipe"],
     })
     let stdout = ""
@@ -195,7 +198,7 @@ async function runSandboxExec(sandboxName: string, command: string[], input?: st
 }
 
 async function readCurrentOpenClawConfig(sandboxName: string) {
-  const result = await runSandboxExec(sandboxName, ["cat", "/sandbox/.openclaw/openclaw.json"])
+  const result = await runOpenShellExec(sandboxName, "cat /sandbox/.openclaw/openclaw.json")
   if (result.code !== 0) throw new Error(result.stderr || "Failed to read OpenClaw config")
   return JSON.parse(result.stdout)
 }
@@ -203,24 +206,14 @@ async function readCurrentOpenClawConfig(sandboxName: string) {
 async function writeOpenClawConfig(sandboxName: string, config: any) {
   const payload = `${JSON.stringify(config, null, 2)}\n`
   const script = [
-    "set -e",
-    `tmp="$(mktemp /sandbox/.openclaw/openclaw.json.XXXXXX)"`,
-    `cat > "$tmp"`,
-    `chmod 444 "$tmp"`,
-    `mv -f "$tmp" /sandbox/.openclaw/openclaw.json`,
-    `tmp2="$(mktemp /sandbox/.openclaw/.config-hash.XXXXXX)"`,
-    `sha256sum /sandbox/.openclaw/openclaw.json > "$tmp2"`,
-    `chmod 444 "$tmp2"`,
-    `mv -f "$tmp2" /sandbox/.openclaw/.config-hash`,
-  ].join("; ")
-  const result = await runSandboxExec(sandboxName, ["sh", "-lc", script], payload)
+    "cat > /sandbox/.openclaw/openclaw.json",
+    "chmod 600 /sandbox/.openclaw/openclaw.json",
+    "sha256sum /sandbox/.openclaw/openclaw.json > /sandbox/.openclaw/.config-hash",
+    "chmod 600 /sandbox/.openclaw/.config-hash",
+  ].join(" && ")
+  const result = await runOpenShellExec(sandboxName, script, payload)
   if (result.code !== 0) throw new Error(result.stderr || "Failed to write OpenClaw config")
   return result
-}
-
-async function restartOpenClawGatewayIfRunning(sandboxName: string) {
-  const script = "for p in /proc/[0-9]*; do cmd=$(tr '\\0' ' ' < \"$p/cmdline\" 2>/dev/null || true); case \"$cmd\" in *'openclaw gateway'*) kill \"${p##*/}\" 2>/dev/null || true;; esac; done"
-  return await runSandboxExec(sandboxName, ["sh", "-lc", script])
 }
 
 // The nemoclaw CLI is invoked directly unless it resolves to a JS entrypoint,
@@ -299,14 +292,20 @@ export async function applySandboxInferenceProfile(sandboxId: string, sandboxNam
   const currentOpenClawConfig = await readCurrentOpenClawConfig(sandboxName)
   const nextOpenClawConfig = buildOpenClawConfig(currentOpenClawConfig, enabledRoutes, primary)
   await writeOpenClawConfig(sandboxName, nextOpenClawConfig)
-  await restartOpenClawGatewayIfRunning(sandboxName)
-
   const routeResult = await runOpenShell(["inference", "set", "--no-verify", "--provider", primary.provider, "--model", primary.model])
+  const restartResult = await restartSandboxGatewayWithNemoClaw(sandboxName)
+  if (!restartResult.ok) {
+    throw new Error(
+      restartResult.stderr || restartResult.error ||
+      "NemoClaw could not verify the native agent gateway restart after applying inference config",
+    )
+  }
   return {
     primaryRoute: primary,
     routesApplied: enabledRoutes.length,
     gatewayRoute: routeResult,
     agent: "openclaw" as const,
     note: "OpenClaw config was patched with the routed inference provider and the OpenShell gateway was pointed at the primary route.",
+    gatewayRestart: "nemoclaw-native-gateway",
   }
 }

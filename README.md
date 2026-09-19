@@ -92,6 +92,8 @@ OpenShell must already be installed and able to reach its gateway. On this host 
 
 The installer does not create an OpenShell gateway for you. Start or connect OpenShell first, then install this dashboard.
 
+Controller commands follow OpenShell's active gateway by default. Set `OPENSHELL_GATEWAY` only for an intentional override; leaving it unset also allows current NemoClaw to restore a port-qualified gateway such as `nemoclaw-8990` when its installer selected an alternate gateway port. Quick Deploy image discovery checks both the default NemoClaw registry and its numeric alternate-port registry roots, and fails closed if a sandbox name is registered under multiple gateways.
+
 ## Installer
 
 Install or refresh the locked OpenShell/NemoClaw pair first:
@@ -232,6 +234,10 @@ The dashboard shells out to the OpenShell CLI for several operations:
 - `openshell policy update`
 - `openshell provider create/update/delete/list`
 - `openshell inference set/get/update`
+
+The **Quick Deploy New NemoClaw Sandbox** path clones a registered image through OpenShell, but it deliberately does not write the clone into NemoClaw's private `sandboxes.json`. Current NemoClaw entries include lifecycle identity, workload provenance, and agent-specific state that must be issued by NemoClaw itself. The clone remains visible and operable through OpenShell Control; use **Fresh NemoClaw Image** when the new sandbox must participate in NemoClaw-managed lifecycle operations.
+
+Sandbox gateway restarts use NemoClaw's native-agent lifecycle command. The controller does not kill or launch OpenClaw or Hermes gateway processes directly; if NemoClaw cannot verify the restart, the request fails without bypassing the agent-owned lifecycle boundary.
 
 OpenClaw dashboard access is loopback-only inside the host/sandbox context, so the UI uses local proxy routes:
 
@@ -767,4 +773,4 @@ npm run dev
 
 ## License
 
-Internal development prototype. Add the appropriate license before distribution.
+OpenShell Control is available under the [MIT License](LICENSE). You may use, copy, modify, merge, publish, distribute, sublicense, and sell copies, provided the copyright and permission notices are retained. The software is provided without warranty.

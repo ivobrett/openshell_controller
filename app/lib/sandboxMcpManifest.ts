@@ -112,7 +112,6 @@ export async function syncSandboxMcpManifest(
     options.brokerBaseUrl,
     handoff.token,
   )
-
   return {
     path: uploaded.path,
     sandboxName: uploaded.sandboxName,

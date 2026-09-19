@@ -5,6 +5,13 @@ import { hostname, networkInterfaces } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 import { NEMOCLAW_BIN, NODE_BIN, OPENSHELL_BIN, hostCommandEnv } from "@/app/lib/hostCommands"
+import {
+  parseDefaultSandboxNames,
+  parseNemoclawListJson,
+  resolveSandboxAgent,
+  type NemoClawListJsonIdentity,
+  type NemoClawRegistryData,
+} from "@/app/lib/nemoclawIdentity.mjs"
 import { resolveRuntimeAuthority } from "@/app/lib/runtimeAuthority"
 import { isUserAuthorizedForSandbox } from "@/app/lib/controlAuth"
 import { isOperator, oauthEmail } from "@/app/lib/auth/context"
@@ -34,13 +41,6 @@ type NemoClawSummary = {
   serviceLines: string[]
   summaryLines: string[]
   source: "nemoclaw-cli" | "none"
-}
-
-type NemoClawRegistryData = {
-  sandboxes?: Record<
-    string,
-    { name?: string; agent?: string | null; agentVersion?: string | null; hermesAuthMethod?: string | null }
-  >
 }
 
 type SandboxItem = {
@@ -124,17 +124,6 @@ function parseOpenShellSandboxNames(output: string) {
     .filter((entry): entry is string => Boolean(entry))
 }
 
-function parseDefaultSandboxNames(output: string) {
-  return new Set(
-    output
-      .split(/\r?\n/)
-      .map((entry) => stripAnsi(entry))
-      .filter((entry) => /^\s{2,}[\w.-]+(?:\s+\*)?\s*$/.test(entry) && entry.includes("*"))
-      .map((entry) => entry.replace("*", "").trim())
-      .filter(Boolean)
-  )
-}
-
 function buildNemoClawSummary(output: string | null, defaultSandboxNames: Set<string>): NemoClawSummary {
   if (!output) {
     return {
@@ -172,31 +161,39 @@ function readNemoClawRegistry(): NemoClawRegistryData {
   }
 }
 
-function resolveSandboxAgent(
+// FORK: upstream's resolveSandboxAgent (nemoclawIdentity.mjs) is authoritative
+// when `nemoclaw list --json` answers, but its registry fallback returns
+// "openclaw" for anything it cannot classify. This fork surfaces CUSTOM
+// sandboxes as a first-class type and creates Hermes sandboxes whose registry
+// `agent` field is often left null, so we keep the extra heuristics below and
+// run them whenever the JSON path is absent or says "unknown".
+function resolveAgentWithForkHeuristics(
   name: string,
   id: string | null,
-  registry: NemoClawRegistryData,
+  listJsonIdentity: NemoClawListJsonIdentity | null,
+  registry: NemoClawRegistryData | null,
   imageMap: SandboxImageMap,
 ) {
-  const entries = registry.sandboxes ?? {}
+  // 1. Authoritative: `nemoclaw list --json` (upstream #44).
+  if (listJsonIdentity) {
+    const direct = listJsonIdentity.agentsByName[name] || (id ? listJsonIdentity.agentsByName[id] : null)
+    if (direct && direct !== "unknown") return direct
+  }
+
+  // 2. Registry, including signals upstream's module does not consult.
+  const entries = registry?.sandboxes ?? {}
   const directEntry = entries[name] || (id ? entries[id] : undefined)
   const namedEntry = Object.values(entries).find((entry) => entry?.name === name || Boolean(id && entry?.name === id))
   const registryAgent = directEntry?.agent || namedEntry?.agent
   if (typeof registryAgent === "string" && registryAgent.trim()) return registryAgent.trim()
-
-  // The registry `agent` field is sometimes left null even for NemoClaw-built
-  // sandboxes. Infer from other registry signals before falling back to the
-  // container image: docker can report a bare image ID (not the tag) once a
-  // build tag is reused/detached, which makes isNemoClawImage miss and
-  // misclassifies an OpenClaw sandbox as "custom".
   const entry = directEntry || namedEntry
   if (entry) {
     if (typeof entry.hermesAuthMethod === "string" && entry.hermesAuthMethod.trim()) return "hermes"
     if (typeof entry.agentVersion === "string" && entry.agentVersion.trim()) return "openclaw"
   }
 
-  // No registry entry → use the container image. NemoClaw-built sandboxes
-  // get "openclaw" as the default; bare openshell sandboxes are "custom".
+  // 3. Container image: docker can report a bare image ID once a build tag is
+  // reused/detached, so isNemoClawImage missing here means "custom", not a bug.
   const image = imageMap.get(name)
   if (isNemoClawImage(image)) return "openclaw"
   if (image) return "custom"
@@ -207,7 +204,7 @@ function resolveSandboxAgent(
 
 async function execNemoclaw(args: string[]) {
   const env = hostCommandEnv({
-    OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw",
+    OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY?.trim() || undefined,
   })
 
   const command = /\.(?:c?m?js|ts)$/i.test(NEMOCLAW_BIN)
@@ -249,7 +246,13 @@ function readHostIdentity() {
   return { hostname: hostname(), address: "127.0.0.1", interface: "lo0" }
 }
 
-async function readSandbox(name: string, defaultSandboxNames: Set<string>, registry: NemoClawRegistryData, imageMap: SandboxImageMap): Promise<{ summary: SandboxSummary; pod: SandboxItem }> {
+async function readSandbox(
+  name: string,
+  defaultSandboxNames: Set<string>,
+  listJsonIdentity: NemoClawListJsonIdentity | null,
+  registry: NemoClawRegistryData | null,
+  imageMap: SandboxImageMap
+): Promise<{ summary: SandboxSummary; pod: SandboxItem }> {
   try {
     const [{ stdout: detailsStdout }, { stdout: sshStdout }] = await Promise.all([
       execOpenShell(["sandbox", "get", name]),
@@ -263,7 +266,7 @@ async function readSandbox(name: string, defaultSandboxNames: Set<string>, regis
     const sshConfig = sshStdout.trim()
     const sshHostAlias = parseSshHostAlias(sshConfig, sandboxName)
     const isDefault = defaultSandboxNames.has(sandboxName)
-    const rawAgent = resolveSandboxAgent(sandboxName, sandboxId, registry, imageMap)
+    const rawAgent = resolveAgentWithForkHeuristics(sandboxName, sandboxId, listJsonIdentity, registry, imageMap)
     // While a create is in flight, present a transient Error/Unknown phase as
     // Pending and prefer the intended agent over an image-inferred "custom".
     const { phase, agent } = applyInFlightPresentation(sandboxName, rawPhase, rawAgent)
@@ -311,7 +314,7 @@ async function readSandbox(name: string, defaultSandboxNames: Set<string>, regis
   } catch (error) {
     const sandboxName = name
     const isDefault = defaultSandboxNames.has(sandboxName)
-    const rawAgent = resolveSandboxAgent(sandboxName, sandboxName, registry, imageMap)
+    const rawAgent = resolveAgentWithForkHeuristics(sandboxName, sandboxName, listJsonIdentity, registry, imageMap)
     // A sandbox that isn't inspectable yet is expected mid-onboard; present it
     // as Pending (not Unknown) with the intended agent while its create runs.
     const { phase, agent } = applyInFlightPresentation(sandboxName, "Unknown", rawAgent)
@@ -364,20 +367,36 @@ export async function GET(request: NextRequest) {
     const { stdout: sandboxListStdout } = await execOpenShell(["sandbox", "list"])
     let names = parseOpenShellSandboxNames(sandboxListStdout)
 
+    // FORK (per-sandbox access control): never widen this to every sandbox.
     if (userEmail) {
       names = names.filter((name) => isUserAuthorizedForSandbox(userEmail, name))
     }
 
-    const [nemoclawListResult, nemoclawStatusResult] = names.length > 0
-      ? await Promise.all([
-          execNemoclaw(["list"]).catch(() => null),
-          execNemoclaw(["status"]).catch(() => null),
-        ])
-      : [null, null]
-    const defaultSandboxNames = parseDefaultSandboxNames(nemoclawListResult?.stdout ?? "")
+    let listJsonIdentity: NemoClawListJsonIdentity | null = null
+    let legacyListResult: { stdout: string; stderr: string } | null = null
+    const nemoclawStatusPromise = names.length > 0
+      ? execNemoclaw(["status"]).catch(() => null)
+      : Promise.resolve(null)
+
+    if (names.length > 0) {
+      const nemoclawListJsonResult = await execNemoclaw(["list", "--json"]).catch(() => null)
+      listJsonIdentity = parseNemoclawListJson(nemoclawListJsonResult?.stdout ?? "")
+      if (!listJsonIdentity) {
+        legacyListResult = await execNemoclaw(["list"]).catch(() => null)
+      }
+    }
+
+    const nemoclawStatusResult = await nemoclawStatusPromise
+    const defaultSandboxNames = listJsonIdentity
+      ? new Set(listJsonIdentity.defaultSandboxNames)
+      : parseDefaultSandboxNames(legacyListResult?.stdout ?? "")
+    // FORK: keep reading the registry even when list --json answered — our
+    // fallback heuristics above use it whenever the JSON says "unknown".
     const registry = readNemoClawRegistry()
     const imageMap: SandboxImageMap = names.length > 0 ? await readSandboxContainerImageMap() : new Map()
-    const results = await Promise.all(names.map((name) => readSandbox(name, defaultSandboxNames, registry, imageMap)))
+    const results = await Promise.all(
+      names.map((name) => readSandbox(name, defaultSandboxNames, listJsonIdentity, registry, imageMap))
+    )
     const sandboxes = results.map((result) => result.summary)
     const items = results.map((result) => result.pod)
     const nemoclaw = buildNemoClawSummary(nemoclawStatusResult?.stdout ?? null, defaultSandboxNames)
@@ -411,7 +430,11 @@ export async function GET(request: NextRequest) {
         explicitInstanceOverride: authority.explicitInstanceOverride,
         usedMappedSandboxInstance: authority.usedMappedSandboxInstance,
       })),
-      defaultSource: defaultSandboxNames.size > 0 ? "nemoclaw-cli" : "none",
+      defaultSource: listJsonIdentity
+        ? "nemoclaw-list-json"
+        : defaultSandboxNames.size > 0
+          ? "nemoclaw-cli"
+          : "none",
       count: inventoryCount,
       message: hasMappedFallbackWithoutInventory
         ? "Fetched live OpenShell inventory: zero sandboxes reported, so any mapped NemoClaw dashboard should be treated as fallback-only."

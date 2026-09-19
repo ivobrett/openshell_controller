@@ -45,10 +45,10 @@ It is currently built for active development and lab use. It includes a simple p
 
 ## Compatibility Targets
 
-This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`. NemoClaw `v0.0.123` pins OpenShell exactly to `0.0.106` (blueprint `min_openshell_version == max_openshell_version`), so the bundled refresh helper defaults to:
+This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`. NemoClaw `v0.0.127` pins OpenShell exactly to `0.0.116` (blueprint `min_openshell_version == max_openshell_version`), so the bundled refresh helper defaults to:
 
-- OpenShell installer release: `v0.0.106` (`OPENSHELL_VERSION=v0.0.106`)
-- NemoClaw source ref: tag `v0.0.123` (`NEMOCLAW_INSTALL_REF`) — carries the Hermes 0.20.6 base. **Do not move to NemoClaw main / OpenClaw 2026.9.1** until a tag ships it; see the header of `install_versioned_nemoclaw_openshell.sh` for the two live failures that forced this revert.
+- OpenShell installer release: `v0.0.116` (`OPENSHELL_VERSION=v0.0.116`)
+- NemoClaw source ref: tag `v0.0.127` (`NEMOCLAW_INSTALL_REF`) — verified live: OpenClaw and Hermes both create and chat. **Do not move to NemoClaw main / OpenClaw 2026.9.1** until a tag ships it; see the installer header.
 - OpenClaw base-image build target: `2026.7.1` (`OPENCLAW_VERSION=2026.7.1`) unless overridden — required for current OpenClaw mobile apps to pair
 
 See `docs/runbooks/nemoclaw-version-bumps.md` before changing any of these, and keep manidae-cloud's four pin-writer files in lockstep. (The sandbox-base digest pin that used to move with them was retired on 2026-09-13 — see that runbook; do not reintroduce `NEMOCLAW_SANDBOX_BASE_IMAGE_REF`.)
@@ -102,7 +102,7 @@ Install or refresh the locked OpenShell/NemoClaw pair first:
 ./install_versioned_nemoclaw_openshell.sh
 ```
 
-That helper defaults to `OPENSHELL_VERSION=v0.0.106`, `NEMOCLAW_INSTALL_REF=v0.0.123`, and `OPENCLAW_VERSION=2026.7.1`.
+That helper defaults to `OPENSHELL_VERSION=v0.0.116`, `NEMOCLAW_INSTALL_REF=v0.0.127`, and `OPENCLAW_VERSION=2026.7.1`.
 
 Then install the dashboard from the repository root:
 

@@ -8,43 +8,32 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# *** REVERTED 2026-09-19 — DO NOT RE-BUMP WITHOUT READING THIS. ***
-# We bumped to NemoClaw main@e38726c8d7 + OpenShell 0.0.116 + OpenClaw 2026.9.1
-# and it FAILED LIVE on a GPU-less Hetzner agent gateway. Two independent,
-# upstream-caused blockers, both reproduced repeatedly:
+# *** VERIFIED LIVE 2026-09-19: NemoClaw v0.0.127 + OpenShell 0.0.116. ***
+# Both agents create first-try and chat on a fresh agent gateway (OpenClaw
+# sandbox replied, Hermes sandbox replied, both coexisting on one gateway).
 #
-#  1. SANDBOX CREATE IS ~78% BROKEN. selectedDockerMode() in NemoClaw's
-#     src/lib/onboard/managed-bootstrap/docker-runtime.ts is unconditional for
-#     GPU-less sandboxes:
-#         if (route !== "compatibility" || !sandboxGpuEnabled)
-#             return buildDockerGpuMode("startup-command");
-#     so NemoClaw ALWAYS recreates the OpenShell container to persist the
-#     startup command ("Docker GPU patch" is a misnomer — that mode carries
-#     device:"" and args:[], no GPU involvement, and no env var disables it;
-#     NEMOCLAW_DOCKER_GPU_PATCH=0 is a NO-OP, it means the same as unset).
-#     OpenShell 0.0.116 destroys the replacement mid-commit: docker events show
-#     the new container reach health_status:healthy and then be killed and
-#     destroyed, after which OpenShell has nothing to start and reports Error.
-#     Almost certainly OpenShell v0.0.111's canonical main process (#2726) /
-#     reject-stale-exit (#2857) refusing NemoClaw's rename-based swap.
-#     Measured: 9 create attempts, 2 succeeded.
+# WHY THIS TAG AND NOT main: OpenClaw 2026.9.1 exists ONLY on NemoClaw main,
+# and that commit is broken for us on two counts — ~78% of sandbox creates
+# fail, and chat dies with AuthProfileMigrationRequiredError because NemoClaw
+# writes a legacy auth-profiles.json that OpenClaw 2026.9.1 refuses (the
+# documented remedy `openclaw doctor --fix` cannot run: the in-sandbox
+# supervisor owns the gateway-lifecycle lock). Tags v0.0.124..v0.0.127 require
+# OpenShell 0.0.116 but still ship OpenClaw 2026.7.1, which is the combination
+# proven here. Re-attempt 2026.9.1 only when a TAG carries it.
 #
-#  2. CHAT IS BROKEN EVEN WHEN CREATE SUCCEEDS. NemoClaw onboarding writes a
-#     legacy /sandbox/.openclaw/agents/main/agent/auth-profiles.json; OpenClaw
-#     2026.9.1 refuses it with AuthProfileMigrationRequiredError and every
-#     chat.send fails. The documented remedy (`openclaw doctor --fix`) CANNOT
-#     run: it needs maintenance mode, and the in-sandbox supervisor owns
-#     gateway-lifecycle, so doctor exits with
-#     StateDatabaseCoordinatorContentionError. `openclaw gateway stop` is a
-#     launchd/systemd command and there is no service manager in the sandbox.
+# OpenShell 0.0.116 itself was NOT the problem — an earlier revert blamed it
+# for the create failures, but pairing it with the v0.0.127 TAG creates
+# reliably. The failures belong to NemoClaw main.
 #
-# Both live inside a NemoClaw main commit that adopted OpenClaw 2026.9.1
-# (#11105) ONE DAY before we pinned it, without the matching migration and
-# lifecycle work. Nothing in this repo can fix either. Re-attempt only when a
-# NemoClaw TAG ships 2026.9.1 and a fresh create + chat passes end-to-end.
-#
-# Restored pins below are the combination proven working on 2026-09-13.
-OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.106}"
+# NOTE for in-place upgrades: the OpenShell .deb ships ONLY /usr/bin/openshell
+# and /usr/bin/openshell-gateway. /usr/bin/openshell-sandbox is installed
+# separately by NemoClaw's scripts/install-openshell.sh, and that script
+# refuses to run while the three disagree ("The selected OpenShell sandbox
+# does not match the active CLI build"). Fetch the matching
+# openshell-sandbox-<arch>-unknown-linux-musl.tar.gz from the OpenShell
+# release and install it, then re-run the script. Fresh provisioning is
+# unaffected — onboarding installs the coherent set itself.
+OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
 # NemoClaw is pinned to TAG v0.0.123 — the last combination verified working
 # end-to-end (fresh create + dashboard + chat), 2026-09-13.
@@ -71,7 +60,7 @@ OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.co
 # Verified at v0.0.123 and still true: §10 token chain intact
 # (gateway.auth.token in /sandbox/.openclaw/openclaw.json), recover unchanged,
 # Hermes 0.20.6, blueprint sandbox digest sha256:b3d832b5….
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.123}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.127}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.7.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

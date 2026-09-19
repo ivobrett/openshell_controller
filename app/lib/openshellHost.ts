@@ -494,9 +494,18 @@ export function forgetSandboxGatewayPort(sandboxName: string) {
   sandboxGatewayPortCache.delete(sandboxName)
 }
 
+// The ssh here goes through `openshell ssh-proxy`, so a call costs an ssh
+// handshake plus the proxy's gateway round-trip. 5s was too tight on a loaded
+// 4-vCPU box: a HEALTHY gateway would time out, we would fall into the
+// expensive restartSandboxGatewayWithNemoClaw path (~35s) and then 16 further
+// 5s retries, so /dashboard/open took ~75s and the launch page gave up at 45s.
+// Measured: the same curl completes in ~0.2s when it is not competing for CPU.
+// 20s keeps a real bound while no longer mistaking slowness for a dead gateway.
+const SANDBOX_DASHBOARD_PROBE_TIMEOUT_MS = 20000
+
 async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string, remotePort: number) {
   try {
-    await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${remotePort}/ >/dev/null`, 5000)
+    await execSandboxSsh(sandboxName, `curl -fsS --max-time 5 http://127.0.0.1:${remotePort}/ >/dev/null`, SANDBOX_DASHBOARD_PROBE_TIMEOUT_MS)
     return true
   } catch {
     const restart = await restartSandboxGatewayWithNemoClaw(sandboxName)
@@ -505,7 +514,7 @@ async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string, remoteP
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
     try {
-      await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${remotePort}/ >/dev/null`, 5000)
+      await execSandboxSsh(sandboxName, `curl -fsS --max-time 5 http://127.0.0.1:${remotePort}/ >/dev/null`, SANDBOX_DASHBOARD_PROBE_TIMEOUT_MS)
       return true
     } catch {
       await sleep(500)

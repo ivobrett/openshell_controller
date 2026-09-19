@@ -99,6 +99,40 @@ function buildTargetUrl(requestUrl: URL) {
   return { target, proxyPrefix, controlUiOrigin, authorityMode, bridgeActive }
 }
 
+// OpenClaw 2026.9.1 fails closed on what it calls "proxy-shaped" traffic that
+// carries no client attribution: every gateway-authenticated route answers
+// 403 `proxy_attribution_required` ("Configure gateway.trustedProxies narrowly
+// and make the proxy overwrite or safely rebuild forwarded client headers"),
+// and the in-sandbox gateway logs "observed unattributable proxy-shaped traffic
+// from 127.0.0.1". The SPA shell, its assets and
+// /__openclaw/control-ui-config.json all 403, so the dashboard renders BLANK
+// with no console error worth the name. 2026.7.1 did not enforce this.
+//
+// We are the trusted proxy (the sandbox config pins
+// gateway.trustedProxies = ["127.0.0.1","::1"]), so we must SUPPLY the
+// attribution rather than relay whatever the browser sent. Relaying is both
+// unreliable (a request that reaches the controller without X-Forwarded-For
+// produces a blank dashboard) and unsafe (a client could forge its own
+// source address). So: drop every inbound attribution header, then set a
+// single rebuilt X-Forwarded-For. Same principle as server.mjs stripping a
+// client-supplied x-forwarded-user — see CLAUDE.md §6.
+const CLIENT_ATTRIBUTION_HEADERS = new Set([
+  'x-forwarded-for',
+  'x-real-ip',
+  'forwarded',
+])
+
+function resolveForwardedClient(request: Request) {
+  // Our own front proxy (Traefik/Pangolin) is the only hop we trust for the
+  // real client address; take its left-most entry. When the controller is
+  // reached directly (loopback smoke tests) there is no chain, and attributing
+  // the request to the loopback caller is both true and sufficient.
+  const chain = request.headers.get('x-forwarded-for') || ''
+  const first = chain.split(',')[0]?.trim()
+  if (first && !/[^A-Za-z0-9.:%\[\]_-]/.test(first)) return first
+  return '127.0.0.1'
+}
+
 function copyRequestHeaders(
   request: Request,
   target: URL,
@@ -116,7 +150,9 @@ function copyRequestHeaders(
       !HOP_BY_HOP_HEADERS.has(lowerKey) &&
       lowerKey !== 'host' &&
       lowerKey !== 'origin' &&
-      lowerKey !== 'referer'
+      lowerKey !== 'referer' &&
+      // Never forward a client-supplied attribution claim — see below.
+      !CLIENT_ATTRIBUTION_HEADERS.has(lowerKey)
     ) {
       const filteredValue = lowerKey === 'cookie' ? filterCookieHeader(value) : value
       if (filteredValue) headers.set(key, filteredValue)
@@ -126,6 +162,7 @@ function copyRequestHeaders(
   headers.set('host', target.host)
   headers.set('origin', controlUiOrigin)
   headers.set('referer', `${controlUiOrigin}/`)
+  headers.set('x-forwarded-for', resolveForwardedClient(request))
   if (dashboardToken && !headers.has('authorization')) {
     headers.set('authorization', `Bearer ${dashboardToken}`)
   }

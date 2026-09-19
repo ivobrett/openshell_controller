@@ -154,11 +154,30 @@ function filterCookieHeader(value: string) {
     .join('; ')
 }
 
+// Response-only strips. NOT added to HOP_BY_HOP_HEADERS because that set is
+// also applied to REQUEST headers, where content-encoding legitimately
+// describes an encoded request body.
+//
+// `content-encoding` MUST be dropped: undici (Node's fetch, which backs the
+// upstream call) transparently decompresses the response body, so by the time
+// we re-emit it the bytes are plain. Forwarding the upstream's
+// `content-encoding: gzip` makes the browser try to gunzip plaintext and fail
+// with net::ERR_CONTENT_DECODING_FAILED — a 200 response that renders a
+// completely BLANK dashboard with no console error and no asset requests,
+// because the document itself never finishes decoding.
+//
+// This surfaced on OpenClaw 2026.7.1 -> 2026.9.1: the new gateway compresses
+// responses even though we strip accept-encoding from the upstream request.
+// It is invisible to plain `curl` (which does not auto-decode, so it sees
+// readable HTML) — only a real browser, or `curl --compressed`, reproduces it.
+const RESPONSE_ONLY_STRIPPED_HEADERS = new Set(['content-encoding'])
+
 function copyResponseHeaders(upstream: Response) {
   const headers = new Headers()
 
   upstream.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+    const lowerKey = key.toLowerCase()
+    if (!HOP_BY_HOP_HEADERS.has(lowerKey) && !RESPONSE_ONLY_STRIPPED_HEADERS.has(lowerKey)) {
       headers.set(key, value)
     }
   })

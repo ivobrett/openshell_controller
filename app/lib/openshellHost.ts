@@ -535,20 +535,14 @@ async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string, remoteP
 }
 
 async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
-  const t0 = Date.now()
-  const lap = (stage: string) => console.log(`[dash-timing] ${sandboxName} ${stage} t=${Date.now() - t0}ms`)
   const port = getOpenClawDashboardPortForSandbox(sandboxName)
   if (!port) return inspectListeningPort(SANDBOX_DASHBOARD_REMOTE_PORT)
 
   const initial = await inspectListeningPort(port)
-  lap(`inspect(hostPort=${port}) listening=${initial.listenerPresent}`)
   if (initial.listenerPresent) return initial
 
   const remotePort = await resolveSandboxGatewayPort(sandboxName)
-  lap(`resolvePort=${remotePort}`)
-  const ready = await ensureRemoteSandboxOpenClawDashboard(sandboxName, remotePort)
-  lap(`ensureRemote=${ready}`)
-  if (!ready) return initial
+  if (!await ensureRemoteSandboxOpenClawDashboard(sandboxName, remotePort)) return initial
 
   const child = spawn("ssh", buildSandboxSshArgs(sandboxName, [
     "-N",
@@ -559,7 +553,6 @@ async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
     stdio: "ignore",
   })
   child.unref()
-  lap("spawned tunnel")
 
   // 8s was too tight. The tunnel is `ssh -N -L` through
   // `openshell ssh-proxy`, so coming up costs an ssh handshake plus the
@@ -569,9 +562,7 @@ async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
   // and the launch page gave up at its 45s client timeout. Measured on a live
   // box: with the tunnel already up the same call is ~7s, so the wait is the
   // whole difference. 30s keeps a bound while leaving room for a slow host.
-  const waited = await waitForListeningPort(port, 30000)
-  lap(`waitForListeningPort listening=${waited.listenerPresent}`)
-  return waited
+  return waitForListeningPort(port, 30000)
 }
 
 export async function probeOpenClawDashboard(instanceId?: string | null): Promise<DashboardProbe> {

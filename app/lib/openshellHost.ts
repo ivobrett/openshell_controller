@@ -535,7 +535,15 @@ async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
   })
   child.unref()
 
-  return waitForListeningPort(port, 8000)
+  // 8s was too tight. The tunnel is `ssh -N -L` through
+  // `openshell ssh-proxy`, so coming up costs an ssh handshake plus the
+  // proxy's own gateway round-trip; on a loaded 4-vCPU box that regularly
+  // exceeds 8s. When the wait expired we returned a non-listening result and
+  // the caller then stalled fetching a dead URL — /dashboard/open took ~75s
+  // and the launch page gave up at its 45s client timeout. Measured on a live
+  // box: with the tunnel already up the same call is ~7s, so the wait is the
+  // whole difference. 30s keeps a bound while leaving room for a slow host.
+  return waitForListeningPort(port, 30000)
 }
 
 export async function probeOpenClawDashboard(instanceId?: string | null): Promise<DashboardProbe> {

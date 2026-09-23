@@ -45,6 +45,29 @@ function parseList(value: string) {
     .filter(Boolean)
 }
 
+/**
+ * Endpoints are rendered as "host:port [L4, access=full], host2:port [L4]" —
+ * the annotation itself contains commas (OpenShell 0.0.116+), so only split on
+ * commas outside the brackets.
+ */
+function parseEndpointList(value: string) {
+  const items: string[] = []
+  let depth = 0
+  let current = ""
+  for (const char of value) {
+    if (char === "[") depth += 1
+    if (char === "]") depth = Math.max(0, depth - 1)
+    if (char === "," && depth === 0) {
+      items.push(current)
+      current = ""
+      continue
+    }
+    current += char
+  }
+  items.push(current)
+  return items.map((item) => item.trim()).filter(Boolean)
+}
+
 function parseNetworkRules(output: string): SandboxNetworkRule[] {
   const clean = stripAnsi(output)
   const chunks = clean.split(/\n\s*Chunk:\s+/).slice(1)
@@ -68,7 +91,7 @@ function parseNetworkRules(output: string): SandboxNetworkRule[] {
         binary: fields.get("binary") || "",
         confidence: fields.get("confidence") || "",
         rationale: fields.get("rationale") || "",
-        endpoints: parseList(fields.get("endpoints") || ""),
+        endpoints: parseEndpointList(fields.get("endpoints") || ""),
         binaries: parseList(fields.get("binaries") || ""),
       }
     })

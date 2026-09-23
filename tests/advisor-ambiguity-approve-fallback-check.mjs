@@ -144,4 +144,15 @@ assert.match(
     "(e.g. 'brew') — doing so folds the binary into the preset and fails identically",
 )
 
+// `rule get` on 0.0.116 renders "host:443 [L4, access=full]" — a comma INSIDE
+// the annotation. Splitting endpoints on every comma yields "host:443 [L4",
+// which fails the host:port shape check, so the fallback finds no endpoint and
+// rethrows the original error (this is why the first two live attempts still
+// failed). Endpoints must be split bracket-aware.
+assert.match(
+  SRC,
+  /endpoints: parseEndpointList\(/,
+  "chunk endpoints must be parsed bracket-aware, not with the plain comma splitter",
+)
+
 console.log("PASS: advisor-vs-preset ambiguity approve fallback guards")

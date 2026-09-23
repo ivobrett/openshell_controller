@@ -121,8 +121,16 @@ assert.match(
 // --rule-name, `policy update` keeps the grant on its own generated rule.
 assert.match(
   SRC,
-  /function isUndeclaredAuthorityMergeFailure[\s\S]{0,200}undeclared authorization/,
+  /function isUndeclaredAuthorityMergeFailure[\s\S]{0,600}undeclared authorization/,
   "the fallback must recognise OpenShell 0.0.116's undeclared-authorization merge refusal",
+)
+// The CLI prints that error wrapped across lines with "│" gutters
+// ("merge\n  │ operation 0 add-rule ..."). The first deploy of this fix matched
+// the unwrapped string only and never fired live — flatten first.
+assert.match(
+  SRC.slice(SRC.indexOf("function isUndeclaredAuthorityMergeFailure")),
+  /replace\(\/\[\\s│\]\+\/g, " "\)/,
+  "the undeclared-authority detector must flatten whitespace and │ gutters before matching",
 )
 assert.match(
   SRC,

@@ -299,7 +299,10 @@ function isAdvisorAmbiguityFailure(detail: string) {
  * Safe to work around only by granting on a SEPARATE rule (see the call site).
  */
 function isUndeclaredAuthorityMergeFailure(detail: string) {
-  return /merge operation \d+ add-rule '[^']+' would grant binary '[^']+' undeclared authorization/i.test(detail)
+  // The CLI wraps its miette error across lines with "│" gutters
+  // ("merge │ operation 0 add-rule ..."), so flatten before matching.
+  const flat = detail.replace(/[\s│]+/g, " ")
+  return /merge operation \d+ add-rule '[^']+' would grant binary '[^']+' undeclared authorization/i.test(flat)
 }
 
 /**

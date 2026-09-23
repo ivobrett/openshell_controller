@@ -163,7 +163,8 @@ export async function resolveSandboxNetworkRule(sandboxId: string, action: strin
     stderr = String(result.stderr)
   } catch (error) {
     const detail = errorText(error)
-    if (command !== "approve" || !isAdvisorAmbiguityFailure(detail)) throw error
+    const undeclaredAuthority = isUndeclaredAuthorityMergeFailure(detail)
+    if (command !== "approve" || !(isAdvisorAmbiguityFailure(detail) || undeclaredAuthority)) throw error
 
     // ADVISOR-vs-PRESET AMBIGUITY FALLBACK.
     //
@@ -195,6 +196,18 @@ export async function resolveSandboxNetworkRule(sandboxId: string, action: strin
     // NOT inherit the preset's other endpoints. Verified live 2026-08-23:
     // python3.13 gained github.com:443 (200) while formulae.brew.sh stayed
     // blocked.
+    //
+    // OpenShell 0.0.116 fails the same grant EARLIER and differently: the
+    // advisor names the overlapping preset as the chunk's rule (Rule: brew),
+    // so `rule approve` tries to add the binary to `brew` itself and the merge
+    // refuses — "merge operation 0 add-rule 'brew' would grant binary
+    // '/usr/bin/python3.13' undeclared authorization for formulae.brew.sh".
+    // That refusal is correct (it would hand python every brew host). Replaying
+    // via `policy update` WITHOUT --rule-name lets OpenShell keep the grant on
+    // its own generated rule ("kept add-rule 'allow_raw_githubusercontent_com_443'
+    // on its own rule instead of folding it into overlapping rule 'brew'"),
+    // scoped to exactly the requested host. Passing --rule-name brew reproduces
+    // the original failure. Verified live 2026-09-23 on my-hermes.
     const pendingRules = await listRulesForStatus(resolved.name, "pending").catch(
       () => [] as SandboxNetworkRule[],
     )
@@ -209,7 +222,7 @@ export async function resolveSandboxNetworkRule(sandboxId: string, action: strin
     const updateArgs = ["policy", "update", resolved.name]
     for (const endpoint of endpoints) updateArgs.push("--add-endpoint", endpoint)
     for (const binary of binaries) updateArgs.push("--binary", binary)
-    if (chunk.rule && /^[\w.-]+$/.test(chunk.rule)) updateArgs.push("--rule-name", chunk.rule)
+    if (!undeclaredAuthority && chunk.rule && /^[\w.-]+$/.test(chunk.rule)) updateArgs.push("--rule-name", chunk.rule)
     updateArgs.push("--wait", "--timeout", "90")
 
     // `policy update --add-endpoint` cannot express `tls` or `allowed_ips`
@@ -281,6 +294,15 @@ function isAdvisorAmbiguityFailure(detail: string) {
 }
 
 /**
+ * OpenShell >= 0.0.116: the advisor targeted an existing multi-endpoint rule,
+ * and adding the binary there would widen it beyond the requested endpoint.
+ * Safe to work around only by granting on a SEPARATE rule (see the call site).
+ */
+function isUndeclaredAuthorityMergeFailure(detail: string) {
+  return /merge operation \d+ add-rule '[^']+' would grant binary '[^']+' undeclared authorization/i.test(detail)
+}
+
+/**
  * `rule get` renders endpoints as "github.com:443 [L4]"; `policy update
  * --add-endpoint` wants a bare "host:port[:access...]". Strip the annotation
  * and keep only well-formed host:port selectors.
@@ -289,7 +311,11 @@ function normalizeEndpointSelectors(endpoints: string[]) {
   const seen = new Set<string>()
   for (const raw of endpoints) {
     const selector = raw.replace(/\s*\[[^\]]*\]\s*/g, "").trim()
-    if (/^[A-Za-z0-9.*_-]+:\d{1,5}$/.test(selector)) seen.add(selector)
+    if (!/^[A-Za-z0-9.*_-]+:\d{1,5}$/.test(selector)) continue
+    // Keep the chunk's access level ("[L4, access=full]") so the replayed
+    // grant matches what the advisor proposed.
+    const access = raw.match(/access=([a-z-]+)/)?.[1]
+    seen.add(access ? `${selector}:${access}` : selector)
   }
   return [...seen]
 }

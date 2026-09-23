@@ -111,4 +111,29 @@ assert.match(
     "cannot tell the request was satisfied",
 )
 
+// --- OpenShell 0.0.116: "undeclared authorization" merge refusal ------------
+// On 0.0.116 the advisor names the overlapping preset as the chunk's rule
+// (Rule: brew), and `rule approve` fails with "merge operation 0 add-rule
+// 'brew' would grant binary '/usr/bin/python3.13' undeclared authorization for
+// formulae.brew.sh". Reported live on my-hermes 2026-09-23 (github.com and
+// raw.githubusercontent.com grants). The fallback must catch it AND must NOT
+// pass --rule-name brew — that reproduces the exact failure. Without
+// --rule-name, `policy update` keeps the grant on its own generated rule.
+assert.match(
+  SRC,
+  /function isUndeclaredAuthorityMergeFailure[\s\S]{0,200}undeclared authorization/,
+  "the fallback must recognise OpenShell 0.0.116's undeclared-authorization merge refusal",
+)
+assert.match(
+  SRC,
+  /isAdvisorAmbiguityFailure\(detail\) \|\| undeclaredAuthority/,
+  "the approve path must route the undeclared-authorization failure into the fallback",
+)
+assert.match(
+  SRC,
+  /if \(!undeclaredAuthority && chunk\.rule[^\n]*"--rule-name"/,
+  "for the undeclared-authorization case the fallback must NOT reuse the chunk's rule name " +
+    "(e.g. 'brew') — doing so folds the binary into the preset and fails identically",
+)
+
 console.log("PASS: advisor-vs-preset ambiguity approve fallback guards")

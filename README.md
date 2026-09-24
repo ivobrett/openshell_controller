@@ -45,10 +45,10 @@ It is currently built for active development and lab use. It includes a simple p
 
 ## Compatibility Targets
 
-This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`. NemoClaw `v0.0.128` pins OpenShell exactly to `0.0.116` (blueprint `min_openshell_version == max_openshell_version`), so the bundled refresh helper defaults to:
+This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`. NemoClaw `v0.0.129` pins OpenShell exactly to `0.0.116` (blueprint `min_openshell_version == max_openshell_version`), so the bundled refresh helper defaults to:
 
 - OpenShell installer release: `v0.0.116` (`OPENSHELL_VERSION=v0.0.116`)
-- NemoClaw source ref: tag `v0.0.128` (`NEMOCLAW_INSTALL_REF`) — first tag shipping OpenClaw 2026.9.1 and Hermes 0.21.3.
+- NemoClaw source ref: tag `v0.0.129` (`NEMOCLAW_INSTALL_REF`) — OpenClaw 2026.9.1, Hermes 0.21.3. Carries upstream bug #12254 (legacy auth-profiles.json breaks OpenClaw chat); the controller works around it in `app/lib/openclawLegacyAuthProfile.ts` until a tag contains PR #12237.
 - OpenClaw base-image build target: `2026.9.1` (`OPENCLAW_VERSION=2026.9.1`) unless overridden
 
 See `docs/runbooks/nemoclaw-version-bumps.md` before changing any of these, and keep manidae-cloud's four pin-writer files in lockstep. (The sandbox-base digest pin that used to move with them was retired on 2026-09-13 — see that runbook; do not reintroduce `NEMOCLAW_SANDBOX_BASE_IMAGE_REF`.)
@@ -102,7 +102,7 @@ Install or refresh the locked OpenShell/NemoClaw pair first:
 ./install_versioned_nemoclaw_openshell.sh
 ```
 
-That helper defaults to `OPENSHELL_VERSION=v0.0.116`, `NEMOCLAW_INSTALL_REF=v0.0.128`, and `OPENCLAW_VERSION=2026.9.1`.
+That helper defaults to `OPENSHELL_VERSION=v0.0.116`, `NEMOCLAW_INSTALL_REF=v0.0.129`, and `OPENCLAW_VERSION=2026.9.1`.
 
 Then install the dashboard from the repository root:
 

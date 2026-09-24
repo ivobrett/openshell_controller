@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { restartSandboxGatewayWithNemoClaw } from "@/app/lib/nemoclawCli"
 import { inspectSandbox, resolveSandboxRef } from "@/app/lib/openshellHost"
+import { repairLegacyOpenClawAuthProfile } from "@/app/lib/openclawLegacyAuthProfile"
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -58,6 +59,11 @@ export async function POST(
       }, { status: 409 })
     }
 
+    // TEMPORARY (NemoClaw #12254): a container restart re-runs nemoclaw-start,
+    // which rewrites the legacy auth-profiles.json that breaks OpenClaw 2026.9.1
+    // chat. Clear it here so the restart below picks that up. No-op for Hermes
+    // and for sandboxes without the file.
+    const legacyAuthProfile = await repairLegacyOpenClawAuthProfile(sandboxName, { restartGateway: false })
     const nemoclawRestart = await restartSandboxGatewayWithNemoClaw(sandboxName)
     if (nemoclawRestart.attempted && nemoclawRestart.ok) {
       return NextResponse.json({
@@ -68,6 +74,7 @@ export async function POST(
         sandboxName,
         readiness,
         nemoclawRestart,
+        legacyAuthProfile,
         elapsedMs: Date.now() - startedAt,
         note: "NemoClaw asked the sandbox's native agent to restart its gateway, then verified gateway health and host forwards.",
       })

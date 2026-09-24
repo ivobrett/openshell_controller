@@ -8,20 +8,17 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# NemoClaw v0.0.128 (2026-09-22) + OpenShell 0.0.116 + OpenClaw 2026.9.1.
-# v0.0.128 is the first NemoClaw TAG carrying OpenClaw 2026.9.1 (#11105) and
-# Hermes 0.21.3 (#11817). OpenShell floor is unchanged from v0.0.127
-# (blueprint min==max==0.0.116), so this is NOT a destructive OpenShell move.
+# NemoClaw v0.0.129 (2026-09-24) + OpenShell 0.0.116 + OpenClaw 2026.9.1.
+# v0.0.128 was the first tag with OpenClaw 2026.9.1 + Hermes 0.21.3; v0.0.129
+# adds restart-readiness/recovery fixes. OpenShell floor unchanged (0.0.116).
 #
-# History: on 2026-09-19 NemoClaw main@e38726c8d7 + 2026.9.1 was tried and
-# reverted: ~78% of creates failed (container-swap race, plausibly fixed by
-# #11909 which ships in this tag) and chat died with
-# AuthProfileMigrationRequiredError. The legacy auth-profiles.json writer in
-# scripts/nemoclaw-start.sh (write_auth_profile) is UNCHANGED in v0.0.128;
-# upstream's full-e2e asserts the sandbox has NO auth-profiles.json, i.e. the
-# writer is a no-op when NVIDIA_INFERENCE_API_KEY is not in the sandbox env.
-# If chat fails with that error again, check for
-# /sandbox/.openclaw/agents/main/agent/auth-profiles.json first.
+# KNOWN UPSTREAM BUG (#12254): nemoclaw-start.sh write_auth_profile writes a
+# legacy auth-profiles.json that OpenClaw 2026.9.1 rejects
+# (AuthProfileMigrationRequiredError; every chat turn fails). Fixed by PR #12237
+# (merged 2026-09-24), which v0.0.129 does NOT contain (cut ~4h earlier). The
+# controller carries a temporary shim: app/lib/openclawLegacyAuthProfile.ts,
+# run after OpenClaw create and on "Restart runtime". Retire it when the pinned
+# tag contains #12237.
 #
 # NOTE for in-place upgrades: the OpenShell .deb ships ONLY /usr/bin/openshell
 # and /usr/bin/openshell-gateway. /usr/bin/openshell-sandbox is installed
@@ -33,12 +30,12 @@ NC='\033[0m'
 # unaffected — onboarding installs the coherent set itself.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.128. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.129. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.128}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.129}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.1}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

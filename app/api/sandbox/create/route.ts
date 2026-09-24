@@ -6,6 +6,7 @@ import { promisify } from "node:util"
 import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from "@/app/lib/openshellHost"
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
 import { recordActivity } from "@/app/lib/activityLog"
+import { repairLegacyOpenClawAuthProfile } from "@/app/lib/openclawLegacyAuthProfile"
 import { clearSandboxCreateInFlight, markSandboxCreateInFlight } from "@/app/lib/sandboxCreateState.mjs"
 import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
@@ -1378,6 +1379,7 @@ export async function POST(request: Request) {
         error: error instanceof Error ? error.message : "Failed to ensure OpenClaw gateway auth token.",
         note: "Failed to ensure OpenClaw gateway auth token; dashboard proxy will fail until this is fixed.",
       })) : null
+      const legacyAuthProfile = created && isOpenClawAgent ? await repairLegacyOpenClawAuthProfile(sandboxName) : null
       // Enable node auto-approval at create time so the mobile app pairs with zero
       // manual steps. NemoClaw/AgentGateway sandboxes bind the gateway to the container
       // IP (e.g. 10.200.0.2), NOT loopback — so the loopback-trusted operator-approve
@@ -1463,6 +1465,7 @@ export async function POST(request: Request) {
         },
         deviceApproval,
         gatewayToken,
+        legacyAuthProfile,
         autoApproveNodes,
         controlUiOrigins,
         hermesDashboardBuild,
@@ -1664,6 +1667,7 @@ export async function POST(request: Request) {
       const isOpenClawAgent = effectiveAgent === "openclaw"
       const deviceApproval = created && isOpenClawAgent ? await approveOpenClawDeviceRequests(sandboxName) : null
       const gatewayToken = created && isOpenClawAgent ? await ensureOpenClawGatewayToken(sandboxName).catch(() => null) : null
+      const legacyAuthProfile = created && isOpenClawAgent ? await repairLegacyOpenClawAuthProfile(sandboxName) : null
       console.log(
         `[sandbox/create] request:complete sandbox=${sandboxName} created=${created} mode=redeploy-image agent=${effectiveAgent} policySource=${policySource} createTimedOut=${createAttempt.timedOut} readinessAttempts=${readiness.attempts} deviceApproval=${deviceApproval?.approved ?? false} gatewayTokenPresent=${gatewayToken?.tokenPresent ?? false} elapsedMs=${elapsedMs(requestStartedAt)}`,
       )
@@ -1713,6 +1717,7 @@ export async function POST(request: Request) {
         registry,
         deviceApproval,
         gatewayToken,
+        legacyAuthProfile,
         note: created
           ? appendNote(
               `Sandbox created by redeploying the running image from '${source.name}' instead of rebuilding it.`,

@@ -249,8 +249,8 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
               ))}
             </div>
             <div>
-              <label className="text-xs uppercase tracking-wider text-muted-foreground">Sandbox Name<FieldHelp text="Lowercase letters, numbers, and hyphens only." /></label>
-              <input value={sandboxName} onChange={(e) => setSandboxName(e.target.value)} placeholder={selectedBlueprint === 'nemoclaw-hermes' ? 'my-hermes' : selectedBlueprint === 'nemoclaw-deepagents-code' ? 'my-deepagents-code' : selectedBlueprint === 'nemoclaw-blueprint' ? 'my-assistant' : selectedBlueprint === 'redeploy-image' ? 'my-assistant-copy' : 'custom-sandbox'} className={`mt-2 ${inputCls}`} />
+              <label className="text-xs uppercase tracking-wider text-muted-foreground">Sandbox Name<FieldHelp text="1-19 characters; start with a lowercase letter; use lowercase letters, numbers, and single internal hyphens only." /></label>
+              <input value={sandboxName} onChange={(e) => setSandboxName(e.target.value)} maxLength={19} pattern="(?!.*--)[a-z](?:[a-z0-9-]*[a-z0-9])?" placeholder={selectedBlueprint === 'nemoclaw-hermes' ? 'my-hermes' : selectedBlueprint === 'nemoclaw-deepagents-code' ? 'my-deepagents-code' : selectedBlueprint === 'nemoclaw-blueprint' ? 'my-assistant' : selectedBlueprint === 'redeploy-image' ? 'my-assistant-copy' : 'custom-sandbox'} className={`mt-2 ${inputCls}`} />
             </div>
             <Card className="p-4 space-y-4">
               <div>

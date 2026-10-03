@@ -56,7 +56,8 @@ function contentDispositionFileName(value: string | null, fallback: string) {
 
 function defaultCloneName(source?: SandboxInventoryItem) {
   if (!source) return ""
-  return `${source.name.replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")}-clone`.slice(0, 63)
+  const base = source.name.replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 13).replace(/-+$/g, "")
+  return `${base || "sandbox"}-clone`
 }
 
 const inputCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -141,7 +142,7 @@ export default function WizardPanel({
 
   const canContinue = (() => {
     if (activeStep === "source") return Boolean(sourceSandbox)
-    if (activeStep === "target") return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(targetName) && targetName.length <= 63
+    if (activeStep === "target") return /^(?!.*--)[a-z]([a-z0-9-]*[a-z0-9])?$/.test(targetName) && targetName.length <= 19
     if (activeStep === "options") return Boolean(backupPath.trim() && restorePath.trim())
     if (activeStep === "review") return Boolean(sourceSandbox && targetName.trim())
     return false
@@ -639,9 +640,12 @@ export default function WizardPanel({
                 <input
                   value={targetName}
                   onChange={(event) => setTargetName(event.target.value)}
+                  maxLength={19}
+                  pattern="(?!.*--)[a-z](?:[a-z0-9-]*[a-z0-9])?"
                   placeholder="source-clone"
                   className={inputCls}
                 />
+                <span className="text-[11px] text-[var(--foreground-dim)]">1-19 characters; start with a lowercase letter; no consecutive hyphens.</span>
               </label>
               {activeBlueprint?.supportsTailscale && (
                 <label className="flex items-center gap-3 text-sm font-mono">

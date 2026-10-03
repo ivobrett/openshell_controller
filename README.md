@@ -62,6 +62,8 @@ Runtime/toolchain versions used during development:
 - OpenShell CLI and gateway compatible with current `NVIDIA/NemoClaw` blueprint constraints
 - NemoClaw CLI compatible with the current `NVIDIA/NemoClaw` repo
 
+Sandbox creation follows NemoClaw's OpenShell routed-name contract: names are 1-19 characters, start with a lowercase letter, contain only lowercase letters, numbers, and single internal hyphens, and end with a letter or number.
+
 Use `./install_versioned_nemoclaw_openshell.sh` to install or refresh the OpenShell/NemoClaw pair. Override `OPENSHELL_VERSION`, `NEMOCLAW_INSTALL_REF`, or `OPENCLAW_VERSION` only when intentionally testing a different pair.
 
 The app uses Next.js `15.5.15`, React `18.3.1`, TypeScript, Tailwind CSS, `ws`, `node-pty`, and the official MCP TypeScript SDK.
@@ -238,6 +240,8 @@ The dashboard shells out to the OpenShell CLI for several operations:
 The **Quick Deploy New NemoClaw Sandbox** path clones a registered image through OpenShell, but it deliberately does not write the clone into NemoClaw's private `sandboxes.json`. Current NemoClaw entries include lifecycle identity, workload provenance, and agent-specific state that must be issued by NemoClaw itself. The clone remains visible and operable through OpenShell Control; use **Fresh NemoClaw Image** when the new sandbox must participate in NemoClaw-managed lifecycle operations.
 
 Sandbox gateway restarts use NemoClaw's native-agent lifecycle command. The controller does not kill or launch OpenClaw or Hermes gateway processes directly; if NemoClaw cannot verify the restart, the request fails without bypassing the agent-owned lifecycle boundary.
+
+OpenClaw owns `openclaw.json` after first launch. Controller-managed MCP and inference updates use OpenClaw's native `config patch --stdin` boundary and do not replace the file or recreate NemoClaw's retired `.config-hash` ownership metadata.
 
 OpenClaw dashboard access is loopback-only inside the host/sandbox context, so the UI uses local proxy routes:
 

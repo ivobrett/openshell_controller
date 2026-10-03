@@ -784,6 +784,13 @@ async function runCreateCommandBounded(file: string, args: string[], env: NodeJS
   })
 }
 
+const DEFAULT_ONBOARD_READY_GRACE_MS = 4 * 60 * 1000
+
+function onboardReadyGraceMs() {
+  const raw = Number(process.env.OPENSHELL_CONTROL_ONBOARD_READY_GRACE_MS)
+  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_ONBOARD_READY_GRACE_MS
+}
+
 async function runCreateCommandUntilReady(file: string, args: string[], env: NodeJS.ProcessEnv, sandboxName: string, timeoutMs: number, intervalMs: number, cwd?: string) {
   const startedAt = Date.now()
   console.log(`[sandbox/create] ready-command:start file=${file} args=${JSON.stringify(args)} timeoutMs=${timeoutMs}`)
@@ -820,6 +827,16 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
     // patch strictly ordered after nemoclaw's last write.
     let readyKill: { verification: SandboxVerification } | null = null
     let killEscalation: NodeJS.Timeout | null = null
+    // NemoClaw v0.0.130 reports the sandbox Ready in the MIDDLE of onboard: its
+    // post-create verification plus the openclaw / agent_setup / policies steps
+    // still run afterwards. SIGTERMing at Ready interrupted them, leaving
+    // ~/.nemoclaw/onboard-session.json "recovery_required" (sandbox step failed,
+    // later steps pending) on 2026-10-03. So after Ready we first give onboard
+    // a grace period to exit on its own, and only kill it if it is still running
+    // then — which keeps the original protection against onboards that hang
+    // after the sandbox is up. Override with OPENSHELL_CONTROL_ONBOARD_READY_GRACE_MS.
+    let readyGraceTimer: NodeJS.Timeout | null = null
+    let killedAfterGrace = false
 
     const finish = (result: {
       completed: boolean
@@ -837,6 +854,7 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
       clearTimeout(timer)
       clearInterval(readinessTimer)
       if (killEscalation) clearTimeout(killEscalation)
+      if (readyGraceTimer) clearTimeout(readyGraceTimer)
       resolve(result)
     }
 
@@ -865,7 +883,7 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
     })
 
     child.on("close", (code, signal) => {
-      console.log(`[sandbox/create] ready-command:close file=${file} elapsedMs=${elapsedMs(startedAt)} code=${code} signal=${signal} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}`)
+      console.log(`[sandbox/create] ready-command:close file=${file} elapsedMs=${elapsedMs(startedAt)} code=${code} signal=${signal} stdoutBytes=${stdout.length} stderrBytes=${stderr.length}${readyKill ? ` afterReady=${killedAfterGrace ? "killed-after-grace" : "exited-on-its-own"}` : ""}`)
       if (code !== 0) logStderr("ready-command:close-stderr", file, stderr)
       if (readyKill) {
         finish({
@@ -898,19 +916,25 @@ async function runCreateCommandUntilReady(file: string, args: string[], env: Nod
       verifySandboxCreation(sandboxName)
         .then((verification) => {
           if (!settled && !readyKill && verification.verified) {
-            console.log(`[sandbox/create] ready-command:ready sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGTERM (waiting for onboard exit before returning)`)
+            const graceMs = onboardReadyGraceMs()
+            console.log(`[sandbox/create] ready-command:ready sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} graceMs=${graceMs} (letting onboard finish before any SIGTERM)`)
             readyKill = { verification }
             clearInterval(readinessTimer)
-            child.kill("SIGTERM")
-            // Graceful shutdown normally finishes within seconds; the dying
-            // registry write was observed at 14s. Escalate well past that so
-            // SIGKILL can't truncate the write, but never hang the create.
-            killEscalation = setTimeout(() => {
-              if (!settled) {
-                console.log(`[sandbox/create] ready-command:ready-escalate sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGKILL`)
-                child.kill("SIGKILL")
-              }
-            }, 30000)
+            readyGraceTimer = setTimeout(() => {
+              if (settled) return
+              console.log(`[sandbox/create] ready-command:grace-expired sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGTERM (waiting for onboard exit before returning)`)
+              killedAfterGrace = true
+              child.kill("SIGTERM")
+              // Graceful shutdown normally finishes within seconds; the dying
+              // registry write was observed at 14s. Escalate well past that so
+              // SIGKILL can't truncate the write, but never hang the create.
+              killEscalation = setTimeout(() => {
+                if (!settled) {
+                  console.log(`[sandbox/create] ready-command:ready-escalate sandbox=${sandboxName} elapsedMs=${elapsedMs(startedAt)} sending=SIGKILL`)
+                  child.kill("SIGKILL")
+                }
+              }, 30000)
+            }, graceMs)
           }
         })
         .finally(() => {

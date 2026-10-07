@@ -8,7 +8,11 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# NemoClaw v0.0.130 (2026-10-01) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# NemoClaw v0.0.131 (2026-10-06) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# v0.0.131 is tag-only for us (same OpenShell floor, OpenClaw and Hermes); notable:
+# #12340 rebuilds now carry the complete native agent home + workspace across.
+# NemoClaw's DEFAULT_CLOUD_MODEL is still the retired nemotron-3-super, so
+# deployments must keep setting NEMOCLAW_MODEL (manidae-cloud does).
 # OpenShell floor unchanged (blueprint min==max==0.0.116). v0.0.130 contains
 # PR #12237, the fix for #12254 (legacy auth-profiles.json broke OpenClaw
 # 2026.9.x chat), so the controller's temporary shim for it was removed.
@@ -26,12 +30,12 @@ NC='\033[0m'
 # unaffected — onboarding installs the coherent set itself.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.130. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.131. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.130}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.131}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

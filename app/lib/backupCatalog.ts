@@ -1,6 +1,8 @@
+import { createReadStream, createWriteStream } from "node:fs"
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { backupSandboxArchive, restoreSandboxArchive } from "./sandboxFiles"
+import { pipeline } from "node:stream/promises"
+import { openSandboxBackup, restoreSandboxArchiveFile } from "./sandboxFiles"
 
 const BACKUP_DIR = process.env.SANDBOX_BACKUP_DIR || path.join(process.cwd(), ".runtime", "backups")
 const MAX_BACKUP_COUNT = Number.parseInt(process.env.SANDBOX_BACKUP_CATALOG_MAX || "100", 10)
@@ -61,19 +63,30 @@ export async function listBackupCatalog() {
 
 export async function createCatalogBackup(sandboxId: string, sourcePath: string) {
   await ensureBackupDirectory()
-  const archive = await backupSandboxArchive(sandboxId, sourcePath)
+  const archive = await openSandboxBackup(sandboxId, sourcePath)
   const id = `${sanitizeSegment(archive.sandboxName)}-${Date.now().toString(36)}`
+
+  // Stream straight to disk; a failed or oversized archive must not be left
+  // behind looking like a usable backup.
+  const { stream, done } = archive.start()
+  let size: number
+  try {
+    await pipeline(stream, createWriteStream(archivePath(id), { mode: 0o600 }))
+    size = (await done).bytes
+  } catch (error) {
+    await rm(archivePath(id), { force: true })
+    throw error
+  }
+
   const entry: BackupCatalogEntry = {
     id,
     fileName: archive.fileName,
     sandboxId,
     sandboxName: archive.sandboxName,
     sourcePath: archive.sourcePath,
-    size: archive.bytes.byteLength,
+    size,
     createdAt: archive.createdAt,
   }
-
-  await writeFile(archivePath(id), archive.bytes, { mode: 0o600 })
   await writeFile(metadataPath(id), `${JSON.stringify(entry, null, 2)}\n`, { mode: 0o600 })
 
   const entries = await listBackupCatalog()
@@ -85,13 +98,14 @@ export async function createCatalogBackup(sandboxId: string, sourcePath: string)
 export async function getCatalogBackup(id: string) {
   const safeId = normalizeBackupId(id)
   const metadata = JSON.parse(await readFile(metadataPath(safeId), "utf8")) as BackupCatalogEntry
-  const bytes = await readFile(archivePath(safeId))
-  return { metadata, bytes }
+  const filePath = archivePath(safeId)
+  const { size } = await stat(filePath)
+  return { metadata, filePath, size, openStream: () => createReadStream(filePath) }
 }
 
 export async function restoreCatalogBackup(id: string, targetSandboxId: string, targetPath: string, replace: boolean) {
   const backup = await getCatalogBackup(id)
-  return restoreSandboxArchive(targetSandboxId, targetPath, backup.metadata.fileName, backup.bytes, replace)
+  return restoreSandboxArchiveFile(targetSandboxId, targetPath, backup.metadata.fileName, backup.filePath, backup.size, replace)
 }
 
 export async function deleteCatalogBackup(id: string) {

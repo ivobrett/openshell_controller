@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import path from "node:path"
 import { OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
 import { resolveSandboxRef } from "./openshellHost"
+import {
+  createSandboxBackupStream,
+  estimateSandboxPathBytes,
+  findSandboxContainer,
+  restoreArchiveFileIntoSandbox,
+} from "./sandboxArchive.mjs"
 
 export const MAX_FILE_BYTES = Number.parseInt(process.env.SANDBOX_FILE_TRANSFER_MAX_BYTES || String(128 * 1024 * 1024), 10)
 export const MAX_MULTIPART_REQUEST_BYTES = MAX_FILE_BYTES + Math.min(10 * 1024 * 1024, Math.max(1024 * 1024, Math.floor(MAX_FILE_BYTES / 10)))
@@ -241,66 +248,51 @@ export async function listSandboxFiles(sandboxId: string, directoryPath: string)
   }
 }
 
-export async function backupSandboxArchive(sandboxId: string, sourcePath: string) {
+// Backups are streamed (see sandboxArchive.mjs) — never buffer the archive in
+// controller memory: agent sandboxes are routinely multi-GB, and the old
+// buffered implementation capped out at MAX_FILE_BYTES (128 MiB).
+export async function openSandboxBackup(sandboxId: string, sourcePath: string) {
   const sandboxName = await resolveSandboxName(sandboxId)
   const targetPath = normalizeSandboxPath(sourcePath || "/sandbox")
+  const containerName = await findSandboxContainer(sandboxName)
+  const estimatedBytes = await estimateSandboxPathBytes(containerName, targetPath)
   const timestamp = new Date().toISOString()
-  const archiveName = `${sanitizeArchiveStem(sandboxName)}-${timestamp.replace(/[:.]/g, "-")}.tar.gz`
-  const script = [
-    `test -d ${shellQuote(targetPath)}`,
-    `tar -C ${shellQuote(targetPath)} -czf - .`,
-  ].join(" && ")
-  const result = await runSandboxExec(sandboxName, script, undefined, 120000)
-  if (result.code !== 0) throw new Error(result.stderr || "failed to create sandbox backup archive")
-  if (result.stdout.byteLength > MAX_FILE_BYTES) {
-    throw new Error(`backup archive is too large; max transfer size is ${Math.floor(MAX_FILE_BYTES / 1024 / 1024)} MiB`)
-  }
 
   return {
     sandboxName,
     sourcePath: targetPath,
-    fileName: archiveName,
-    bytes: result.stdout,
+    fileName: `${sanitizeArchiveStem(sandboxName)}-${timestamp.replace(/[:.]/g, "-")}.tar.gz`,
     createdAt: timestamp,
+    // Uncompressed size of the directory; the .tar.gz is usually smaller.
+    estimatedBytes,
+    start: () => createSandboxBackupStream({ containerName, targetPath }),
   }
 }
 
-export async function restoreSandboxArchive(
+export async function restoreSandboxArchiveFile(
   sandboxId: string,
   targetPathInput: string,
   archiveName: string,
-  payload: Buffer,
+  hostFile: string,
+  bytes: number,
   replace: boolean
 ) {
-  if (payload.byteLength > MAX_FILE_BYTES) {
-    throw new Error(`archive is too large; max transfer size is ${Math.floor(MAX_FILE_BYTES / 1024 / 1024)} MiB`)
-  }
-
   const sandboxName = await resolveSandboxName(sandboxId)
   const targetPath = normalizeSandboxPath(targetPathInput || "/sandbox")
-  const safeArchiveName = sanitizeFileName(archiveName || "sandbox-backup.tar.gz")
-  const script = [
-    `tmp_archive="$(mktemp /tmp/openshell-restore.XXXXXX.tar.gz)"`,
-    `cat > "$tmp_archive"`,
-    `tar -tzf "$tmp_archive" >/tmp/openshell-restore-list.$$`,
-    `tar -tvzf "$tmp_archive" >/tmp/openshell-restore-verbose.$$`,
-    `while IFS= read -r entry; do case "$entry" in ""|/*|../*|*/../*|*"/..") rm -f "$tmp_archive" /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 42;; esac; done < /tmp/openshell-restore-list.$$`,
-    `while IFS= read -r entry; do case "$entry" in [-d]*) :;; *) rm -f "$tmp_archive" /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 43;; esac; done < /tmp/openshell-restore-verbose.$$`,
-    `mkdir -p ${shellQuote(targetPath)}`,
-    replace ? `find ${shellQuote(targetPath)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +` : `:`,
-    `if grep -q '^payload/' /tmp/openshell-restore-list.$$; then tar -xzf "$tmp_archive" -C ${shellQuote(targetPath)} --strip-components=1 --wildcards 'payload/*'; else tar -xzf "$tmp_archive" -C ${shellQuote(targetPath)}; fi`,
-    `rm -f "$tmp_archive" /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$`,
-  ].join(" && ")
-  const result = await runSandboxExec(sandboxName, script, payload, 120000)
-  if (result.code === 42) throw new Error("archive contains unsafe paths")
-  if (result.code === 43) throw new Error("archive contains unsupported entry types")
-  if (result.code !== 0) throw new Error(result.stderr || "failed to restore sandbox archive")
+  const containerName = await findSandboxContainer(sandboxName)
+  await restoreArchiveFileIntoSandbox({
+    containerName,
+    hostFile,
+    targetPath,
+    replace,
+    token: randomBytes(16).toString("hex"),
+  })
 
   return {
     sandboxName,
-    archiveName: safeArchiveName,
+    archiveName: sanitizeFileName(archiveName || "sandbox-backup.tar.gz"),
     targetPath,
-    bytes: payload.byteLength,
+    bytes,
     mode: replace ? "replace" : "merge",
   }
 }

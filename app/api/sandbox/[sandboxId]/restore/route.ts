@@ -1,5 +1,9 @@
+import { randomBytes } from "node:crypto"
+import { rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { NextResponse } from "next/server"
-import { assertRequestContentLength, restoreSandboxArchive } from "@/app/lib/sandboxFiles"
+import { assertRequestContentLength, restoreSandboxArchiveFile } from "@/app/lib/sandboxFiles"
 import { recordActivity } from "@/app/lib/activityLog"
 
 export async function POST(
@@ -19,8 +23,13 @@ export async function POST(
       ? rawTargetPath.trim()
       : "/sandbox"
     const replace = rawReplace === "true" || rawReplace === "1"
+    // server.mjs intercepts POST .../restore before Next.js in production
+    // (streaming upload); this handler only serves `next dev` without it.
     const payload = Buffer.from(await file.arrayBuffer())
-    const restored = await restoreSandboxArchive(sandboxId, targetPath, file.name, payload, replace)
+    const hostFile = path.join(tmpdir(), `openshell-restore-${randomBytes(16).toString("hex")}.tar.gz`)
+    await writeFile(hostFile, payload, { mode: 0o600 })
+    const restored = await restoreSandboxArchiveFile(sandboxId, targetPath, file.name, hostFile, payload.byteLength, replace)
+      .finally(() => rm(hostFile, { force: true }))
     await recordActivity({
       type: "backup.upload.restore",
       status: "success",

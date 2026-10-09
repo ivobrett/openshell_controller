@@ -616,11 +616,27 @@ The file transfer UI is scoped to safe sandbox paths:
 - `/sandbox`
 - `/tmp`
 
-The default max transfer size is `128 MiB`. Override with:
+The default max transfer size for single file/directory transfers is `128 MiB`. Override with:
 
 ```bash
 SANDBOX_FILE_TRANSFER_MAX_BYTES=134217728
 ```
+
+Sandbox **backup and restore** archives are streamed rather than buffered, so
+they are not subject to that limit — agent sandboxes are routinely several GiB.
+Backups stream from the sandbox straight to the browser (or the catalog file),
+and the UI uploads a restore archive as the raw request body, which the
+controller streams to a host temp file before `docker cp`-ing it into the
+sandbox. The only ceiling is a disk-safety valve (default 16 GiB compressed)
+and an overall timeout (default 60 minutes):
+
+```bash
+SANDBOX_ARCHIVE_MAX_BYTES=17179869184
+SANDBOX_ARCHIVE_TIMEOUT_MS=3600000
+```
+
+Legacy `multipart/form-data` restore uploads still work but must be buffered to
+be parsed, so they keep the `SANDBOX_FILE_TRANSFER_MAX_BYTES` cap.
 
 ## Development Commands
 

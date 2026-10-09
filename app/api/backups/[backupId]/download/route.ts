@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import { NextResponse } from "next/server"
 import { getCatalogBackup } from "@/app/lib/backupCatalog"
 
@@ -13,12 +14,12 @@ export async function GET(
   try {
     const { backupId } = await params
     const backup = await getCatalogBackup(backupId)
-    return new NextResponse(new Uint8Array(backup.bytes), {
+    return new Response(Readable.toWeb(backup.openStream()) as ReadableStream<Uint8Array>, {
       status: 200,
       headers: {
         "cache-control": "no-store",
         "content-disposition": contentDisposition(backup.metadata.fileName),
-        "content-length": String(backup.bytes.byteLength),
+        "content-length": String(backup.size),
         "content-type": "application/gzip",
       },
     })

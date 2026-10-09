@@ -25,7 +25,8 @@ type BackupCatalogEntry = {
 function formatBytes(value: number) {
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KiB`
-  return `${(value / 1024 / 1024).toFixed(1)} MiB`
+  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MiB`
+  return `${(value / 1024 / 1024 / 1024).toFixed(1)} GiB`
 }
 
 export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: SandboxArchivePanelProps) {
@@ -60,26 +61,22 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
       setBusy("backup")
       setMessage("")
       const pathToBackup = backupPath.trim()
-      const response = await fetch(`/api/sandbox/${encodeURIComponent(sandbox.id)}/backup?${new URLSearchParams({ path: pathToBackup })}`)
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to create sandbox backup")
-      }
+      const backupUrl = `/api/sandbox/${encodeURIComponent(sandbox.id)}/backup?${new URLSearchParams({ path: pathToBackup })}`
+      // Validate first (errors come back as JSON), then hand the stream to the
+      // browser's download manager. Never read the archive into page memory —
+      // agent sandboxes are routinely multiple GiB.
+      const check = await fetch(`${backupUrl}&check=1`, { cache: "no-store" })
+      const data = await check.json().catch(() => ({}))
+      if (!check.ok) throw new Error(data.error || "Failed to create sandbox backup")
 
-      const blob = await response.blob()
-      const contentDisposition = response.headers.get("content-disposition") || ""
-      const fileName = decodeURIComponent(contentDisposition.match(/filename\*=UTF-8''([^;]+)/)?.[1] || "")
-        || contentDisposition.match(/filename="([^"]+)"/)?.[1]
-        || `${sandbox.name}-backup.tar.gz`
-      const url = window.URL.createObjectURL(blob)
       const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = fileName
+      anchor.href = backupUrl
+      anchor.download = data.fileName || `${sandbox.name}-backup.tar.gz`
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
-      window.URL.revokeObjectURL(url)
-      setMsg(`Created backup for ${pathToBackup}: ${fileName}.`)
+      const estimate = typeof data.estimatedBytes === "number" ? ` (about ${formatBytes(data.estimatedBytes)} before compression)` : ""
+      setMsg(`Backup of ${pathToBackup} is downloading${estimate}. Large sandboxes can take several minutes — keep this tab open until the browser finishes.`)
     } catch (error) {
       setMsg(error instanceof Error ? error.message : "Failed to create sandbox backup", true)
     } finally {
@@ -113,13 +110,17 @@ export default function SandboxArchivePanel({ sandbox, onRestoreComplete }: Sand
     try {
       setBusy("restore")
       setMessage("")
-      const form = new FormData()
-      form.set("archive", selectedArchive)
-      form.set("targetPath", restorePath.trim())
-      form.set("replace", restoreReplace ? "true" : "false")
-      const response = await fetch(`/api/sandbox/${encodeURIComponent(sandbox.id)}/restore`, {
+      // Send the archive as the raw request body so the server can stream it
+      // to disk; multipart uploads have to be buffered and are capped small.
+      const query = new URLSearchParams({
+        targetPath: restorePath.trim(),
+        replace: restoreReplace ? "true" : "false",
+        name: selectedArchive.name,
+      })
+      const response = await fetch(`/api/sandbox/${encodeURIComponent(sandbox.id)}/restore?${query}`, {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/gzip" },
+        body: selectedArchive,
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Failed to restore sandbox backup")

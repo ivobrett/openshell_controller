@@ -32,7 +32,7 @@ const helpSections = [
     items: [
       "File Transfer uploads local files into /sandbox or /tmp and downloads regular files back out.",
       "The file browser lists one directory at a time; select a directory to enter it or use Up to move back.",
-      "Large file transfers are limited by SANDBOX_FILE_TRANSFER_MAX_BYTES, currently defaulting to 128 MiB.",
+      "Single file transfers are limited by SANDBOX_FILE_TRANSFER_MAX_BYTES (default 128 MiB). Sandbox backup and restore archives are streamed and are not subject to that limit.",
     ],
   },
   {

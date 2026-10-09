@@ -20,6 +20,14 @@ import {
   OAUTH_COOKIE_NAME,
   LEGACY_OAUTH_COOKIE_NAME,
 } from './app/lib/auth/node.mjs'
+import {
+  archiveMaxBytes,
+  findSandboxContainer,
+  formatArchiveBytes,
+  normalizeArchiveSandboxPath,
+  receiveStreamToFile,
+  restoreArchiveFileIntoSandbox,
+} from './app/lib/sandboxArchive.mjs'
 
 function loadLocalEnvFile(pathname) {
   if (!existsSync(pathname)) return
@@ -572,19 +580,34 @@ const handle = app.getRequestHandler()
 // multipart uploads — whether the body is unconsumed (original bug) or pre-read
 // by us (same error, different cause). Bypassing Next.js routing for this one
 // POST endpoint lets us use Node.js streams directly.
+//
+// Two upload shapes:
+//   - raw body (what the UI sends): the .tar.gz IS the request body, with
+//     targetPath / replace / name in the query string. Streamed to a host temp
+//     file, so the only limit is SANDBOX_ARCHIVE_MAX_BYTES (default 16 GiB).
+//   - multipart/form-data (legacy clients): has to be buffered to be parsed,
+//     so it keeps the small SANDBOX_FILE_TRANSFER_MAX_BYTES cap (128 MiB).
 const RESTORE_ROUTE_RE = /^\/api\/sandbox\/([^/?#]+)\/restore(?:\?|$)/
 const OPENSHELL_BIN_FOR_RESTORE = process.env.OPENSHELL_BIN || '/usr/bin/openshell'
 const MAX_RESTORE_FILE_BYTES = Number(process.env.SANDBOX_FILE_TRANSFER_MAX_BYTES) || (128 * 1024 * 1024)
-const ALLOWED_SANDBOX_ROOTS = ['/sandbox', '/tmp']
 
-function shellQuoteRestore(value) {
-  return "'" + String(value).replace(/'/g, "'\\''") + "'"
+function restoreTooLargeError(maxBytes, hint) {
+  return new Error(`archive is too large; max ${hint} size is ${formatArchiveBytes(maxBytes)}`)
 }
 
-function collectIncomingBody(req) {
+function collectIncomingBody(req, maxBytes) {
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+    let bytes = 0
+    req.on('data', (chunk) => {
+      bytes += chunk.byteLength
+      if (bytes > maxBytes) {
+        req.destroy()
+        reject(restoreTooLargeError(MAX_RESTORE_FILE_BYTES, 'multipart upload'))
+        return
+      }
+      chunks.push(Buffer.from(chunk))
+    })
     req.on('end', () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
   })
@@ -632,140 +655,93 @@ async function resolveRestoreSandboxName(sandboxId) {
   throw new Error(`sandbox not found: ${sandboxId}`)
 }
 
-// openshell sandbox exec pipes stdin through gRPC which has a 1 MiB message limit,
-// making it unusable for archives > 1 MiB. Instead: write the archive to a VPS
-// temp file, docker cp it into the container (no gRPC), then restore with docker exec.
-function spawnAsync(cmd, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = '', stderr = ''
-    child.stdout.on('data', (d) => { stdout += d })
-    child.stderr.on('data', (d) => { stderr += d })
-    child.on('close', (code) => resolve({ code, stdout, stderr: stderr.trim() }))
-    child.on('error', reject)
-  })
+function sendRestoreJson(res, status, body) {
+  if (res.headersSent) return
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
+  res.end(JSON.stringify(body))
 }
 
-function findSandboxContainer(sandboxId) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('docker', ['ps', '--format', '{{.Names}}', '--filter', `name=${sandboxId}`], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    let stdout = ''
-    child.stdout.on('data', (d) => { stdout += d })
-    child.on('close', (code) => {
-      if (code !== 0) return reject(new Error('docker ps failed'))
-      const name = stdout.trim().split('\n').map((s) => s.trim()).find(Boolean)
-      if (!name) return reject(new Error(`no running container found for sandbox ${sandboxId}`))
-      resolve(name)
-    })
-    child.on('error', reject)
-  })
-}
+// Receive the upload into a host temp file. Returns { archiveName, targetPath,
+// replace, bytes }; the caller owns deleting hostTmp.
+async function receiveRestoreUpload(req, hostTmp) {
+  const contentType = String(req.headers['content-type'] || '')
+  const declared = Number.parseInt(String(req.headers['content-length'] || ''), 10)
 
-async function runRestoreExec(sandboxId, payload, targetPath, replace) {
-  const token = crypto.randomBytes(16).toString('hex')
-  const hostTmp = pathJoin(tmpdir(), `openshell-restore-${token}.tar.gz`)
-  const containerTmp = `/tmp/openshell-restore-${token}.tar.gz`
-  await fsWriteFile(hostTmp, payload)
-  try {
-    const containerName = await findSandboxContainer(sandboxId)
-    const cp = await spawnAsync('docker', ['cp', hostTmp, `${containerName}:${containerTmp}`])
-    if (cp.code !== 0) throw new Error(`docker cp failed: ${cp.stderr}`)
-    // Make the file readable by the sandbox user (docker cp creates root-owned files).
-    await spawnAsync('docker', ['exec', '-u', 'root', containerName, 'chmod', '644', containerTmp])
-    const qt = shellQuoteRestore(targetPath)
-    // --warning=no-unknown-keyword: silence macOS PAX header keywords (SCHILY.fflags etc.)
-    // --exclude='._*': skip macOS AppleDouble resource-fork sidecar files
-    // tar exits 1 for "some files differ" (non-fatal warnings), 2 for fatal errors.
-    // Use newline-separated commands (not &&) so ec=$? always runs; treat exit 1 as success.
-    const tarFlags = `--warning=no-unknown-keyword --exclude='._*'`
-    const script = [
-      `tmp=${shellQuoteRestore(containerTmp)}`,
-      `tar -tzf "$tmp" ${tarFlags} >/tmp/openshell-restore-list.$$ 2>/dev/null || { ec=$?; test "$ec" -eq 1 || { rm -f "$tmp" /tmp/openshell-restore-list.$$; exit "$ec"; }; }`,
-      `tar -tvzf "$tmp" ${tarFlags} >/tmp/openshell-restore-verbose.$$ 2>/dev/null || { ec=$?; test "$ec" -eq 1 || { rm -f "$tmp" /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit "$ec"; }; }`,
-      `while IFS= read -r e; do case "$e" in ""|/*|../*|*/../*|*"/..") rm -f "$tmp" /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 42;; esac; done < /tmp/openshell-restore-list.$$`,
-      `while IFS= read -r e; do case "$e" in [-d]*) :;; *) rm -f "$tmp" /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 43;; esac; done < /tmp/openshell-restore-verbose.$$`,
-      `mkdir -p ${qt}`,
-      replace ? `find ${qt} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +` : ':',
-      `if grep -q '^payload/' /tmp/openshell-restore-list.$$; then tar -xzf "$tmp" -C ${qt} --strip-components=1 --wildcards 'payload/*' ${tarFlags} 2>/dev/null; else tar -xzf "$tmp" -C ${qt} ${tarFlags} 2>/dev/null; fi`,
-      `ec=$?`,
-      `rm -f /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$ 2>/dev/null`,
-      `test "$ec" -le 1 || exit "$ec"`,
-    ].join('\n')
-    const exec = await spawnAsync('docker', ['exec', '-u', 'sandbox', containerName, 'sh', '-lc', script])
-    if (exec.code === 42) throw new Error('archive contains unsafe paths')
-    if (exec.code === 43) throw new Error('archive contains unsupported entry types')
-    if (exec.code !== 0) throw new Error(exec.stderr || 'failed to restore sandbox archive')
-    // Best-effort cleanup of container temp file (sandbox user may not own it).
-    await spawnAsync('docker', ['exec', '-u', 'root', containerName, 'rm', '-f', containerTmp]).catch(() => {})
-  } finally {
-    await fsUnlink(hostTmp).catch(() => {})
-  }
-}
-
-async function handleRestoreRequest(req, res, sandboxId) {
-  if (!isAuthenticatedUpgrade(req)) {
-    res.writeHead(401, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }))
-    return
-  }
-  try {
-    const rawBody = await collectIncomingBody(req)
-    const contentType = req.headers['content-type'] || ''
+  if (/^multipart\/form-data/i.test(contentType)) {
+    // Parsing multipart needs the whole body in memory — bound it BEFORE reading.
+    const multipartLimit = MAX_RESTORE_FILE_BYTES + 1024 * 1024
+    if (Number.isFinite(declared) && declared > multipartLimit) {
+      throw restoreTooLargeError(MAX_RESTORE_FILE_BYTES, 'multipart upload')
+    }
+    const rawBody = await collectIncomingBody(req, multipartLimit)
     let form
     try {
       form = await new Request('http://localhost/__restore', {
         method: 'POST', headers: { 'content-type': contentType }, body: rawBody,
       }).formData()
     } catch (e) {
-      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok: false, error: `Failed to parse upload: ${e?.message}` }))
-      return
+      throw new Error(`Failed to parse upload: ${e?.message}`)
     }
     const archiveFile = form.get('archive')
-    if (!archiveFile || !(archiveFile instanceof File)) {
-      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok: false, error: 'archive is required' }))
-      return
-    }
+    if (!archiveFile || !(archiveFile instanceof File)) throw new Error('archive is required')
+    const payload = Buffer.from(await archiveFile.arrayBuffer())
+    if (payload.byteLength > MAX_RESTORE_FILE_BYTES) throw restoreTooLargeError(MAX_RESTORE_FILE_BYTES, 'multipart upload')
+    await fsWriteFile(hostTmp, payload, { mode: 0o600 })
     const rawTarget = form.get('targetPath')
     const rawReplace = form.get('replace')
-    const targetPath = typeof rawTarget === 'string' && rawTarget.trim() ? rawTarget.trim() : '/sandbox'
-    const replace = rawReplace === 'true' || rawReplace === '1'
-    const normalized = targetPath.startsWith('/') ? targetPath : '/sandbox/' + targetPath
-    if (!ALLOWED_SANDBOX_ROOTS.some((r) => normalized === r || normalized.startsWith(r + '/'))) {
-      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok: false, error: 'sandbox path must be under /sandbox or /tmp' }))
-      return
+    return {
+      archiveName: archiveFile.name,
+      targetPath: typeof rawTarget === 'string' ? rawTarget : '',
+      replace: rawReplace === 'true' || rawReplace === '1',
+      bytes: payload.byteLength,
     }
-    const payload = Buffer.from(await archiveFile.arrayBuffer())
-    if (payload.byteLength > MAX_RESTORE_FILE_BYTES) {
-      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok: false, error: `archive is too large; max transfer size is ${Math.floor(MAX_RESTORE_FILE_BYTES / 1024 / 1024)} MiB` }))
-      return
-    }
+  }
+
+  const maxBytes = archiveMaxBytes()
+  if (Number.isFinite(declared) && declared > maxBytes) throw restoreTooLargeError(maxBytes, 'archive')
+  const query = new URL(req.url || '/', 'http://localhost').searchParams
+  const bytes = await receiveStreamToFile(req, hostTmp, maxBytes)
+  if (bytes === 0) throw new Error('archive is required')
+  const rawReplace = query.get('replace')
+  return {
+    archiveName: query.get('name') || 'sandbox-backup.tar.gz',
+    targetPath: query.get('targetPath') || '',
+    replace: rawReplace === 'true' || rawReplace === '1',
+    bytes,
+  }
+}
+
+async function handleRestoreRequest(req, res, sandboxId) {
+  if (!isAuthenticatedUpgrade(req)) {
+    sendRestoreJson(res, 401, { ok: false, error: 'Unauthorized' })
+    return
+  }
+  const token = crypto.randomBytes(16).toString('hex')
+  const hostTmp = pathJoin(tmpdir(), `openshell-restore-${token}.tar.gz`)
+  try {
+    const upload = await receiveRestoreUpload(req, hostTmp)
+    const targetPath = normalizeArchiveSandboxPath(upload.targetPath)
     let sandboxName
     try {
       sandboxName = await resolveRestoreSandboxName(sandboxId)
     } catch {
-      res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ ok: false, error: `sandbox not found: ${sandboxId}` }))
+      sendRestoreJson(res, 404, { ok: false, error: `sandbox not found: ${sandboxId}` })
       return
     }
-    await runRestoreExec(sandboxId, payload, normalized, replace)
-    const mode = replace ? 'replace' : 'merge'
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({
+    const containerName = await findSandboxContainer(sandboxName)
+    await restoreArchiveFileIntoSandbox({ containerName, hostFile: hostTmp, targetPath, replace: upload.replace, token })
+    const mode = upload.replace ? 'replace' : 'merge'
+    sendRestoreJson(res, 200, {
       ok: true,
-      restored: { sandboxName, archiveName: archiveFile.name, targetPath: normalized, bytes: payload.byteLength, mode },
-      note: `Restored ${archiveFile.name} into ${normalized} (${mode}).`,
-    }))
+      restored: { sandboxName, archiveName: upload.archiveName, targetPath, bytes: upload.bytes, mode },
+      note: `Restored ${upload.archiveName} into ${targetPath} (${mode}).`,
+    })
   } catch (e) {
     const message = e?.message || 'Failed to restore sandbox backup'
-    const status = /required|path|large|unsafe|archive/.test(message) ? 400 : 500
-    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({ ok: false, error: message }))
+    const status = /required|path|large|unsafe|archive|parse upload|interrupted/.test(message) ? 400 : 500
+    sendRestoreJson(res, status, { ok: false, error: message })
+  } finally {
+    await fsUnlink(hostTmp).catch(() => {})
   }
 }
 

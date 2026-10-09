@@ -417,3 +417,182 @@ came back Ready on the new pinned versions.**
 - **Total agent downtime ≈ 25 min** (from `pkill` to both Ready), driven
   by two sequential base-image builds. Everything else ran with
   containers Ready.
+
+## Execution record — 2026-10-09, Oracle BYOVPS (130.61.64.124): 0.0.85 → 0.0.116
+
+Second run on the same box, this time a **multi-hop** jump: OpenShell
+0.0.85 → 0.0.116, NemoClaw v0.0.92 → **v0.0.130** (not the v0.0.131 pin —
+see trap 1), OpenClaw 2026.7.1 → 2026.9.2, Hermes 0.18.0 → 0.21.3,
+controller `2d0f742` → `a44d8b0`. Both agents ended Ready with state
+restored and a chat turn verified, but it took ~85 min of agent downtime
+instead of 25 and **the Step 3 sequence above no longer works as written**
+on NemoClaw ≥ v0.0.130. Everything below was hit for real. Working files
+and logs: `/root/upgrade-2026-10-09/` on the box; rollback material:
+`/root/backups/2026-10-09-pre-upgrade/` (+ images `rollback/ivos-*:2026-10-09`).
+
+### What to do differently (the sequence that worked)
+
+1. **Run every `nemoclaw`/`openshell` command with the controller unit's
+   environment**, not a bare `sudo` shell: `HOME=/root`,
+   `OPENSHELL_GATEWAY=nemoclaw`, `XDG_RUNTIME_DIR=/run/user/0`,
+   `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus`. Without the last
+   two, `systemctl --user` is unreachable and the v0.0.130+ installer takes
+   its "systemd user manager is unavailable" branch, which can move the
+   gateway to an alternate port.
+2. **`apt-get install lsof` first.** NemoClaw's gateway-port probe runs
+   `lsof -ti :8080 -sTCP:LISTEN`; without it every rebuild/recover preflight
+   fails with `System readiness could not confirm required capabilities:
+   gateway.version.compatible, gateway.port.uncontested`. Oracle's Ubuntu
+   image does not ship it.
+3. **Make the registry rows match the live inference route** before any
+   recreate. Rows still said `compatible-endpoint` (dead Entrim) while the
+   gateway was on `nvidia-prod`; a recreate re-applies the row. Also give the
+   gateway provider the credential name the row expects:
+   `openshell provider update nvidia-prod --credential NVIDIA_INFERENCE_API_KEY=…`
+   (keep the existing `NVIDIA_API_KEY` / `OPENAI_API_KEY` entries).
+4. **Take the full rollback set while Ready**: `/usr/bin/openshell*`
+   binaries, `~/.local/state/nemoclaw` (minus the gateway log),
+   `~/.local/state/openshell`, `~/.config/openshell`, `~/.nemoclaw` (minus
+   `rebuild-backups`), `/opt/nemoclaw-src` (the wrapper `rm -rf`s it — it is
+   the old CLI), plus `docker cp <cnt>:/sandbox`. On OpenShell 0.0.85 the
+   `sandbox.jwt` has `exp: 0`, so the *old* containers can be restarted under
+   the *old* gateway — a real rollback exists until the old container is
+   deleted. After the gateway kill, take a quiesced `docker cp` and
+   `docker commit` of each stopped container.
+5. **Prune the junk that makes the backup impossible** (trap 2), verifying
+   every file is in the `docker cp` copy first.
+6. **Install the new CLI without letting install.sh retire the gateway**:
+   move `~/.local/state/nemoclaw/openshell-docker-gateway/openshell-gateway.pid`
+   aside for the duration of the `--skip-openshell` wrapper run (restore it
+   after). The run ends at "Could not retire the legacy OpenShell gateway" —
+   or earlier, at the backup — with the gateway untouched. On this box the
+   PID file is root-owned and valid, so **without this the wrapper would have
+   run the whole destructive window unattended**.
+7. `backup-all` with the new CLI → `install-openshell.sh` → kill the old
+   gateway → quiesced snapshots → **start the new gateway yourself**
+   (`systemctl --user start openshell-gateway`, then copy
+   `…/openshell-docker-gateway/tls/{ca.crt,client/tls.crt,client/tls.key}`
+   over `~/.config/openshell/gateways/nemoclaw/mtls/` — the first 0.0.116
+   start regenerates the whole PKI and the CLI then fails with
+   `invalid peer certificate: BadSignature`).
+8. For each sandbox: `openshell sandbox delete <name>` (the migrated legacy
+   row is stuck `Ready`, see trap 5) and then
+   `NEMOCLAW_RESTORE_LATEST_BACKUP_ON_RECREATE=1 nemoclaw upgrade-sandboxes --auto --yes`.
+   `--check` must show the sandbox under **"Prepared backup recovery"**.
+   Hermes additionally needs `TELEGRAM_BOT_TOKEN` in the environment.
+9. Afterwards: `nemoclaw <name> recover` (host forwards), then the
+   controller's own post-create steps via its API — `POST
+   /api/sandbox/<name>/openclaw-remote`, `POST /api/sandbox/<name>/hermes-remote`,
+   `POST /api/sandbox/<name>/mcp {"action":"sync"}` — and copy loose
+   `/sandbox` files (anything outside `.openclaw` / `.hermes`) back from the
+   quiesced copy by hand.
+
+### New traps
+
+1. **NemoClaw v0.0.131 cannot upgrade a real sandbox.** #12340's
+   whole-home capture (a) refuses the backup if *any* file contains
+   token-shaped text — chat transcripts, `runtime/state.db`, a Hermes
+   `bin/tirith` binary, pip/uv caches, raw token files — with "native state
+   archive contains credential-bearing or uninspectable content", (b)
+   SIGSTOPs every sandbox-user process during capture and fails with
+   `exit 21` when it cannot (seen on Hermes), and (c) **cannot restore
+   backups taken by any earlier version** ("Legacy selective backups require
+   manual file recovery"; manifest v1 backups are not even listed). v0.0.130
+   sanitises instead of refusing, and has the same OpenShell/OpenClaw/Hermes
+   versions, so this box was taken to v0.0.130. Treat v0.0.131 as
+   fresh-install-only until upstream relaxes this; `upgrade-sandboxes` /
+   `rebuild` / installer Gate A on a v0.0.131 box will hit it.
+2. **v0.0.130's backup sanitiser caps structured state at 32 MiB / 100k
+   entries** (`MAX_TOTAL_BYTES` in `snapshot-sanitizer-boundary.ts`; counts
+   every `.json`/`.yaml`/`.env`). Over it: `Credential sanitization failed;
+   removed the incomplete backup`. Not sed-fixable — the helper returns all
+   candidate content as one base64 JSON string. Two things blew it here:
+   26,700 Hermes `sessions/request_dump_*.json` failure dumps (554 MiB, one
+   per failed cron inference call since August) and 38,400 OpenClaw session
+   transcripts no longer referenced by `sessions.json` (2.8 GiB). Prune those
+   (after confirming they are in the `docker cp` copy) and the backup passes
+   in under a minute. A sandbox that has run for months will need this.
+3. **The OpenClaw image build does a live `npm audit`.** On v0.0.130 it now
+   fails with `mcporter-runtime: unaccepted npm audit findings at or above
+   high: GHSA-6qxp-vccf-f47h, GHSA-jqcg-44mw-7w3h` — in `Dockerfile.base`
+   *and* in the sandbox `Dockerfile`, so pulling the published base image
+   does not avoid it. **No OpenClaw sandbox can be created or rebuilt on a
+   stock v0.0.130 install today.** v0.0.131 carries the fix; applying just
+   its `agents/openclaw/mcporter-runtime/package{,-lock}.json` and the
+   matching `lockSha256` in `ci/reviewed-npm-audit.json` to the v0.0.130
+   checkout makes the build pass. **Pre-build both agent images before
+   killing the gateway** — this was only caught because of that.
+4. **Our installer's Dockerfile unpin forces a local base-image build.**
+   NemoClaw only pulls the published `ghcr.io/nvidia/nemoclaw/*sandbox-base:<tag>`
+   when `Dockerfile.base` is git-clean and a version tag resolves
+   (`NEMOCLAW_INSTALL_REF` in the environment). The `sed` unpin makes it
+   dirty, so every box builds locally (15 min on arm64) and is exposed to
+   trap 3. Reverting the Dockerfiles in `/opt/nemoclaw-src` and exporting
+   `NEMOCLAW_INSTALL_REF` let Hermes use the published image.
+5. **0.0.85 sandbox rows are unusable under the 0.0.116 gateway.** They list
+   as `Ready` forever while the container restart-loops (`provider
+   'compatible-endpoint' not found`, `sandbox requires a non-empty
+   workspace`), `stop` is rejected, and `upgrade-sandboxes` reports them as
+   "Unknown version … No running stale sandboxes to rebuild". Delete the row;
+   the prepared-backup recovery then applies.
+6. **`nemoclaw <name> recover` no longer starts the shared gateway**
+   (v0.0.130: "This sandbox-scoped command will not restart the shared host
+   gateway. Start the gateway again with `nemoclaw onboard`"), and the
+   installer's own post-retire start targets `nemoclaw-openshell-gateway.service`,
+   which does not exist on boxes carrying the upstream `.deb` unit. Start
+   `openshell-gateway.service` directly (step 7 above). CLAUDE.md §3 predates this.
+7. **The policy handoff carries the old live policy verbatim** and the new
+   CLI rejects parts of it *after* pre-flight: a stock channel preset from
+   the old version ("live network policy 'telegram' does not match the
+   enabled channel requirement"), and approved rules with a binary path of
+   `"-"` ("does not satisfy the shipped sandbox policy schema"). Edit the
+   `rebuild-policy-handoff.<sha>.yaml` in the backup dir, rename it to its
+   new sha256 and update `rebuildPolicyHandoff` in `rebuild-manifest.json`.
+   A failed attempt **strips both handoffs from the manifest** ("Cannot
+   rebuild an absent sandbox without its authoritative OpenShell policy" /
+   "retained rebuild MCP recovery observation is unavailable") and leaves a
+   `.nemoclaw-rebuild-recovery.json` journal ("already belongs to another
+   transaction") — keep copies and put them back before each retry.
+8. **The controller's own MCP broker entry blocks rebuilds.** `mcp.servers.
+   openshell-control` in `openclaw.json` has a bearer header rather than an
+   OpenShell credential binding: "MCP server 'openshell-control' has no
+   complete authenticated credential binding". Remove it from the backup's
+   `openclaw.json` and set `rebuildMcpHandoff.entries` to `[]`; the
+   controller's MCP sync re-issues it afterwards. This will affect every
+   OpenClaw rebuild on v0.0.130+ and wants a controller-side fix.
+9. **A main-process exit puts the sandbox in a sticky `Error` phase.**
+   `stop`, `start`, `exec`, `backup-all` and `recover` are all refused, a
+   healthy restarted container does not clear it, and neither does a gateway
+   restart. Only delete + recreate does. Two ways we got there: restarting
+   the OpenClaw gateway on un-migrated 2026.7.1 state ("Legacy workspace
+   setup state requires migration … run openclaw doctor --fix"), and Hermes
+   refusing to start because the agent itself had appended a raw
+   `TELEGRAM_BOT_TOKEN` to `.hermes/.env`.
+10. **Manual OpenClaw state restore, when the pipeline wedges** (it did:
+    "OpenShell did not return one exact durable sandbox identity", then a
+    retained-recovery record that blocked both retry and `destroy`): remove
+    the registry row, `nemoclaw onboard --fresh --name <name>`, `nemoclaw
+    <name> stop`, stream the state dirs into the stopped container owned by
+    the sandbox uid (`tar --owner=998 --group=998 … | docker cp - <cnt>:/sandbox/.openclaw/`,
+    keeping the new `openclaw.json` and `models.json`), drop a
+    `.nemoclaw-post-upgrade-doctor` marker (content
+    `nemoclaw-openclaw-post-upgrade-doctor-v2`, mode 600, **owned by the
+    sandbox uid** — a root-owned marker is refused and the start fails),
+    `nemoclaw <name> start`, wait for "post-upgrade doctor completed" in
+    `/tmp/nemoclaw-start.log`, then atomically replace the marker with
+    `nemoclaw-openclaw-post-upgrade-doctor-release-v1`. `snapshot restore`
+    is not an option ("legacy snapshot lacks managed workload and provider
+    runtime authority").
+
+### Not carried over / still open on this box
+
+- OpenClaw's Telegram channel and its custom approved network rules were in
+  the old `openclaw.json` / live policy and were not re-applied (the
+  sanctioned `channels add` queues a rebuild, which fails on a source
+  install: "managed image catalog 'v0.1.0' is unavailable … HTTP 404").
+- The box runs v0.0.130 with a hand-applied lock fix in `/opt/nemoclaw-src`;
+  re-running the installer replaces it.
+- `~/.local/state/nemoclaw/openshell-docker-gateway/openshell-gateway.log`
+  had grown to 2.7 GiB (the pre-0.0.116 standalone gateway logged there with
+  no rotation). The 0.0.116 gateway runs as a systemd user service and logs
+  to the journal, so the file is now dead weight.

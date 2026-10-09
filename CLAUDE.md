@@ -114,6 +114,14 @@ again and sandboxes return to Ready. `HOME` must be set explicitly —
 NemoClaw needs it for `~/.local/state/nemoclaw/`. It is always set in
 the systemd unit; add it for bare SSH sessions.
 
+**On NemoClaw ≥ v0.0.130 `recover` no longer starts the host gateway**
+("This sandbox-scoped command will not restart the shared host gateway").
+Start it directly, then run `recover` per sandbox for the forwards:
+
+```bash
+XDG_RUNTIME_DIR=/run/user/0 systemctl --user start openshell-gateway.service
+```
+
 After the host gateway is back, individual sandbox inner gateways
 (Hermes / OpenClaw) may also need recovery. Repeat the `nemoclaw
 <sandbox-name> recover` command per affected sandbox.
@@ -133,7 +141,7 @@ the right one based on what you're doing:
 | **`docs/runbooks/live-vps-upgrades.md`** | **Executing** a version upgrade on a VPS with running sandboxes. Read BEFORE running the versioned installer on a live box — covers why `--skip-openshell` is mandatory when OpenShell is already at the pin, the sandbox-token expiry trap, the v0.0.78 strict-backup / legacy-recreate / route-metadata gates, and emergency data preservation. |
 | **`docs/runbooks/byovps-architecture.md`** | A script works on cloud VPS but breaks on BYOVPS (or vice versa). Covers Traefik network mode, hermes process naming, openshell-gateway ensure-mtls flips, needrestart, ollama bootstrap source-of-truth. |
 | **`docs/runbooks/byovps-controller-upgrade.md`** | Admin checklist: upgrading controller code + NemoClaw/OpenClaw pins on a live BYOVPS with running sandboxes. Wraps §2 deploy + `live-vps-upgrades.md` into one end-to-end procedure (pre-flight, controller git upgrade, `--skip-openshell` installer run, verify, rollback). |
-| **`docs/runbooks/live-openshell-bump-with-agent-upgrade.md`** | The **hard** live upgrade: when the target NemoClaw pin also forces an **OpenShell version bump** (the destructive maintenance window) AND a running agent's pinned version moves (e.g. OpenClaw 2026.6.10→2026.7.1 so the current Android app reconnects). Covers multi-GB agent-state backup (the `maxBuffer` cap vs `docker cp` safety net), the token-TTL race for the not-rebuilt agent, and the two-pass installer run. Use instead of `byovps-controller-upgrade.md` whenever `OPENSHELL_VERSION` > the box's `openshell --version`. |
+| **`docs/runbooks/live-openshell-bump-with-agent-upgrade.md`** | The **hard** live upgrade: when the target NemoClaw pin also forces an **OpenShell version bump** (the destructive maintenance window) AND a running agent's pinned version moves (e.g. OpenClaw 2026.6.10→2026.7.1 so the current Android app reconnects). Covers multi-GB agent-state backup (the `maxBuffer` cap vs `docker cp` safety net), the token-TTL race for the not-rebuilt agent, and the two-pass installer run. Use instead of `byovps-controller-upgrade.md` whenever `OPENSHELL_VERSION` > the box's `openshell --version`. **Read the 2026-10-09 execution record first** — on NemoClaw ≥ v0.0.130 the original Step 3 no longer works as written, and v0.0.131 cannot back up or restore pre-existing sandboxes at all. |
 | **`docs/runbooks/fresh-vps-setup.md`** | Brand-new VPS (BYOVPS or cloud) bring-up. Not needed for incremental deploys — those use §2. |
 | **`docs/runbooks/minimal-openshell-host.md`** | Installing the controller in **minimal profile** (`./install.sh --minimal`, `OPENSHELL_CONTROL_PROFILE=minimal`) against a plain OpenShell host (e.g. the `openshell` snap, gateway `openshell-gateway`) — custom sandboxes only, no NemoClaw/OpenClaw. Includes the full snap gateway + `gateway_jwt` bring-up recipe. Invariants: `tests/minimal-profile-check.mjs`; profile logic: `app/lib/controlProfile.ts`. |
 | **`HERMES_REMOTE_DESKTOP.md`** | Anything about the Hermes Desktop public-URL flow: architecture, expose.sh / launch.sh, session-token gate, Traefik rule, troubleshooting cheatsheet (§5). |

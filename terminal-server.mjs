@@ -105,15 +105,21 @@ function buildAttachCommand(sandboxId) {
     const safeAlias = shellEscape(`openshell-${normalizeSandboxId(sandboxId)}`)
     return process.env.OPENSHELL_TERMINAL_ATTACH_TEMPLATE.replaceAll('{sandboxId}', safeSandboxId).replaceAll('{alias}', safeAlias)
   }
-  // No template configured → use the openshell CLI's own `sandbox connect`
-  // subcommand, which knows how to install/update the SSH config wiring
-  // before invoking ssh. The terminal lands directly inside the sandbox
-  // shell with no host-side wrapper text visible to the operator. Host
-  // mode falls back to the platform shell via buildSessionCommand.
+  // No template configured → open an interactive login shell in the sandbox
+  // with `openshell sandbox exec --tty`.
+  //
+  // This used to be `openshell sandbox connect <name>`. Since OpenShell 0.0.111
+  // (the "canonical main process" change) `connect` ATTACHES to the sandbox's
+  // main process instead of starting a shell: the operator sees the agent
+  // gateway's live log, typed input goes nowhere, and Ctrl-C can terminate the
+  // main process (which leaves the sandbox in OpenShell's sticky Error phase).
+  // `exec --tty` has no timeout by default (--timeout 0) and lands in the same
+  // place the old connect did: the sandbox user, HOME=/sandbox.
   if (sandboxId && sandboxId !== 'host') {
     const safeBin = shellEscape(openshellBin())
     const safeName = shellEscape(normalizeSandboxId(sandboxId))
-    return `${safeBin} sandbox connect ${safeName}`
+    const loginShell = shellEscape('command -v bash >/dev/null 2>&1 && exec bash -l || exec sh -l')
+    return `${safeBin} sandbox exec -n ${safeName} --tty -- sh -c ${loginShell}`
   }
   return shellForPlatform()
 }

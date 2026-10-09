@@ -96,3 +96,12 @@ assert.match(server, /findSandboxContainer\(sandboxName\)/, 'restore must resolv
 const panel = await read('app/components/SandboxArchivePanel.tsx')
 assert.doesNotMatch(panel, /response\.blob\(\)/, 'the UI must not read the backup into page memory')
 assert.match(panel, /body: selectedArchive,/, 'the UI must upload the archive as the raw request body')
+
+// --- restore must accept what our own backups contain ---
+// A full /sandbox archive always has symlinks (and hard links on Hermes);
+// the validator used to allow only files and directories, so every backup
+// taken with the Backup button failed to restore with "unsupported entry types".
+const archive = await read('app/lib/sandboxArchive.mjs')
+assert.match(archive, /case "\$e" in \[-dl\]\*\) :;;/, 'restore must accept regular files, directories and symlinks')
+assert.match(archive, /h\*\) case "\$e" in \*" link to \/"\*/, 'hard links must be limited to relative in-archive targets')
+assert.doesNotMatch(archive, /in \[-dlhbcps\]|in \[-dlbc/, 'device, FIFO and socket entries must stay rejected')

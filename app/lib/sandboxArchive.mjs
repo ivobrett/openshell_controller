@@ -212,7 +212,14 @@ export async function restoreArchiveFileIntoSandbox({ containerName, hostFile, t
       `tar -tzf "$tmp" ${tarFlags} >/tmp/openshell-restore-list.$$ 2>/dev/null || { ec=$?; test "$ec" -eq 1 || { rm -f /tmp/openshell-restore-list.$$; exit "$ec"; }; }`,
       `tar -tvzf "$tmp" ${tarFlags} >/tmp/openshell-restore-verbose.$$ 2>/dev/null || { ec=$?; test "$ec" -eq 1 || { rm -f /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit "$ec"; }; }`,
       `while IFS= read -r e; do case "$e" in ""|/*|../*|*/../*|*"/..") rm -f /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 42;; esac; done < /tmp/openshell-restore-list.$$`,
-      `while IFS= read -r e; do case "$e" in [-d]*) :;; *) rm -f /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 43;; esac; done < /tmp/openshell-restore-verbose.$$`,
+      // Entry types: regular files, directories and symlinks are accepted — a
+      // full /sandbox backup always contains symlinks (node_modules/.bin,
+      // .hermes/state.db-wal -> runtime/...), so rejecting them made our own
+      // backups unrestorable. GNU tar (no -P) defers symlinks with absolute or
+      // ".." targets until the end of extraction, so nothing is written
+      // through them. Hard links are accepted only when their target is a
+      // relative path inside the archive. Devices, FIFOs and sockets are refused.
+      `while IFS= read -r e; do case "$e" in [-dl]*) :;; h*) case "$e" in *" link to /"*|*" link to ../"*|*" link to "*"/../"*) rm -f /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 43;; esac;; *) rm -f /tmp/openshell-restore-list.$$ /tmp/openshell-restore-verbose.$$; exit 43;; esac; done < /tmp/openshell-restore-verbose.$$`,
       `mkdir -p ${qt}`,
       replace ? `find ${qt} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +` : ':',
       `if grep -q '^payload/' /tmp/openshell-restore-list.$$; then tar -xzf "$tmp" -C ${qt} --strip-components=1 --wildcards 'payload/*' ${tarFlags} 2>/dev/null; else tar -xzf "$tmp" -C ${qt} ${tarFlags} 2>/dev/null; fi`,

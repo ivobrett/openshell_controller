@@ -1,0 +1,28 @@
+# Lets an OpenClaw sandbox call Anthropic's Messages API directly, so OpenClaw
+# can run on a Claude subscription setup token saved in its own auth store.
+# See docs/runbooks/claude-subscription-inference.md.
+#
+#   nemoclaw <sandbox> policy add --from-file scripts/claude-subscription/network-policy.yaml --yes
+#   nemoclaw <sandbox> policy remove claude-subscription --yes
+#
+# Only OpenClaw's Node process is allowed, and only the endpoints it needs.
+preset:
+  name: claude-subscription
+  description: "Anthropic Messages API for OpenClaw running on a Claude subscription setup token"
+
+network_policies:
+  claude_subscription:
+    name: claude_subscription
+    endpoints:
+      - host: api.anthropic.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/v1/messages" }
+          - allow: { method: POST, path: "/v1/messages/count_tokens" }
+          - allow: { method: GET, path: "/v1/models" }
+          - allow: { method: GET, path: "/v1/models/**" }
+    binaries:
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/node }

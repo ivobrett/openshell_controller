@@ -28,6 +28,22 @@ NC='\033[0m'
 # openshell-sandbox-<arch>-unknown-linux-musl.tar.gz from the OpenShell
 # release and install it, then re-run the script. Fresh provisioning is
 # unaffected — onboarding installs the coherent set itself.
+#
+# NOTE for LIVE boxes with existing sandboxes (learned 2026-10-09, see
+# docs/runbooks/live-openshell-bump-with-agent-upgrade.md):
+#   - Run scripts/upgrade/preflight.sh first. It is read-only.
+#   - v0.0.131's backup (#12340) REFUSES sandbox state containing token-shaped
+#     text and CANNOT restore backups taken by older versions, so this pin can
+#     install fresh but cannot carry a pre-existing sandbox across an OpenShell
+#     bump. v0.0.130 can (same OpenShell/OpenClaw/Hermes) — but stock v0.0.130
+#     can no longer BUILD OpenClaw images: its in-build `npm audit` now blocks
+#     on advisories published after the tag was cut. v0.0.131 carries that fix
+#     (agents/openclaw/mcporter-runtime lock). Do not "downgrade the pin to
+#     v0.0.130" for fresh installs.
+#   - The Dockerfile unpin below makes Dockerfile.base git-dirty, and NemoClaw
+#     only pulls the published ghcr.io/nvidia/nemoclaw/*sandbox-base:<tag>
+#     image for a clean checkout — so every box builds its base image locally
+#     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
 # NemoClaw is pinned to TAG v0.0.131. The NemoClaw ref and OPENCLAW_VERSION
@@ -175,6 +191,31 @@ install_nemoclaw() {
   require_command sh
   require_command git
   require_command docker
+
+  # NemoClaw >= v0.0.130 identifies the gateway-port listener with
+  # `lsof -ti :<port> -sTCP:LISTEN`. Without lsof the scan is "incomplete" and
+  # every rebuild / recover / upgrade preflight fails with "System readiness
+  # could not confirm required capabilities: gateway.version.compatible,
+  # gateway.port.uncontested". Minimal images (Oracle Cloud Ubuntu) do not
+  # ship it — hit on the 2026-10-09 BYOVPS upgrade.
+  if ! command -v lsof >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+      log "Installing lsof (required by NemoClaw's gateway-port probe)"
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q lsof >/dev/null 2>&1 \
+        || warn "Could not install lsof — install it manually before running NemoClaw rebuilds."
+    else
+      warn "lsof is not installed. NemoClaw rebuild/recover preflights need it."
+    fi
+  fi
+
+  # A bare `sudo` shell has no XDG_RUNTIME_DIR, so `systemctl --user` cannot
+  # reach root's user manager and NemoClaw's installer takes its "systemd user
+  # manager is unavailable" branch — which can move the gateway off port 8080
+  # and strand the controller. Give it the same view the controller unit has.
+  if [[ -z "${XDG_RUNTIME_DIR:-}" && -S "/run/user/$(id -u)/bus" ]]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+  fi
 
   # The source checkout must OUTLIVE this installer: when upstream
   # install.sh runs from a source checkout it installs the CLI with

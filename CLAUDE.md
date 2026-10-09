@@ -142,6 +142,7 @@ the right one based on what you're doing:
 | **`docs/runbooks/byovps-architecture.md`** | A script works on cloud VPS but breaks on BYOVPS (or vice versa). Covers Traefik network mode, hermes process naming, openshell-gateway ensure-mtls flips, needrestart, ollama bootstrap source-of-truth. |
 | **`docs/runbooks/byovps-controller-upgrade.md`** | Admin checklist: upgrading controller code + NemoClaw/OpenClaw pins on a live BYOVPS with running sandboxes. Wraps §2 deploy + `live-vps-upgrades.md` into one end-to-end procedure (pre-flight, controller git upgrade, `--skip-openshell` installer run, verify, rollback). |
 | **`docs/runbooks/live-openshell-bump-with-agent-upgrade.md`** | The **hard** live upgrade: when the target NemoClaw pin also forces an **OpenShell version bump** (the destructive maintenance window) AND a running agent's pinned version moves (e.g. OpenClaw 2026.6.10→2026.7.1 so the current Android app reconnects). Covers multi-GB agent-state backup (the `maxBuffer` cap vs `docker cp` safety net), the token-TTL race for the not-rebuilt agent, and the two-pass installer run. Use instead of `byovps-controller-upgrade.md` whenever `OPENSHELL_VERSION` > the box's `openshell --version`. **Read the 2026-10-09 execution record first** — on NemoClaw ≥ v0.0.130 the original Step 3 no longer works as written, and v0.0.131 cannot back up or restore pre-existing sandboxes at all. |
+| **`scripts/upgrade/`** | Before and during any live NemoClaw/OpenShell upgrade. `preflight.sh` (read-only, run it first), `env.sh` (source it in a bare root shell), `rollback-backup.sh`, `prune-sandbox-state.sh`, `fix-rebuild-backup.sh`, `openclaw-offline-doctor.sh`, `hermes-post-restore.sh`. Each header says which failure it exists for. |
 | **`docs/runbooks/fresh-vps-setup.md`** | Brand-new VPS (BYOVPS or cloud) bring-up. Not needed for incremental deploys — those use §2. |
 | **`docs/runbooks/minimal-openshell-host.md`** | Installing the controller in **minimal profile** (`./install.sh --minimal`, `OPENSHELL_CONTROL_PROFILE=minimal`) against a plain OpenShell host (e.g. the `openshell` snap, gateway `openshell-gateway`) — custom sandboxes only, no NemoClaw/OpenClaw. Includes the full snap gateway + `gateway_jwt` bring-up recipe. Invariants: `tests/minimal-profile-check.mjs`; profile logic: `app/lib/controlProfile.ts`. |
 | **`HERMES_REMOTE_DESKTOP.md`** | Anything about the Hermes Desktop public-URL flow: architecture, expose.sh / launch.sh, session-token gate, Traefik rule, troubleshooting cheatsheet (§5). |
@@ -390,6 +391,16 @@ kept in sync — if you change either, update both.
   (~2s) and locks in dashboard token (§10), auth, middleware, sandbox
   lifecycle, and MCP config invariants. Baseline is "all PASS except
   the one known tech-debt failure".
+- **Don't** restart an agent gateway on state or config it may reject
+  (OpenClaw on pre-2026.9 state; Hermes with a raw secret in `.env` /
+  `config.yaml`). A failed start puts the sandbox in OpenShell's sticky
+  `Error` phase, and only delete + recreate clears it.
+- **Don't** let an agent "fix" its own messaging credentials or restart its
+  own gateway — it writes raw tokens into config. Credentials go through
+  `nemoclaw <name> channels add` on the host.
+- **Don't** buffer sandbox archives in memory. Backup/restore stream through
+  `app/lib/sandboxArchive.mjs`; `tests/sandbox-archive-streaming-check.mjs`
+  guards it.
 - **Don't** delete or weaken `tests/dashboard-token-cookie-wins-check.mjs`
   or `tests/dashboard-token-runtime-check.mjs` without understanding
   §10. They are the only mechanical guards against the brittle

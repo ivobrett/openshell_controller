@@ -47,6 +47,20 @@
   not deletion; a sandbox that can only be fixed by discarding its
   state is.)
 
+## Before anything: run the pre-flight
+
+```bash
+. /opt/openshell-controller/scripts/upgrade/env.sh     # NOT a bare `sudo -i` shell
+/opt/openshell-controller/scripts/upgrade/preflight.sh
+```
+
+It is read-only and exits non-zero on a blocker. It checks the things that
+have actually stopped upgrades: the systemd user bus and `lsof`, the three
+OpenShell binaries agreeing, registry rows vs the live inference route and
+provider credential names, sandbox phases, the size of the state the backup
+has to digest, raw secrets in Hermes config, and leaked controller tunnels.
+Fix every BLOCK before running the installer.
+
 ## TL;DR — safe NemoClaw-only bump (OpenShell version unchanged)
 
 ```bash
@@ -187,6 +201,31 @@ This is truthful, not a hack: the gateway has exactly one shared
 inference route, so a sandbox that runs on that gateway runs on that
 route — the row just predates the tracking.
 
+### Trap 4 — a failed start leaves the sandbox in a sticky `Error` phase
+
+(OpenShell 0.0.116.) When a sandbox's main process exits non-zero the gateway
+marks it `Error` and keeps it there: `stop`, `start`, `exec`, `backup-all` and
+`recover` are all refused, restarting the container by hand does not clear it,
+and neither does restarting the gateway. Only delete + recreate does. So
+**never restart an agent gateway on state or config it may reject**:
+
+- OpenClaw ≥ 2026.9 on state from an older version → run the migration
+  offline first (`scripts/upgrade/openclaw-offline-doctor.sh`).
+- Hermes ≥ 0.21 with a raw secret in `.hermes/.env` or `config.yaml` →
+  remove it first (`scripts/upgrade/hermes-post-restore.sh` checks).
+
+### Trap 5 — the backup cannot digest a long-lived sandbox
+
+NemoClaw ≥ v0.0.130 sanitises backups through a helper capped at 32 MiB of
+`.json`/`.yaml`/`.env` content and 100k entries per sandbox; over that the
+strict pre-upgrade backup (Gate A) fails with `Credential sanitization
+failed; removed the incomplete backup`. v0.0.131 goes further and refuses any
+state containing token-shaped text, and cannot restore older backups. State
+that grows without bound: Hermes `sessions/request_dump_*.json` (one per
+failed inference call) and OpenClaw session transcripts no longer referenced
+by `sessions.json`. `scripts/upgrade/prune-sandbox-state.sh` (dry run by
+default) removes exactly those.
+
 ## Installer gates you may hit (v0.0.78 install.sh)
 
 | Gate | Trigger | Resolution |
@@ -233,6 +272,12 @@ docker images | grep nemoclaw-sandbox-base-local
 ```
 
 ## Known issues / follow-ups (as of 2026-07-09)
+
+- **2026-10-09:** the "OpenShell version bump" procedure above is superseded
+  for NemoClaw ≥ v0.0.130 — see the 2026-10-09 execution record in
+  `live-openshell-bump-with-agent-upgrade.md`. `nemoclaw <name> recover` no
+  longer starts the host gateway; start `openshell-gateway.service` (systemd
+  user unit) directly.
 
 - ~~Controller leaves OpenClaw registry rows metadata-less on 0.78~~ —
   fixed same day (Trap 3, cause 2). The delete route now also

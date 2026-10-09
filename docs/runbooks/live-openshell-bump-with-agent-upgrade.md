@@ -18,6 +18,22 @@
 > - `nemoclaw-version-bumps.md` — what to check in NemoClaw source
 >   before moving a pin.
 
+> **2026-10-09 — read this first.** On NemoClaw ≥ v0.0.130 the Step 3
+> sequence below no longer works as written, and v0.0.131 cannot carry a
+> pre-existing sandbox across the window at all. Use the **"Execution record
+> — 2026-10-09"** section at the end as the current procedure. The helpers it
+> relies on live in `scripts/upgrade/`:
+>
+> | Script | What it does |
+> |---|---|
+> | `env.sh` | The environment `nemoclaw`/`openshell` need in a bare root shell (source it) |
+> | `preflight.sh` | Read-only: every blocker from that run, checked before you touch anything |
+> | `rollback-backup.sh` | The full rollback set (`--quiesced` after the gateway is stopped) |
+> | `prune-sandbox-state.sh` | Dry-run-by-default prune of the state that makes the backup impossible |
+> | `fix-rebuild-backup.sh` | Repair a backup's policy/MCP handoff the new CLI rejects |
+> | `openclaw-offline-doctor.sh` | Start a stopped OpenClaw sandbox through the offline `doctor --fix` |
+> | `hermes-post-restore.sh` | Reopen `state.db` + restore approved messaging users after a Hermes restore |
+
 ## When this runbook applies (vs the easier `--skip-openshell` path)
 
 Use `byovps-controller-upgrade.md` (the non-destructive path) when the
@@ -432,6 +448,9 @@ and logs: `/root/upgrade-2026-10-09/` on the box; rollback material:
 
 ### What to do differently (the sequence that worked)
 
+Steps 1–5 are what `scripts/upgrade/preflight.sh` checks; 4 is
+`rollback-backup.sh`, 5 is `prune-sandbox-state.sh`.
+
 1. **Run every `nemoclaw`/`openshell` command with the controller unit's
    environment**, not a bare `sudo` shell: `HOME=/root`,
    `OPENSHELL_GATEWAY=nemoclaw`, `XDG_RUNTIME_DIR=/run/user/0`,
@@ -583,6 +602,53 @@ and logs: `/root/upgrade-2026-10-09/` on the box; rollback material:
     `nemoclaw-openclaw-post-upgrade-doctor-release-v1`. `snapshot restore`
     is not an option ("legacy snapshot lacks managed workload and provider
     runtime authority").
+
+### After the recreate — the things that looked fine but were not
+
+Both agents were `Ready`, passed `doctor` and answered a chat turn, and
+Telegram was still dead on both. Check messaging explicitly.
+
+11. **Hermes: approved users are forgotten.** `Unauthorized user: <id> on
+    telegram` while `hermes pairing list` shows the user approved. Hermes
+    ≥ 0.21 reads `.hermes/platforms/pairing/`; the restore puts the store
+    back at `.hermes/pairing/`. Approving the pending request from the CLI
+    writes to the old location too and changes nothing. Copy
+    `pairing/*-approved.json` into `platforms/pairing/`.
+12. **Hermes: "This session's history is temporarily unavailable … inspect
+    state.db".** The restore replaces `runtime/state.db` under the gateway
+    that booted before it; the gateway then refuses the file ("state.db was
+    replaced underneath the gateway"). The database is intact — restart the
+    gateway **from the host** (`nemoclaw <name> gateway restart`).
+    `scripts/upgrade/hermes-post-restore.sh <name>` does 11 and 12.
+13. **Never let the agent fix its own messaging.** Asked to "fix Telegram",
+    the Hermes agent wrote the raw bot token into `.hermes/.env` (first time)
+    and `config.yaml` (second time) and ran `hermes gateway restart`. Hermes
+    ≥ 0.21 refuses to start with a raw secret in either file; the first time
+    that took the sandbox into the sticky Error phase. The token belongs in
+    the OpenShell provider (`nemoclaw <name> channels add telegram` with
+    `TELEGRAM_BOT_TOKEN` in the environment). `hermes-post-restore.sh`
+    refuses to restart while a raw secret is present.
+14. **OpenClaw created fresh has no channels.** `channels.telegram` was in
+    the old `openclaw.json`, which a fresh create does not inherit; the
+    Telegram plugin is disabled (`plugins.entries.telegram.enabled=false`),
+    there is no network rule for `api.telegram.org`, and config hot-reload is
+    off (`gateway.reload.mode=off`). What restored it: a custom policy file
+    for `api.telegram.org:443` (`nemoclaw <name> policy add --from-file`),
+    `openclaw config patch --stdin` with `channels.telegram` and
+    `plugins.entries.telegram.enabled=true`, then `nemoclaw <name> gateway
+    restart`. This keeps the token in `openclaw.json` as before; the
+    sanctioned `nemoclaw <name> channels add telegram` moves it into a
+    provider but queues a rebuild.
+15. **`openshell sandbox exec` swallows a script's stdin.** In a
+    `ssh host 'bash -s' <<EOF` script every line after the first `exec` call
+    silently never runs. Append `</dev/null` to each `openshell`/`docker exec`
+    call that is not meant to read the script.
+16. **A burst of retries from both agents trips NVIDIA's rate limit**
+    (`429 Too Many Requests` on the shared key) and looks like "the agent is
+    broken": the message arrives, the reply is an error. Hermes's 5-minute
+    `inter-sandbox-poll` cron keeps retrying into it and writes a
+    `request_dump_*.json` per failure — the same files that broke the backup.
+    `prune-sandbox-state.sh --dumps-only --apply` is safe to schedule.
 
 ### Not carried over / still open on this box
 

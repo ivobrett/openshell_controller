@@ -429,10 +429,10 @@ work for archives of any size.
   in `server.mjs`). Middleware doesn't get a chance to run — so any
   defence we add in middleware (e.g. rate limiting, audit logging) won't
   apply to restore.
-- The restore writes into the sandbox via `docker exec`, which runs as
-  root in the container. This is more permission than `openshell sandbox
-  exec` would have — by design, since restore needs to overwrite
-  arbitrary paths.
+- The restore reaches the sandbox via `docker cp` + `docker exec`, not
+  `openshell sandbox exec`, so it bypasses OpenShell's own mediation. The
+  archive is extracted as the `sandbox` user (root is used only to chmod
+  and remove the copied-in temp file).
 - Path validation in `app/lib/sandboxFiles.ts` (`normalizeSandboxPath`)
   restricts targets to `/sandbox` or `/tmp`. **If that validation is
   bypassed or weakened, an authenticated operator could write anywhere
@@ -446,9 +446,30 @@ is the practical answer.
 - Next.js 16+ release notes on multipart streaming.
 - OpenShell gRPC raising the 1 MiB stdin limit.
 
+**2026-10-09 — backup and restore now stream** (they used to buffer the
+whole archive and cap it at 128 MiB, which no real sandbox fits):
+- The mechanics moved out of `server.mjs` into `app/lib/sandboxArchive.mjs`,
+  shared with the Next.js backup/catalog routes. `server.mjs` keeps the
+  route interception, the operator-session check and upload parsing.
+- Restore takes the archive as the **raw request body** (streamed to a host
+  temp file, bounded by `SANDBOX_ARCHIVE_MAX_BYTES`, default 16 GiB). The
+  legacy multipart shape is still accepted and is now rejected *before*
+  buffering when over `SANDBOX_FILE_TRANSFER_MAX_BYTES`.
+- **Entry-type policy was loosened deliberately:** symlinks, and hard links
+  whose target is a relative path inside the archive, are accepted. Every
+  full `/sandbox` backup contains them, so the previous files-and-dirs-only
+  rule made our own backups unrestorable. Extraction runs as the `sandbox`
+  user with GNU tar's default deferral of out-of-tree symlinks; devices,
+  FIFOs and sockets stay refused. **Don't** widen this further, and don't
+  add `-P`/`--absolute-names`.
+- Container lookup matches the sandbox name exactly, for both
+  `openshell-<name>-<uuid>` and 0.0.116's `openshell-<workspace>--<name>-<uuid>`.
+- Guard: `tests/sandbox-archive-streaming-check.mjs`.
+
 **Files:**
-- `server.mjs` (~400 LoC of restore handling)
-- `app/lib/sandboxFiles.ts` (path validation, archive sanity checks)
+- `server.mjs` (restore route interception, auth, upload parsing)
+- `app/lib/sandboxArchive.mjs` (+ `.d.ts`) — streaming backup/restore, archive validation
+- `app/lib/sandboxFiles.ts` (path validation), `app/lib/backupCatalog.ts`
 
 ---
 
@@ -629,6 +650,9 @@ access.
 - Don't remove the legacy `CF_Authorization` cookie reader from `context.ts` / `server.mjs` without explicit OK — browsers may still hold sessions under that name.
 - Don't add a fallback secret to `getOAuthSecret` — fail-closed on missing secret is intentional.
 - Don't weaken `server.mjs` `copyHeaders()` stripping of client-supplied `x-forwarded-user` on WS upstream.
+- Don't restart an agent gateway on state or config it may reject (OpenClaw on pre-2026.9 state; Hermes with a raw secret in `.env` / `config.yaml`) — a failed start leaves the sandbox in OpenShell's sticky `Error` phase; only delete + recreate clears it.
+- Don't let an agent "fix" its own messaging credentials or restart its own gateway — credentials go through `nemoclaw <name> channels add` on the host.
+- Don't buffer sandbox archives in memory — backup/restore stream through `app/lib/sandboxArchive.mjs` (`tests/sandbox-archive-streaming-check.mjs`).
 - Don't delete or weaken `tests/dashboard-token-cookie-wins-check.mjs` or `tests/dashboard-token-runtime-check.mjs` — they are the only mechanical guards against the 2026-06-13 dashboard regression.
 - Don't push to `gatewaydashboard` without `npm run build` + smoke-test on the VPS first. Don't force-push to `gatewaydashboard`.
 

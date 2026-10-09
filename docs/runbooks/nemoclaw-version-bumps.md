@@ -724,6 +724,30 @@ ssh <vps> '
 Then re-create the sandbox through the controller UI. No service
 restart needed; nemoclaw re-reads the Dockerfiles per build.
 
+## Pre-flight additions learned on the 2026-10-09 live upgrade
+
+Three things a source diff of the usual files does not show, each of which
+broke a live box:
+
+1. **Can the new tag restore the old tag's backups?** Compare
+   `MANIFEST_VERSION` in `src/lib/state/sandbox.ts` and read `listBackups` /
+   the restore entry point. v0.0.131 bumped it to 2 and ignores v1 backups
+   ("Legacy selective backups require manual file recovery"), so a box cannot
+   be carried from ≤ v0.0.130 to v0.0.131 across an OpenShell bump.
+2. **Does the backup still accept real state?** grep `sandbox.ts` and
+   `src/lib/security/` for new refusals ("credential-bearing", size or entry
+   caps). Then prove it on a long-lived box: `nemoclaw backup-all` with the
+   new CLI, gateway PID file moved aside so nothing can be retired.
+3. **Do both agent images build *today*, on the box's architecture?**
+   `docker build -f Dockerfile.base …` and `-f agents/hermes/Dockerfile.base`,
+   then the sandbox `Dockerfile` on top. The OpenClaw build runs a live
+   `npm audit`; a tag that built on release day stops building when a new
+   advisory lands (v0.0.130, two GHSAs, within a week). An older pin is
+   therefore not a safe fallback for fresh installs.
+
+Also check `scripts/install.sh` for new host dependencies (v0.0.130 needs
+`lsof`) and whether `recover`/`upgrade-sandboxes` still start the gateway.
+
 ## Other places that pin versions (audit notes)
 
 - **`install_versioned_nemoclaw_openshell.sh`** — pins `OPENSHELL_VERSION`,

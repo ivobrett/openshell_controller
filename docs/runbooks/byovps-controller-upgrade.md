@@ -36,9 +36,16 @@ with `HOME=/root`:
 ```bash
 ssh -i ~/.ssh/tf_oracle ubuntu@<VPS_IP>
 sudo -i
-export PATH="/root/.nvm/current/bin:/root/.local/bin:/usr/local/bin:$PATH"
-export HOME=/root
+. /opt/openshell-controller/scripts/upgrade/env.sh
+/opt/openshell-controller/scripts/upgrade/preflight.sh    # read-only; fix every BLOCK
 ```
+
+`env.sh` also sets `XDG_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS`. Without
+them a `sudo -i` shell cannot reach root's systemd user manager, and
+NemoClaw ≥ v0.0.130's installer then treats the gateway service as
+unmanageable. (On a box whose controller predates `scripts/upgrade/`, do
+Step 1 first, then come back and run the pre-flight.) The numbered checks
+below are what the script automates, kept for the reasoning.
 
 1. **Record the rollback state:**
 

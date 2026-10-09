@@ -1,0 +1,29 @@
+# Lets a Hermes sandbox call Anthropic's Messages API directly, so Hermes can
+# run on a Claude subscription setup token read from /sandbox/.claude/.credentials.json.
+# See docs/runbooks/claude-subscription-inference.md.
+#
+#   nemoclaw <sandbox> policy add --from-file scripts/claude-subscription/network-policy-hermes.yaml --yes
+#   nemoclaw <sandbox> policy remove claude-subscription-hermes --yes
+#
+# Only Hermes's Python interpreter is allowed, and only the endpoints it needs.
+preset:
+  name: claude-subscription-hermes
+  description: "Anthropic Messages API for Hermes running on a Claude subscription setup token"
+
+network_policies:
+  claude_subscription_hermes:
+    name: claude_subscription_hermes
+    endpoints:
+      - host: api.anthropic.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/v1/messages" }
+          - allow: { method: POST, path: "/v1/messages/count_tokens" }
+          - allow: { method: GET, path: "/v1/models" }
+          - allow: { method: GET, path: "/v1/models/**" }
+    binaries:
+      - { path: /usr/bin/python3.13 }
+      - { path: /usr/bin/python3 }
+      - { path: /opt/hermes/.venv/bin/python }

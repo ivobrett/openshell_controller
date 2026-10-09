@@ -1,4 +1,4 @@
-# Runbook — running an OpenClaw sandbox on a Claude subscription (setup token)
+# Runbook — running an OpenClaw or Hermes sandbox on a Claude subscription (setup token)
 
 > Indexed from CLAUDE.md §4. Written 2026-10-09 after doing this end to end
 > on the Oracle BYOVPS (`ivos-openclaw`, OpenShell 0.0.116, NemoClaw v0.0.130,
@@ -143,6 +143,93 @@ token may have been exposed, regenerate it with `claude setup-token`.
 | Default changed but replies still come from the old model | Gateway not restarted from the host (step 5), or the session is pinned |
 | Terminal shows a log stream instead of a prompt | Controller older than the `sandbox exec --tty` terminal fix |
 
+## Hermes
+
+> Verified end to end 2026-10-09 on `ivos-hermes` (Hermes 0.21.3): a turn
+> through the restarted gateway's API logged `model=claude-sonnet-4-6
+> provider=anthropic`, and Telegram reconnected.
+
+Hermes 0.21.3 supports setup tokens natively (`agent/anthropic_adapter.py`:
+Bearer auth, the `claude-code-20250219,oauth-2025-04-20` betas and the Claude
+Code system prefix for any key starting `sk-ant-` that is not `sk-ant-api`).
+No third-party patch is needed. In particular **do not install
+`hermes-claude-auth`**: it forges Claude Code's signed billing header and SDK
+fingerprint to get past Anthropic's check on third-party clients, its own
+issue tracker shows it breaking with each Anthropic change and billing to
+extra-usage credits, and it would have to be written into the root-owned
+`/opt/hermes` venv of the image.
+
+Three things differ from OpenClaw, all NemoClaw-specific:
+
+- **Never let the token reach `/sandbox/.hermes/.env`.** NemoClaw's
+  `validate-env-secret-boundary.py` refuses to start Hermes when a
+  `*TOKEN*`/`*KEY*` entry there holds anything but an OpenShell placeholder,
+  and a refused start is the sticky `Error` phase (delete + recreate).
+  Hermes's own flows write exactly there: `hermes model`, `hermes setup` and
+  the "paste setup-token" prompt all call `save_anthropic_oauth_token`.
+  **Do not use them.**
+- **Store the token in `/sandbox/.claude/.credentials.json` instead.** Hermes
+  reads it as a borrowed Claude Code credential and the guard does not scan it.
+- **`hermes chat --provider …` is rewritten by NemoClaw's wrapper** (it folds
+  the provider into the model name and the turn goes to `inference.local`).
+  Use `/usr/local/bin/hermes.real` for the one-off test.
+
+Procedure:
+
+1. **Host — network rule** (Hermes is Python, so its own policy file):
+
+   ```bash
+   nemoclaw <sb> policy add \
+     --from-file /opt/openshell-controller/scripts/claude-subscription/network-policy-hermes.yaml --yes
+   ```
+
+2. **Save the token with the helper script.** Long commands get split by the
+   web terminal (two attempts at a pasted `read … printf …` one-liner saved an
+   empty token), so install the helper from the host:
+
+   ```bash
+   C=$(docker ps --format '{{.Names}}' | grep -- "-<sb>-" | head -1)
+   docker exec -i -u sandbox "$C" sh -c 'umask 077; mkdir -p /sandbox/.claude;
+     cat > /sandbox/.claude/save-token.sh; chmod 700 /sandbox/.claude/save-token.sh' \
+     < /opt/openshell-controller/scripts/claude-subscription/save-hermes-token.sh
+   ```
+
+   then in the sandbox terminal run `sh ~/.claude/save-token.sh`, paste the
+   token and press Enter. Expect `Saved (… bytes).`
+
+   Do not `export ANTHROPIC_API_KEY=…` instead: a turn from that shell works,
+   but the gateway never sees the variable, so making Anthropic the default
+   would leave the agent with no credential.
+
+3. **Sandbox — one-off turn** (default model unchanged):
+
+   ```bash
+   hermes.real chat --provider anthropic -m claude-sonnet-4-6 \
+     -q "Reply with exactly the single word KIWI" -Q
+   ```
+
+4. **Sandbox — make it the default.** Two keys; `model.base_url` can stay.
+   Copy `config.yaml` to `~/.hermes/backups/` first: `config set` rewrites the
+   file without its comments. Run the `.env` guard before restarting
+   (`python3 -I /usr/local/lib/nemoclaw/validate-hermes-env-secret-boundary.py
+   env-file /sandbox/.hermes/.env`, exit 0 = safe).
+
+   ```bash
+   hermes.real config set model.provider anthropic
+   hermes.real config set model.default claude-sonnet-4-6
+   ```
+
+5. **Host — `nemoclaw <sb> gateway restart`**, then test dashboard chat and
+   Telegram.
+
+Existing cron jobs keep the provider and model they were created with; move
+them with `hermes cron edit <job_id> --provider anthropic --model <model>` if
+wanted.
+
+Undo: set `model.provider` back to `custom` and `model.default` to the previous
+model, restart from the host, `rm -rf ~/.claude`, then
+`nemoclaw <sb> policy remove claude-subscription-hermes --yes`.
+
 ## Keeping the token out of the sandbox (investigated, not built)
 
 OpenShell can hold the token and substitute it at the proxy. A custom provider
@@ -155,7 +242,8 @@ gateways, so the network rule above is still needed.
 
 It does not work with OpenClaw as shipped: OpenClaw only switches to its
 setup-token request shape when the key contains `sk-ant-oat`, and the
-placeholder does not. OpenShell refuses the workarounds by design — a
+placeholder does not. Hermes has the same limit (it keys on the `sk-ant-`
+prefix). OpenShell refuses the workarounds by design — a
 token-shaped alias (`sk-ant-oat01-OPENSHELL-RESOLVE-ENV-…`) is rejected for
 endpoint-bound credentials, and a placeholder embedded after a prefix in the
 header is not rewritten. The remaining routes are a small patch to OpenClaw's
@@ -166,7 +254,6 @@ token grants need a SPIFFE Workload API, which the Docker driver lacks.
 
 ## Not tested
 
-- Hermes on a subscription token.
 - The controller's **Restart runtime** action as the step-5 restart.
 - Survival across a NemoClaw `rebuild`.
 - Long-running use: rate-limit behaviour, token expiry (`--expires-in`).

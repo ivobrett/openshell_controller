@@ -1,4 +1,4 @@
-# Runbook — running an OpenClaw or Hermes sandbox on a Claude subscription (setup token)
+# Runbook — running an OpenClaw or Hermes sandbox on a Claude (or ChatGPT) subscription
 
 > Indexed from CLAUDE.md §4. Written 2026-10-09 after doing this end to end
 > on the Oracle BYOVPS (`ivos-openclaw`, OpenShell 0.0.116, NemoClaw v0.0.130,
@@ -230,6 +230,77 @@ Undo: set `model.provider` back to `custom` and `model.default` to the previous
 model, restart from the host, `rm -rf ~/.claude`, then
 `nemoclaw <sb> policy remove claude-subscription-hermes --yes`.
 
+## ChatGPT (Codex) subscription — investigated, NOT verified
+
+> Status 2026-10-09: nobody here has a ChatGPT subscription, so no sign-in was
+> completed and no model turn was run. What was proven on `ivos-openclaw` and
+> `ivos-hermes`: with the policy below applied, both agents **start** the
+> device-code sign-in (Hermes printed a user code, OpenClaw reached "waiting
+> for device authorization"), and `chatgpt.com/backend-api/codex/*` answers
+> `401 Unauthorized` from inside the sandbox, i.e. it is reachable and not
+> bot-blocked. Everything after "enter the code" is from the agents' own docs
+> and source. The test policy was removed afterwards.
+
+Both agents support this natively, and it is a better fit than the Claude
+token: OpenClaw's provider doc says OpenAI explicitly supports subscription
+OAuth in external tools, and nothing is pasted — the user approves a code in
+their own browser. Like the Claude route it bypasses `inference.local` and the
+resulting OAuth tokens live inside the sandbox.
+
+1. **Host — network rule** (one file for both agents):
+
+   ```bash
+   nemoclaw <sb> policy add \
+     --from-file /opt/openshell-controller/scripts/claude-subscription/network-policy-chatgpt.yaml --yes
+   ```
+
+   It allows the device-code endpoints and token refresh on `auth.openai.com`
+   and the Codex backend on `chatgpt.com`. The refresh rule matters: these
+   tokens are short-lived and rotate, unlike a Claude setup token.
+
+2. **Sandbox terminal — sign in with the device-code flow.** The default
+   browser flow needs a callback on `localhost:1455`, which a sandbox cannot
+   receive. The command prints a URL (`https://auth.openai.com/codex/device`)
+   and a code; open the URL on any device, enter the code, and the command
+   finishes by itself. It needs a real terminal (it hangs under a non-TTY exec).
+
+   ```bash
+   # OpenClaw
+   openclaw models auth login --provider openai --device-code
+   # Hermes — tokens go to ~/.hermes/auth.json, which NemoClaw's .env guard does not scan
+   hermes.real auth add openai-codex --no-browser
+   ```
+
+3. **One-off turn, then default, then host-side gateway restart** — same shape
+   as the Claude procedures above:
+
+   ```bash
+   # OpenClaw
+   openclaw agent --agent main --model openai/gpt-5.5 -m "Reply with exactly the single word KIWI"
+   openclaw models set openai/gpt-5.5
+   # Hermes
+   hermes.real chat --provider openai-codex -m gpt-5.5 -q "Reply with exactly the single word KIWI" -Q
+   hermes.real config set model.provider openai-codex
+   hermes.real config set model.default gpt-5.5
+   ```
+
+   Model ids depend on the plan (`openclaw models list --provider openai`;
+   Hermes's built-in list includes `gpt-5.5`, `gpt-5.4`, `gpt-5.3-codex`).
+
+Expected trouble, in order of likelihood:
+
+- **OpenClaw may pick its "native Codex app-server" runtime** for `openai/*`
+  subscription models and try to install the Codex plugin, which is a different
+  binary making its own network calls — both blocked here. If a turn fails that
+  way, pin the model to the embedded runtime in `openclaw.json`
+  (`agents.defaults.models["openai/<model>"].agentRuntime = { id: "openclaw" }`),
+  which OpenClaw documents as "embedded runtime, internal Codex-auth transport".
+- **A path outside the policy** (the sandbox proxy returns 403 "not allowed by
+  any policy"): add the path it names to the YAML and re-apply.
+- The Claude caveats apply unchanged: tokens are readable by the agent, are
+  lost on recreate, and block NemoClaw ≥ v0.0.131 backups until logged out
+  (`openclaw models auth logout …`, `hermes.real auth logout openai-codex`).
+
 ## Keeping the token out of the sandbox (investigated, not built)
 
 OpenShell can hold the token and substitute it at the proxy. A custom provider
@@ -256,4 +327,5 @@ token grants need a SPIFFE Workload API, which the Docker driver lacks.
 
 - The controller's **Restart runtime** action as the step-5 restart.
 - Survival across a NemoClaw `rebuild`.
+- The whole ChatGPT subscription route beyond starting the sign-in (see that section).
 - Long-running use: rate-limit behaviour, token expiry (`--expires-in`).

@@ -1,0 +1,39 @@
+# Lets an OpenClaw or Hermes sandbox sign in to a ChatGPT (Codex) subscription
+# with the device-code flow and call the ChatGPT Codex backend directly.
+# See docs/runbooks/claude-subscription-inference.md ("ChatGPT subscription").
+# NOT verified with a real subscription — see the runbook for what was tested.
+#
+#   nemoclaw <sandbox> policy add --from-file scripts/claude-subscription/network-policy-chatgpt.yaml --yes
+#   nemoclaw <sandbox> policy remove chatgpt-subscription --yes
+#
+# Node is OpenClaw, Python is Hermes; one file serves both.
+preset:
+  name: chatgpt-subscription
+  description: "ChatGPT/Codex subscription sign-in (device code) and Codex backend for OpenClaw or Hermes"
+
+network_policies:
+  chatgpt_subscription:
+    name: chatgpt_subscription
+    endpoints:
+      - host: auth.openai.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/api/accounts/deviceauth/usercode" }
+          - allow: { method: POST, path: "/api/accounts/deviceauth/token" }
+          - allow: { method: POST, path: "/oauth/token" }
+      - host: chatgpt.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/backend-api/codex/**" }
+          - allow: { method: GET, path: "/backend-api/codex/**" }
+          - allow: { method: GET, path: "/backend-api/wham/usage" }
+    binaries:
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/python3.13 }
+      - { path: /usr/bin/python3 }
+      - { path: /opt/hermes/.venv/bin/python }

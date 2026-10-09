@@ -33,6 +33,7 @@
 > | `fix-rebuild-backup.sh` | Repair a backup's policy/MCP handoff the new CLI rejects |
 > | `openclaw-offline-doctor.sh` | Start a stopped OpenClaw sandbox through the offline `doctor --fix` |
 > | `hermes-post-restore.sh` | Reopen `state.db` + restore approved messaging users after a Hermes restore |
+> | `install-prune-timer.sh` | Weekly systemd timer for `prune-sandbox-state.sh --dumps-only` (fresh installs get it from the bootstrap) |
 
 ## When this runbook applies (vs the easier `--skip-openshell` path)
 

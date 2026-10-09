@@ -72,6 +72,7 @@ export async function GET(
       sandboxId: sandboxId || undefined,
       message,
     }).catch(() => undefined)
-    return NextResponse.json({ ok: false, error: message }, { status: /required|path|large|exist|directory|container/.test(message) ? 400 : 500 })
+    const status = /not found|no running container/.test(message) ? 404 : /required|path|large|exist|directory/.test(message) ? 400 : 500
+    return NextResponse.json({ ok: false, error: message }, { status })
   }
 }

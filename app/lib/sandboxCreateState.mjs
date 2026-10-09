@@ -56,3 +56,37 @@ export function applyInFlightPresentation(name, phase, agent) {
     agent: inFlight.agent || agent,
   }
 }
+
+// ---------------------------------------------------------------------------
+// One NemoClaw onboard at a time.
+//
+// `nemoclaw onboard` takes a host-wide onboarding lock. A second onboard
+// started while one is running exits in ~2s with "Cannot update onboarding
+// recovery because the onboarding lock is unavailable. Recorded lock PID: …".
+// Before this queue, creating a second sandbox while the first was still
+// building (on a fresh gateway the first OpenClaw create takes ~4 min) failed
+// instantly, and the request then polled 90s for a sandbox that was never
+// going to exist. Seen on a fresh BYOVPS 2026-10-09: OpenClaw at 14:05, Hermes
+// at 14:08 → Hermes never created.
+//
+// runExclusiveOnboard() chains onboard runs within this controller process;
+// isOnboardLockBusy() recognises the same refusal when the lock is held by an
+// onboard this process did not start (the CLI, or a previous controller).
+// ---------------------------------------------------------------------------
+
+const ONBOARD_QUEUE_KEY = Symbol.for("openshell.nemoclawOnboardQueue")
+
+export function runExclusiveOnboard(task) {
+  const previous = globalThis[ONBOARD_QUEUE_KEY] || Promise.resolve()
+  // Run after the previous onboard settles, whether it succeeded or failed.
+  const run = previous.then(task, task)
+  // The stored tail must never reject, or one failed create would poison the queue.
+  globalThis[ONBOARD_QUEUE_KEY] = run.then(() => undefined, () => undefined)
+  return run
+}
+
+export function isOnboardLockBusy(result) {
+  if (!result || result.timedOut) return false
+  const text = `${result.stderr || ""}\n${result.stdout || ""}`
+  return /onboarding lock is unavailable/i.test(text)
+}

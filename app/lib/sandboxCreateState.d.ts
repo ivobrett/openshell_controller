@@ -17,3 +17,8 @@ export function applyInFlightPresentation(
   phase: string,
   agent: string,
 ): { phase: string; agent: string }
+
+export function runExclusiveOnboard<T>(task: () => Promise<T>): Promise<T>
+export function isOnboardLockBusy(
+  result: { timedOut?: boolean; stderr?: string; stdout?: string } | null | undefined,
+): boolean

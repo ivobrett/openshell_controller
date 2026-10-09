@@ -6,7 +6,12 @@ import { promisify } from "node:util"
 import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from "@/app/lib/openshellHost"
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
 import { recordActivity } from "@/app/lib/activityLog"
-import { clearSandboxCreateInFlight, markSandboxCreateInFlight } from "@/app/lib/sandboxCreateState.mjs"
+import {
+  clearSandboxCreateInFlight,
+  isOnboardLockBusy,
+  markSandboxCreateInFlight,
+  runExclusiveOnboard,
+} from "@/app/lib/sandboxCreateState.mjs"
 import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
 import { exportSandboxPolicyToFile as exportPolicy } from "@/app/lib/sandboxCreate/policy"
 import { planRouteMetadataPatch } from "@/app/lib/sandboxCreate/registryRouteMetadata"
@@ -1283,19 +1288,37 @@ export async function POST(request: Request) {
       // builds reuse the cached layers and finish in ~30 seconds — the cap
       // only matters for the very first sandbox on a fresh box.
       const FIRST_BUILD_TIMEOUT_MS = 20 * 60 * 1000
+      // `nemoclaw onboard` holds a host-wide lock, so onboard runs are queued:
+      // a create requested while another sandbox is still building waits its
+      // turn instead of failing in ~2s on "onboarding lock is unavailable".
       const runOnboardOnce = () =>
-        agent === "hermes"
-          ? runCreateCommandBounded(createCommand.file, createCommandArgs, env, FIRST_BUILD_TIMEOUT_MS)
-          : runCreateCommandUntilReady(
-              createCommand.file,
-              createCommandArgs,
-              env,
-              sandboxName,
-              FIRST_BUILD_TIMEOUT_MS,
-              5000,
-              NEMOCLAW_CWD,
-            )
+        runExclusiveOnboard(() =>
+          agent === "hermes"
+            ? runCreateCommandBounded(createCommand.file, createCommandArgs, env, FIRST_BUILD_TIMEOUT_MS)
+            : runCreateCommandUntilReady(
+                createCommand.file,
+                createCommandArgs,
+                env,
+                sandboxName,
+                FIRST_BUILD_TIMEOUT_MS,
+                5000,
+                NEMOCLAW_CWD,
+              ),
+        )
       let result = await runOnboardOnce()
+
+      // The lock can also be held by an onboard this process did not start (the
+      // CLI, an installer run, a previous controller instance). Wait for it
+      // rather than reporting a failure for a sandbox that was never attempted.
+      const ONBOARD_LOCK_WAIT_MS = 20 * 60 * 1000
+      const lockWaitStartedAt = Date.now()
+      while (isOnboardLockBusy(result) && Date.now() - lockWaitStartedAt < ONBOARD_LOCK_WAIT_MS) {
+        console.log(
+          `[sandbox/create] onboard-lock-busy sandbox=${sandboxName} agent=${agent} waitedMs=${Date.now() - lockWaitStartedAt} — another NemoClaw onboarding is running; retrying in 15s`,
+        )
+        await new Promise((resolve) => setTimeout(resolve, 15000))
+        result = await runOnboardOnce()
+      }
 
       // First-build base-image glibc-probe race (seen on arm64 / slow storage). NemoClaw builds
       // the agent's sandbox base image on demand (no published image exists for some agent/arch

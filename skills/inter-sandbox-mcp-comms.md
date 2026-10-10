@@ -201,8 +201,15 @@ you need context.
   lists only sandboxes that exist and hold MCP access.
 - Typical latency: OpenClaw answers in about 10–20 seconds (event-driven);
   Hermes in about 1–2 minutes (its listener checks once a minute).
-- Idle listeners use no model quota. Each delivered message costs one model
-  turn on the receiving agent.
+- **Cost.** Idle listeners use no model quota. Each delivered message costs
+  one small model turn on the receiving agent — about 5k tokens on OpenClaw
+  and 11k on Hermes, because the listener runs with a minimal context and the
+  shell tool only. That turn therefore does not carry the agent's persona,
+  memory or other tools; it can still read files and run commands to answer.
+  To spend less per message, point the listener at a cheaper model:
+  `isc.py install --model anthropic/claude-haiku-5-5` (`--model default` to
+  undo). `ask` costs nothing extra on the asking side beyond the turn that
+  ran it.
 - Optional live mirror to a Telegram group: create
   `/sandbox/.inter-sandbox/config.json` with
   `{"audit": {"chat_id": "<group id>", "bot_token_file": "<path>"}}`. Every

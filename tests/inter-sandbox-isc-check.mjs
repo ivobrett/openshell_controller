@@ -223,6 +223,11 @@ try {
   assert.match(source, /stderr=subprocess\.DEVNULL/, 'the listener must not leak poll errors into lines the runtime reads')
   assert.match(source, /"--stream-mode", "match"/, 'the OpenClaw listener must only fire on ISC-MESSAGE lines')
   assert.match(source, /"--monitor-script"/, 'the Hermes listener must use monitor mode, which runs the model only on change')
+  // Token cost per delivered message, measured on the Oracle BYOVPS 2026-10-10:
+  // OpenClaw 78.9k -> 4.9k with a light context; Hermes 41.5k -> 10.8k shell-only.
+  assert.match(source, /"--light-context", "--thinking", "off", "--tools", "exec"/, 'OpenClaw listener turns must not load the full workspace context')
+  assert.match(source, /'enabled_toolsets': \['terminal'\]/, 'Hermes listener turns must be limited to the shell toolset')
+  assert.ok(source.match(/HANDLER_PROMPT = """([\s\S]*?)"""/)[1].length < 700, 'the handler prompt is paid for on every message: keep it short')
   assert.match(source, /"--no-deliver"/)
   assert.match(source, /"--deliver", "local"/)
 

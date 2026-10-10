@@ -91,8 +91,27 @@ sleep 2
 #    127.0.0.1:${PORT} (Traefik middleware in expose.sh, the HTTP proxy
 #    route, the server.mjs WS tunnel). Backward compatible with 0.16/0.17.
 INTERNAL_PORT=$((PORT + 1))
+
+# NemoClaw >= v0.0.132 (#12562): NVIDIA-Endpoints sandboxes no longer use
+# inference.local. config.yaml points at integrate.api.nvidia.com with
+# `api_key: ${NVIDIA_INFERENCE_API_KEY}`, and that variable holds a NON-SECRET
+# OpenShell handle (openshell:resolve:env:…) which the sandbox proxy swaps for
+# the real key at egress. The gateway process has it; this dashboard is
+# launched outside that process tree, so hand it the same handle or the
+# embedded chat has no credential. Anything that is not a handle is dropped —
+# a raw key must never be copied into this command line.
+NVIDIA_HANDLE=$(docker exec "$CONTAINER" sh -c "tr '\\0' '\\n' < /proc/${GW_PID}/environ" 2>/dev/null \
+  | sed -n 's/^NVIDIA_INFERENCE_API_KEY=//p' | head -1)
+if ! [[ "$NVIDIA_HANDLE" =~ ^openshell:resolve:env:[A-Za-z0-9_]+$ ]]; then
+  NVIDIA_HANDLE=""
+fi
+NVIDIA_EXPORT=""
+if [ -n "$NVIDIA_HANDLE" ]; then
+  NVIDIA_EXPORT=" NVIDIA_INFERENCE_API_KEY='${NVIDIA_HANDLE}'"
+fi
+
 docker exec -d --privileged "$CONTAINER" nsenter -t "$GW_PID" -n -- \
-  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
+  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'${NVIDIA_EXPORT}; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
   || die "docker exec failed launching dashboard"
 
 # ── Wait for readiness, then verify the auth gate ────────────────

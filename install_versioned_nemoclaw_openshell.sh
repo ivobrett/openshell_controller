@@ -8,8 +8,26 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# NemoClaw v0.0.131 (2026-10-06) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
-# v0.0.131 is tag-only for us (same OpenShell floor, OpenClaw and Hermes); notable:
+# NemoClaw v0.0.132 (2026-10-10) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# v0.0.132 is tag-only on versions (same OpenShell floor, OpenClaw 2026.9.2,
+# Hermes 0.21.3) but changes inference routing for NEW sandboxes:
+#   - #12562: NVIDIA-Endpoints sandboxes get a sandbox-attached OpenShell
+#     provider (`nemoclaw-nvidia-prod-v1`) and call integrate.api.nvidia.com
+#     DIRECTLY; they no longer use inference.local. In-sandbox config carries a
+#     non-secret handle (`${NVIDIA_INFERENCE_API_KEY}` -> openshell:resolve:env:…)
+#     that the sandbox proxy swaps for the key. Consequences for this repo:
+#       * scripts/hermes-remote/launch.sh passes that handle to its dashboard.
+#       * The gateway-level Inference panel (`openshell inference set`) does
+#         not move such a sandbox; use the per-sandbox switch (`nemoclaw
+#         inference set`). app/lib/sandboxInferenceApply.ts still writes an
+#         inference.local route for an OpenClaw sandbox switched to nvidia-prod
+#         from the UI — re-verify that path on a v0.0.132 box before relying on it.
+#       * Custom / Ollama / PII-router routes are unchanged (still inference.local).
+#   - #12762: source-installed rebuilds use the installed image catalog (fixes
+#     the "managed image catalog v0.1.0 404" seen on `rebuild` / `channels add`).
+#   - #12801: rebuild checks host API keys first and keeps the old sandbox if
+#     a key is invalid.
+# v0.0.131 notes (still true):
 # #12340 rebuilds now carry the complete native agent home + workspace across.
 # NemoClaw's DEFAULT_CLOUD_MODEL is still the retired nemotron-3-super, so
 # deployments must keep setting NEMOCLAW_MODEL (manidae-cloud does).
@@ -46,12 +64,12 @@ NC='\033[0m'
 #     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.131. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.132. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.131}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.132}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

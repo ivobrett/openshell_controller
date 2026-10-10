@@ -48,7 +48,7 @@ It is currently built for active development and lab use. It includes a simple p
 This dashboard is validated against the current NVIDIA NemoClaw repo and the OpenShell version range declared in NemoClaw's `nemoclaw-blueprint/blueprint.yaml`. NemoClaw `v0.0.131` pins OpenShell exactly to `0.0.116` (blueprint `min_openshell_version == max_openshell_version`), so the bundled refresh helper defaults to:
 
 - OpenShell installer release: `v0.0.116` (`OPENSHELL_VERSION=v0.0.116`)
-- NemoClaw source ref: tag `v0.0.131` (`NEMOCLAW_INSTALL_REF`) — OpenClaw 2026.9.2, Hermes 0.21.3. Pinned to tags, never bare `main`.
+- NemoClaw source ref: tag `v0.0.132` (`NEMOCLAW_INSTALL_REF`) — OpenClaw 2026.9.2, Hermes 0.21.3. Pinned to tags, never bare `main`.
 - OpenClaw base-image build target: `2026.9.2` (`OPENCLAW_VERSION=2026.9.2`) unless overridden
 
 See `docs/runbooks/nemoclaw-version-bumps.md` before changing any of these, and keep manidae-cloud's four pin-writer files in lockstep. (The sandbox-base digest pin that used to move with them was retired on 2026-09-13 — see that runbook; do not reintroduce `NEMOCLAW_SANDBOX_BASE_IMAGE_REF`.)
@@ -104,7 +104,7 @@ Install or refresh the locked OpenShell/NemoClaw pair first:
 ./install_versioned_nemoclaw_openshell.sh
 ```
 
-That helper defaults to `OPENSHELL_VERSION=v0.0.116`, `NEMOCLAW_INSTALL_REF=v0.0.131`, and `OPENCLAW_VERSION=2026.9.2`.
+That helper defaults to `OPENSHELL_VERSION=v0.0.116`, `NEMOCLAW_INSTALL_REF=v0.0.132`, and `OPENCLAW_VERSION=2026.9.2`.
 
 Then install the dashboard from the repository root:
 

@@ -83,6 +83,19 @@ export async function verifySandboxMcpBrokerToken(token: string) {
   const session = Object.values(store.sessions).find((candidate) => safeEqual(candidate.tokenHash, hash))
   if (!session || !session.enabled) return null
   if (session.expiresAt && Date.parse(session.expiresAt) <= Date.now()) return null
+  // Sliding expiry: a token that is in use keeps working. A fixed lifetime cut
+  // every sandbox off the broker after MCP_BROKER_TOKEN_TTL_HOURS (7 days by
+  // default) until an operator re-issued access by hand; agents reported that
+  // as "can't access the MCP server". Renewal is written at most once per half
+  // lifetime, and revoking or re-issuing still invalidates the token at once.
+  const renewed = expiryFromNow()
+  if (session.expiresAt && renewed) {
+    const halfLifeMs = (DEFAULT_TOKEN_TTL_HOURS * 60 * 60 * 1000) / 2
+    if (Date.parse(session.expiresAt) - Date.now() < halfLifeMs) {
+      session.expiresAt = renewed
+      await writeStore(store).catch(() => null)
+    }
+  }
   return session
 }
 

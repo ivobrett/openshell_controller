@@ -1,6 +1,11 @@
 import { execFile } from "node:child_process"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { promisify } from "node:util"
 import { OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
+import { MCP_BROKER_POLICY_PRESET, buildMcpBrokerPolicyPreset } from "./mcpBrokerPolicyPreset.mjs"
+import { applySandboxPolicyPresetFile, removeSandboxPolicyPreset } from "./nemoclawCli"
 import { resolveSandboxRef } from "./openshellHost"
 
 const execFileAsync = promisify(execFile)
@@ -382,9 +387,43 @@ async function probeBrokerEndpoint(sandboxName: string, brokerBaseUrl: string) {
   await runOpenShell(["sandbox", "exec", "-n", sandboxName, "--", ...script], 15000).catch(() => null)
 }
 
+/**
+ * Grant broker access with a deterministic preset covering curl, node and
+ * python. Returns a result even on failure: hosts without NemoClaw (minimal
+ * profile) and broker URLs a preset cannot express fall back to the
+ * probe-and-approve path below.
+ */
+async function applyBrokerPolicyPreset(sandboxName: string, brokerBaseUrl: string) {
+  const preset = buildMcpBrokerPolicyPreset(brokerBaseUrl)
+  if (!preset) return { applied: false, reason: "broker URL is not on the sandbox host bridge" }
+  const dir = await mkdtemp(path.join(tmpdir(), "mcp-broker-preset-"))
+  try {
+    const file = path.join(dir, `${MCP_BROKER_POLICY_PRESET}.yaml`)
+    await writeFile(file, preset, "utf8")
+    const result = await applySandboxPolicyPresetFile(sandboxName, file)
+    return result.ok
+      ? { applied: true, reason: "" }
+      : { applied: false, reason: (result.stderr || result.stdout || result.error || "preset was not applied").slice(-400) }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 export async function syncBrokerNetworkAccess(sandboxId: string, brokerBaseUrl: string) {
   const resolved = await resolveSandboxRef(sandboxId)
   const candidates = brokerEndpointCandidates(brokerBaseUrl)
+  const preset = await applyBrokerPolicyPreset(resolved.name, brokerBaseUrl)
+    .catch((error) => ({ applied: false, reason: error instanceof Error ? error.message : String(error) }))
+  if (preset.applied) {
+    return {
+      sandboxId,
+      sandboxName: resolved.name,
+      brokerBaseUrl,
+      preset: MCP_BROKER_POLICY_PRESET,
+      approved: [] as BrokerNetworkAction[],
+      alreadyApproved: [],
+    }
+  }
   await probeBrokerEndpoint(resolved.name, brokerBaseUrl)
   const pending = await listRulesForStatus(resolved.name, "pending").catch(() => [] as SandboxNetworkRule[])
   const matchingPending = pending.filter((rule) => ruleMatchesEndpoints(rule, candidates))
@@ -416,6 +455,7 @@ export async function syncBrokerNetworkAccess(sandboxId: string, brokerBaseUrl: 
 
 export async function revokeBrokerNetworkAccess(sandboxId: string, brokerBaseUrl: string) {
   const resolved = await resolveSandboxRef(sandboxId)
+  await removeSandboxPolicyPreset(resolved.name, MCP_BROKER_POLICY_PRESET).catch(() => null)
   const candidates = brokerEndpointCandidates(brokerBaseUrl)
   const [pending, approved] = await Promise.all([
     listRulesForStatus(resolved.name, "pending").catch(() => [] as SandboxNetworkRule[]),

@@ -1,0 +1,33 @@
+# Lets a sandbox reach the OpenShell Control MCP broker on the host, from any
+# of the HTTP clients an agent is likely to use (curl, node, python).
+#
+# Without this, broker access depends on one-off approvals that are tied to a
+# single program and a single address: curl gets through where the agent's own
+# MCP client does not, and the approval is lost when the sandbox is recreated.
+#
+#   nemoclaw <sandbox> policy add --from-file scripts/inter-sandbox/network-policy-mcp-broker.yaml --yes
+#   nemoclaw <sandbox> policy remove mcp-broker --yes
+#
+# Only the broker paths are allowed; the rest of the controller stays closed.
+preset:
+  name: mcp-broker
+  description: "OpenShell Control MCP broker (inter-sandbox chat and brokered MCP tools)"
+
+network_policies:
+  mcp_broker:
+    name: mcp_broker
+    endpoints:
+      - host: host.openshell.internal
+        port: 3000
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/api/mcp/broker/**" }
+          - allow: { method: GET, path: "/api/mcp/broker/**" }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/python3.13 }
+      - { path: /usr/bin/python3 }
+      - { path: /opt/hermes/.venv/bin/python }

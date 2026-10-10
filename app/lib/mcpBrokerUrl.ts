@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { OPENSHELL_BIN, hostCommandEnv } from "./hostCommands"
+import { SANDBOX_HOST_BRIDGE } from "./mcpBrokerPolicyPreset.mjs"
 import { resolveSandboxRef } from "./openshellHost"
 
 const execFileAsync = promisify(execFile)
@@ -51,7 +52,15 @@ export async function brokerBaseUrlForSandbox(
   const origin = new URL(request.url).origin
   const publicOrigin = new URL(origin)
   if (LOCAL_HOSTNAMES.has(publicOrigin.hostname)) {
-    publicOrigin.hostname = "host.docker.internal"
+    // The sandbox reaches the controller over OpenShell's host bridge, and the
+    // controller's own listener (server.mjs) is plain HTTP. Behind a TLS
+    // reverse proxy the request origin says https://localhost:3000, which used
+    // to produce an https://host.docker.internal:3000 broker URL that no
+    // sandbox could use (TLS handshake against a plain-HTTP port). The bridge
+    // name, not host.docker.internal, is the one NemoClaw policy presets may
+    // name without extra trust flags — see mcpBrokerPolicyPreset.mjs.
+    publicOrigin.hostname = SANDBOX_HOST_BRIDGE
+    publicOrigin.protocol = "http:"
   }
 
   const hostBrokerUrl = `${publicOrigin.toString().replace(/\/+$/, "")}/api/mcp/broker`

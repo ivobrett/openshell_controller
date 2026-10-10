@@ -215,3 +215,15 @@ export async function restartSandboxGatewayWithNemoClaw(sandboxName: string) {
     error: result.error,
   }
 }
+
+/**
+ * Apply (or re-apply) a custom network-policy preset file to a sandbox.
+ * `policy add` is idempotent for an unchanged preset and replaces a changed one.
+ */
+export async function applySandboxPolicyPresetFile(sandboxName: string, presetFile: string) {
+  return runNemoClaw([sandboxName, "policy", "add", "--from-file", presetFile, "--yes"], 120000)
+}
+
+export async function removeSandboxPolicyPreset(sandboxName: string, presetName: string) {
+  return runNemoClaw([sandboxName, "policy", "remove", presetName, "--yes"], 120000)
+}

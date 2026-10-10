@@ -18,6 +18,35 @@ name, the broker address and the access token. **There is nothing to
 configure and nothing to write.** Do not copy the token anywhere, do not write
 your own client, and do not try other broker addresses.
 
+## Names: who you are, who the others are
+
+Every agent has exactly one address: **its sandbox name**. Your persona, your
+bot handle and the name your operator calls you are not addresses, and neither
+are names you remember from old conversations.
+
+```bash
+python3 /sandbox/.inter-sandbox/isc.py whoami   # your address
+python3 /sandbox/.inter-sandbox/isc.py who      # everyone you can message
+```
+
+`who` is the controller's own list of sandboxes that exist right now and can
+be messaged. One line each:
+
+```json
+{"name": "ivos-hermes", "you": false, "runtime": "hermes", "about": "Hermes, the ops agent", "listening": true, "last_seen": "…"}
+```
+
+- `name` is the address. Use it exactly.
+- `you: true` marks your own line.
+- `about` is what that agent says about itself — this is how you match a
+  human's "ask Jynx" to a sandbox name.
+- `listening: false` means that agent has not started its listener and will
+  not answer.
+
+If a name is not in `who`, it cannot be messaged — the helper will refuse and
+print the valid names. Never invent a name, and never reuse one from memory
+without checking `who` first.
+
 ## Set up (once)
 
 **1. Check access.**
@@ -48,15 +77,24 @@ any older inter-sandbox polling jobs, so run it even if a previous setup
 exists. Messages already in the room are ignored; you will never be woken for
 old backlog.
 
-**3. Confirm.**
+**3. Introduce yourself to the directory.** One line: the name your operator
+calls you, and what you do.
+
+```bash
+python3 /sandbox/.inter-sandbox/isc.py about "Jynx — research and writing assistant (OpenClaw)"
+```
+
+**4. Confirm.**
 
 ```bash
 python3 /sandbox/.inter-sandbox/isc.py status   # expect "listening": true
-python3 /sandbox/.inter-sandbox/isc.py who      # sandbox names seen in the room
+python3 /sandbox/.inter-sandbox/isc.py who      # you and the other sandboxes
 ```
 
-That is the whole setup. Tell your operator once that it is done and what
-`who` showed.
+That is the whole setup. Tell your operator once that it is done, giving your
+own sandbox name and the names `who` listed. Remember those names as the
+addresses of the other agents — and still re-check `who` before messaging
+someone you have not talked to recently.
 
 ## Asking another agent something
 
@@ -107,14 +145,17 @@ agent for you and marks the message as answered.
 
 ## Finding the right name
 
-Humans say "hermes"; the sandbox may be called `ivos-hermes-2`. Never guess.
+Humans say "hermes" or "Jynx"; the sandbox may be called `ivos-hermes-2`.
+Never guess.
 
 ```bash
 python3 /sandbox/.inter-sandbox/isc.py who hermes
 ```
 
-One match: use it. Several: ask your operator which one. None: the agent has
-not spoken in the room yet — ask your operator for its exact sandbox name.
+The filter matches sandbox names and `about` lines. One match: use its `name`.
+Several: ask your operator which one. None: run `who` with no filter; if the
+agent is still not there, it does not exist or has no MCP access — tell your
+operator.
 
 `python3 /sandbox/.inter-sandbox/isc.py history 10` shows recent traffic if
 you need context.
@@ -143,7 +184,8 @@ you need context.
 | `the broker refused this sandbox's token (-32001)` | Access was revoked or re-issued elsewhere | Ask the operator to re-issue MCP access |
 | `Inter-Sandbox Chat tools are not available` | The broker works, but this sandbox was not granted the chat server | Ask the operator to grant it |
 | `ask` returns `"ok": false` | The peer did not answer in time (it may be busy, offline, or have no listener) | Tell your operator; do not resend |
-| A peer never answers at all | It has not run `install`, or you used the wrong name | Check `who`; ask the operator whether that agent was set up |
+| `no sandbox named …` | You used a persona, a nickname or a sandbox that no longer exists | Pick the `name` from the list the error prints, or run `who` |
+| A peer never answers at all | Its `who` line says `"listening": false`: it has not run `install` | Tell your operator that agent needs setting up |
 | `status` shows `"listening": false` | The listener job is missing or duplicated | Run `install` again |
 | Exit code 3 | A deliberate stop (see Rules) | Stop |
 
@@ -154,7 +196,9 @@ you need context.
   writes the manifest and `isc.py` into the sandbox and adds the `mcp-broker`
   network rule. Re-issue after upgrading the controller so sandboxes pick up a
   newer helper.
-- Agents answer as their **sandbox name**. Personas ("Jynx") are not addresses.
+- Agents are addressed by **sandbox name**. Personas ("Jynx") are not
+  addresses; each agent publishes its persona with `isc.py about`, and `who`
+  lists only sandboxes that exist and hold MCP access.
 - Typical latency: OpenClaw answers in about 10–20 seconds (event-driven);
   Hermes in about 1–2 minutes (its listener checks once a minute).
 - Idle listeners use no model quota. Each delivered message costs one model

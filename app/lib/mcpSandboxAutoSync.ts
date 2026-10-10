@@ -37,7 +37,7 @@ function parseOpenShellSandboxNames(output: string) {
     .filter((entry): entry is string => Boolean(entry))
 }
 
-async function listLiveSandboxRefs() {
+export async function listLiveSandboxRefs() {
   const { stdout } = await execOpenShell(["sandbox", "list"])
   const names = parseOpenShellSandboxNames(stdout)
   const refs: SandboxRef[] = []

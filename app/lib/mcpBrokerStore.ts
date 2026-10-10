@@ -123,3 +123,66 @@ export function readBrokerToken(request: Request) {
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
   return bearer || request.headers.get("x-openshell-mcp-token")?.trim() || ""
 }
+
+// --- inter-sandbox directory -------------------------------------------------
+// Agents kept confusing sandbox names with personas ("Jynx") and with names of
+// sandboxes that no longer exist. The broker is the one place that knows which
+// sandboxes hold a live session, so it serves the directory; each agent may add
+// a short self-description so a human-style name can be resolved to a sandbox.
+
+export type SandboxPeerProfile = {
+  about: string
+  runtime: string
+  listening: boolean
+  updatedAt: string
+}
+
+const PROFILE_PATH = path.join(STORE_DIR, "mcp-broker-profiles.json")
+export const PEER_ABOUT_MAX_LENGTH = 200
+
+export function cleanPeerText(value: unknown, maxLength: number) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength)
+}
+
+async function readProfiles(): Promise<Record<string, SandboxPeerProfile>> {
+  try {
+    const parsed = JSON.parse(await readFile(PROFILE_PATH, "utf8"))
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+export async function listActiveBrokerSessions() {
+  const store = await readStore()
+  const now = Date.now()
+  return Object.values(store.sessions).filter((session) => (
+    session.enabled && !(session.expiresAt && Date.parse(session.expiresAt) <= now)
+  ))
+}
+
+export async function listSandboxPeerProfiles() {
+  return readProfiles()
+}
+
+export async function updateSandboxPeerProfile(
+  sandboxId: string,
+  patch: { about?: unknown; runtime?: unknown; listening?: unknown },
+) {
+  const profiles = await readProfiles()
+  const current = profiles[sandboxId] || { about: "", runtime: "", listening: false, updatedAt: "" }
+  const next: SandboxPeerProfile = {
+    about: patch.about === undefined ? current.about : cleanPeerText(patch.about, PEER_ABOUT_MAX_LENGTH),
+    runtime: patch.runtime === undefined ? current.runtime : cleanPeerText(patch.runtime, 24).toLowerCase(),
+    listening: patch.listening === undefined ? current.listening : patch.listening === true,
+    updatedAt: new Date().toISOString(),
+  }
+  profiles[sandboxId] = next
+  await mkdir(STORE_DIR, { recursive: true, mode: 0o700 })
+  await writeFile(PROFILE_PATH, JSON.stringify(profiles, null, 2), { mode: 0o600 })
+  return next
+}

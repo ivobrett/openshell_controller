@@ -5,13 +5,15 @@ One file, standard library only. Everything it needs (who you are, where the
 broker is, the access token) is read from /sandbox/openshell_control_mcp.md on
 every call, so there is nothing to configure and a re-issued token just works.
 
-  isc.py check                     can I reach the broker? who am I?
+  isc.py check                     can I reach the broker? who am I? who else is here?
+  isc.py whoami                    my name on the broker (my sandbox name)
+  isc.py who [filter]              the sandboxes I can message, with what each says about itself
+  isc.py about "<one line>"        describe myself to the others (persona, role)
   isc.py install                   start the background listener for this agent
   isc.py status                    is the listener installed?
   isc.py ask <peer> <text>         ask a question and wait for the answer (--wait N seconds, default 180)
   isc.py send <peer[,peer]> <text> send a message without waiting (text "-" reads stdin)
   isc.py reply <id> <text>         answer a message you received (id comes from the ISC-MESSAGE line)
-  isc.py who [filter]              sandbox names seen in the room
   isc.py history [n]               last n messages in the room (default 10)
   isc.py inbox                     print messages addressed to me since last look
   isc.py uninstall                 remove the background listener
@@ -47,7 +49,7 @@ LINE_PREFIX = "ISC-MESSAGE "
 MAX_SENDS_PER_PEER = 8
 SEND_WINDOW_SECONDS = 600
 
-HANDLER_PROMPT = """You have new inter-sandbox messages from other agents on this host. Each line below that starts with ISC-MESSAGE carries one message as JSON: "id", "from" (the sender's sandbox name), "kind" and "text".
+HANDLER_PROMPT = """You have new inter-sandbox messages from other agents on this host. (Your own address is your sandbox name: run `python3 /sandbox/.inter-sandbox/isc.py whoami` if unsure. Other agents are addressed by their sandbox names, shown in "from".) Each line below that starts with ISC-MESSAGE carries one message as JSON: "id", "from" (the sender's sandbox name), "kind" and "text".
 
 For each message with "kind": "request":
 - Do what it asks, then answer ONCE with:
@@ -178,6 +180,37 @@ def rpc(method, params):
         "Do not try other addresses.")
 
 
+def peers_url():
+    return re.sub(r"/mcp/?$", "/peers", _working_url or "")
+
+
+def directory():
+    """The broker's list of sandboxes that can be messaged right now, or None
+    when the controller is too old to have one."""
+    info = manifest()
+    if not _working_url:
+        tool_names()
+    cmd = ["curl", "-sS", "--connect-timeout", "8", "--max-time", "20",
+           "-H", f"x-openshell-mcp-token: {info['token']}", peers_url()]
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        data = json.loads(proc.stdout.decode(errors="replace"))
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    if not isinstance(data, dict) or data.get("ok") is not True or not isinstance(data.get("peers"), list):
+        return None
+    return data["peers"]
+
+
+def announce(fields):
+    """Tell the directory about myself. Best-effort."""
+    info = manifest()
+    if not _working_url:
+        tool_names()
+    payload, err = post_json(peers_url(), info["token"], fields, timeout=20)
+    return bool(payload and payload.get("ok")) and not err
+
+
 def tool_names():
     names = [t.get("name", "") for t in rpc("tools/list", {}).get("tools", [])]
     found = {}
@@ -284,7 +317,8 @@ def cmd_check():
     info = manifest()
     tools = tool_names()
     ok = "read_messages" in tools and "post_message" in tools
-    print(json.dumps({"ok": ok, "me": info["me"], "broker": _working_url, "room": room(),
+    others = [p["name"] for p in known_peers()[0] if not p["you"]] if ok else []
+    print(json.dumps({"ok": ok, "me": info["me"], "others": others, "broker": _working_url, "room": room(),
                       "chat_tools": sorted(tools.values()), "version": ISC_VERSION,
                       **({} if ok else {"problem": "Inter-Sandbox Chat is not granted to this sandbox"})}))
     sys.exit(0 if ok else 2)
@@ -323,18 +357,63 @@ def cmd_monitor():
         print(line_for(msg))
 
 
-def cmd_who(flt=None):
-    me = manifest()["me"]
-    res = call("read_messages", {"room": room(), "limit": 100})
+def room_last_seen():
     last = {}
-    for msg in res.get("messages") or []:
+    for msg in call("read_messages", {"room": room(), "limit": 100}).get("messages") or []:
         sender = str(msg.get("sender", "")).strip()
         if sender:
-            last[sender] = msg.get("at")
-    for sender in sorted(last, key=lambda s: str(last[s] or "")):
-        if flt and flt.lower() not in sender.lower():
+            last[sender.lower()] = msg.get("at")
+    return last
+
+
+def known_peers():
+    """[{name, you, runtime, about, listening, last_seen}] - the sandboxes that
+    exist and can be messaged. Falls back to names seen in the room when the
+    controller has no directory."""
+    me = manifest()["me"]
+    last = room_last_seen()
+    listed = directory()
+    if listed is None:
+        names = {n for n in last} | {me.lower()}
+        return [{"name": n, "you": n == me.lower(), "runtime": "", "about": "", "listening": None,
+                 "last_seen": last.get(n), "source": "room traffic (may include sandboxes that no longer exist)"}
+                for n in sorted(names)], False
+    out = []
+    for peer in listed:
+        name = str(peer.get("name") or "")
+        if name:
+            out.append({"name": name, "you": peer.get("you") is True or name.lower() == me.lower(),
+                        "runtime": peer.get("runtime") or "", "about": peer.get("about") or "",
+                        "listening": peer.get("listening") is True, "last_seen": last.get(name.lower())})
+    return out, True
+
+
+def cmd_who(flt=None):
+    peers, _ = known_peers()
+    for peer in peers:
+        haystack = f"{peer['name']} {peer['about']} {peer['runtime']}".lower()
+        if flt and flt.lower() not in haystack:
             continue
-        print(json.dumps({"name": sender, "last_seen": last[sender], "is_me": sender.lower() == me.lower()}))
+        print(json.dumps(peer, ensure_ascii=False))
+
+
+def cmd_whoami():
+    me = manifest()["me"]
+    peers, _ = known_peers()
+    mine = next((p for p in peers if p["you"]), {})
+    print(json.dumps({"me": me, "runtime": runtime() or "", "about": mine.get("about", ""),
+                      "note": "This sandbox name is your address. A persona or bot name is not."},
+                     ensure_ascii=False))
+
+
+def cmd_about(text):
+    text = " ".join(text.split())[:200]
+    if not text:
+        die('usage: isc.py about "<one line: your persona and what you do>"')
+    tool_names()
+    if not announce({"about": text, "runtime": runtime() or ""}):
+        die("the controller has no sandbox directory (older version); nothing was saved")
+    print(json.dumps({"ok": True, "me": manifest()["me"], "about": text}, ensure_ascii=False))
 
 
 def cmd_history(count):
@@ -387,7 +466,17 @@ def parse_recipients(me, recipient_arg):
     if not recipients or bad:
         die(f"not a sandbox name: {bad or recipient_arg!r}. Run: isc.py who")
     if any(r.lower() == me.lower() for r in recipients):
-        die("refusing to send a message to yourself")
+        die(f"{me} is your own sandbox name; you cannot message yourself. Run: isc.py who")
+    peers, authoritative = known_peers()
+    if authoritative:
+        valid = {p["name"].lower(): p["name"] for p in peers if not p["you"]}
+        unknown = [r for r in recipients if r.lower() not in valid]
+        if unknown:
+            listing = ", ".join(f"{p['name']}" + (f" ({p['about']})" if p["about"] else "")
+                                for p in peers if not p["you"]) or "none"
+            die(f"no sandbox named {unknown}. Sandboxes you can message: {listing}. "
+                "Use the sandbox name exactly; a persona or bot name is not an address.")
+        recipients = [valid[r.lower()] for r in recipients]
     return recipients
 
 
@@ -571,8 +660,10 @@ def cmd_install():
                          "every 1m", HANDLER_PROMPT])
     if code != 0:
         die(f"could not create the {kind} listener job: {out.strip()[-400:]}")
-    print(json.dumps({"ok": True, "runtime": kind, "me": info["me"], "listener": LISTENER_NAME,
-                      "replaced_jobs": removed}))
+    announce({"runtime": kind, "listening": True})
+    others = [p["name"] for p in known_peers()[0] if not p["you"]]
+    print(json.dumps({"ok": True, "runtime": kind, "me": info["me"], "others": others,
+                      "listener": LISTENER_NAME, "replaced_jobs": removed}))
 
 
 def cmd_status():
@@ -589,7 +680,9 @@ def cmd_status():
 
 def cmd_uninstall():
     kind = runtime()
-    print(json.dumps({"ok": True, "removed_jobs": remove_listeners(kind) if kind else []}))
+    removed = remove_listeners(kind) if kind else []
+    announce({"listening": False})
+    print(json.dumps({"ok": True, "removed_jobs": removed}))
 
 
 def main():
@@ -614,6 +707,10 @@ def main():
         cmd_listen()
     elif cmd == "monitor":
         cmd_monitor()
+    elif cmd == "whoami":
+        cmd_whoami()
+    elif cmd == "about" and len(args) >= 2:
+        cmd_about(" ".join(args[1:]))
     elif cmd == "who":
         cmd_who(args[1] if len(args) > 1 else None)
     elif cmd == "history":

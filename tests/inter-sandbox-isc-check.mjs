@@ -25,6 +25,9 @@ if (spawnSync('python3', ['--version']).status !== 0 || spawnSync('curl', ['--ve
 
 // --- mock broker ---
 const messages = []
+const profiles = {}
+const liveSandboxes = ['ivos-hermes', 'ivos-hermes2', 'ivos-openclaw']
+let directoryEnabled = true
 let seq = 0
 const tools = ['read_messages', 'post_message'].map((name) => ({ name: `inter-sandbox-chat__${name}` }))
 function handle(body) {
@@ -56,6 +59,17 @@ const server = http.createServer((req, res) => {
     res.setHeader('content-type', 'application/json')
     if (!String(req.headers['x-openshell-mcp-token'] || '').startsWith('osmcp_')) {
       res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32001, message: 'unavailable' } }))
+      return
+    }
+    if (req.url.endsWith('/peers')) {
+      if (!directoryEnabled) { res.statusCode = 404; res.end('{"error":"not found"}'); return }
+      const you = String(req.headers['x-openshell-mcp-token']).replace('osmcp_test-', '')
+      if (req.method === 'POST') Object.assign(profiles[you] ||= {}, JSON.parse(raw))
+      res.end(JSON.stringify({
+        ok: true,
+        you,
+        peers: liveSandboxes.map((name) => ({ name, you: name === you, runtime: '', about: '', listening: false, ...profiles[name] })),
+      }))
       return
     }
     const body = JSON.parse(raw)
@@ -174,6 +188,34 @@ try {
   assert.match(denied.err, /re-issue MCP access/)
   assert.doesNotMatch(denied.err, /Traceback/)
 
+  // --- names: who am I, who else is there ---
+  // Agents confused personas ("Jynx") and dead sandbox names with addresses.
+  assert.deepEqual(JSON.parse((await claw.run('check')).out).others, ['ivos-hermes', 'ivos-hermes2'])
+  assert.equal(JSON.parse((await claw.run('whoami')).out).me, 'ivos-openclaw')
+  assert.equal((await claw.run('about', 'Jynx, the research assistant')).code, 0)
+  const who = (await hermes.run('who')).out.split('\n').map((line) => JSON.parse(line))
+  assert.deepEqual(who.map((p) => p.name), liveSandboxes, 'who must list exactly the live sandboxes')
+  assert.equal(who.find((p) => p.name === 'ivos-hermes').you, true)
+  assert.equal(who.find((p) => p.name === 'ivos-openclaw').about, 'Jynx, the research assistant')
+  assert.ok(!who.some((p) => p.name === 'someone'), 'a name that only appears in old traffic is not an address')
+  const byPersona = (await hermes.run('who', 'jynx')).out.split('\n').filter(Boolean).map((line) => JSON.parse(line))
+  assert.deepEqual(byPersona.map((p) => p.name), ['ivos-openclaw'], 'a persona must resolve to its sandbox name')
+
+  const toPersona = await hermes.run('send', 'jynx', 'hello')
+  assert.equal(toPersona.code, 2, 'a persona is not an address')
+  assert.match(toPersona.err, /Sandboxes you can message: .*ivos-openclaw \(Jynx, the research assistant\)/)
+  const before2 = messages.length
+  assert.equal((await hermes.run('send', 'deleted-sandbox', 'hello')).code, 2)
+  assert.equal(messages.length, before2, 'nothing may be posted to a sandbox that does not exist')
+  assert.equal(JSON.parse((await hermes.run('send', 'IVOS-OpenClaw', 'case test')).out).to[0], 'ivos-openclaw', 'names are matched case-insensitively and sent in their real spelling')
+
+  // an older controller has no directory: fall back to room traffic, do not block sending
+  directoryEnabled = false
+  assert.equal((await hermes.run('send', 'ivos-openclaw', 'still works')).code, 0)
+  assert.match((await hermes.run('who')).out, /may include sandboxes that no longer exist/)
+  assert.equal((await hermes.run('about', 'x')).code, 2)
+  directoryEnabled = true
+
   // --- source guards ---
   const source = await readFile(ISC, 'utf8')
   assert.match(source, /^ISC_VERSION = 7$/m)
@@ -193,4 +235,12 @@ try {
 } finally {
   server.close()
   await rm(dir, { recursive: true, force: true })
+}
+
+// --- the directory endpoint ---
+{
+  const peersRoute = await readFile(path.join(root, 'app/api/mcp/broker/peers/route.ts'), 'utf8')
+  assert.match(peersRoute, /verifySandboxMcpBrokerToken/, 'the directory must require a broker token')
+  assert.match(peersRoute, /listLiveSandboxRefs/, 'the directory must drop sandboxes that no longer exist')
+  assert.match(peersRoute, /updateSandboxPeerProfile\(session\.sandboxId,/, 'a sandbox may only describe itself')
 }

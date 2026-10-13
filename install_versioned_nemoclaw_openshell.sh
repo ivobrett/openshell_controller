@@ -8,9 +8,21 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# NemoClaw v0.0.132 (2026-10-10) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
-# v0.0.132 is tag-only on versions (same OpenShell floor, OpenClaw 2026.9.2,
-# Hermes 0.21.3) but changes inference routing for NEW sandboxes:
+# NemoClaw v0.0.133 (2026-10-12) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# v0.0.133 is tag-only on versions (same OpenShell floor, OpenClaw 2026.9.2,
+# Hermes 0.21.3). It extends v0.0.132's routing change to more providers:
+#   - #12886: OpenAI, Anthropic, Gemini, OpenRouter and Hermes Provider
+#     selections also become sandbox-attached providers that call the vendor
+#     endpoint directly (handles in OPENAI_API_KEY / ANTHROPIC_API_KEY /
+#     GEMINI_API_KEY / OPENROUTER_API_KEY). scripts/hermes-remote/launch.sh
+#     forwards those handles too. Custom / Ollama / PII-router routes still use
+#     inference.local.
+#   - #12934: fixes an OpenClaw sandbox switched to native NVIDIA not completing
+#     a turn (stale credential handle).
+#   - #12983: `policy remove` readback tolerates provider-composed entries.
+#   - #12800 / #12839: gateway recovery keeps the last verified binding per
+#     port; a blocked sandbox name is released once verified absent.
+# Carried over from v0.0.132, which changed inference routing for NEW sandboxes:
 #   - #12562: NVIDIA-Endpoints sandboxes get a sandbox-attached OpenShell
 #     provider (`nemoclaw-nvidia-prod-v1`) and call integrate.api.nvidia.com
 #     DIRECTLY; they no longer use inference.local. In-sandbox config carries a
@@ -64,12 +76,12 @@ NC='\033[0m'
 #     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.132. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.133. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.132}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.133}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

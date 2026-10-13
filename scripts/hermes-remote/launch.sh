@@ -92,26 +92,26 @@ sleep 2
 #    route, the server.mjs WS tunnel). Backward compatible with 0.16/0.17.
 INTERNAL_PORT=$((PORT + 1))
 
-# NemoClaw >= v0.0.132 (#12562): NVIDIA-Endpoints sandboxes no longer use
-# inference.local. config.yaml points at integrate.api.nvidia.com with
-# `api_key: ${NVIDIA_INFERENCE_API_KEY}`, and that variable holds a NON-SECRET
+# NemoClaw >= v0.0.132 (#12562, NVIDIA) and >= v0.0.133 (#12886, OpenAI,
+# Anthropic, Gemini, OpenRouter): these sandboxes no longer use inference.local.
+# config.yaml points at the provider's own endpoint with
+# `api_key: ${<PROVIDER>_API_KEY}`, and that variable holds a NON-SECRET
 # OpenShell handle (openshell:resolve:env:…) which the sandbox proxy swaps for
 # the real key at egress. The gateway process has it; this dashboard is
 # launched outside that process tree, so hand it the same handle or the
 # embedded chat has no credential. Anything that is not a handle is dropped —
 # a raw key must never be copied into this command line.
-NVIDIA_HANDLE=$(docker exec "$CONTAINER" sh -c "tr '\\0' '\\n' < /proc/${GW_PID}/environ" 2>/dev/null \
-  | sed -n 's/^NVIDIA_INFERENCE_API_KEY=//p' | head -1)
-if ! [[ "$NVIDIA_HANDLE" =~ ^openshell:resolve:env:[A-Za-z0-9_]+$ ]]; then
-  NVIDIA_HANDLE=""
-fi
-NVIDIA_EXPORT=""
-if [ -n "$NVIDIA_HANDLE" ]; then
-  NVIDIA_EXPORT=" NVIDIA_INFERENCE_API_KEY='${NVIDIA_HANDLE}'"
-fi
+GW_ENVIRON=$(docker exec "$CONTAINER" sh -c "tr '\\0' '\\n' < /proc/${GW_PID}/environ" 2>/dev/null || true)
+HANDLE_EXPORT=""
+for HANDLE_VAR in NVIDIA_INFERENCE_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY OPENROUTER_API_KEY; do
+  HANDLE_VALUE=$(printf '%s\n' "$GW_ENVIRON" | sed -n "s/^${HANDLE_VAR}=//p" | head -1)
+  if [[ "$HANDLE_VALUE" =~ ^openshell:resolve:env:[A-Za-z0-9_]+$ ]]; then
+    HANDLE_EXPORT="${HANDLE_EXPORT} ${HANDLE_VAR}='${HANDLE_VALUE}'"
+  fi
+done
 
 docker exec -d --privileged "$CONTAINER" nsenter -t "$GW_PID" -n -- \
-  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'${NVIDIA_EXPORT}; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
+  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'${HANDLE_EXPORT}; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
   || die "docker exec failed launching dashboard"
 
 # ── Wait for readiness, then verify the auth gate ────────────────

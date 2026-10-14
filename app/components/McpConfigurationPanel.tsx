@@ -610,6 +610,9 @@ export default function McpConfigurationPanel({ sandboxes = [] }: McpConfigurati
     }
   }
 
+  // Load once on mount. `load` is redefined every render, so listing it would
+  // re-fetch in a loop; the panel reloads explicitly after each save.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
 
   const accordionToggle = "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-sm text-foreground"

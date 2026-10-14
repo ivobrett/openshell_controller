@@ -470,6 +470,9 @@ export default function InferenceEndpointPanel() {
     }
   }
 
+  // Load once on mount. `load` is redefined every render, so listing it would
+  // re-fetch in a loop; the panel reloads explicitly after each save.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
 
   const loadOllamaModels = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {

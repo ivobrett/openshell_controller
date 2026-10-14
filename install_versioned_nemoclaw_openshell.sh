@@ -8,9 +8,22 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# NemoClaw v0.0.133 (2026-10-12) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
-# v0.0.133 is tag-only on versions (same OpenShell floor, OpenClaw 2026.9.2,
-# Hermes 0.21.3). It extends v0.0.132's routing change to more providers:
+# NemoClaw v0.0.134 (2026-10-14) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# v0.0.134 is tag-only on versions (blueprint OpenShell min==max 0.0.116,
+# OpenClaw 2026.9.2, Hermes 0.21.3; no OpenClaw/Hermes/base Dockerfile
+# changes — the "OpenShell 0.1.2" in its notes is a CI trust record only).
+# What can affect us:
+#   - #13035 / #13077: generated and custom Dockerfiles are built in the local
+#     engine and verified BEFORE sandbox creation; a failed build/verify now
+#     stops the create instead of surfacing later.
+#   - #12947: provider setup re-checks the stored gateway profile after the
+#     runtime identity import (a mismatch now warns).
+#   - #13107: a paired OpenClaw CLI device may request write scope after probe
+#     activity (scope upgrades, cf. isc.py's self-approve).
+#   - #13048: `lsof` mount warnings no longer mark a free port as owned.
+#   - #13049: Hermes backups keep a sanitized config even when it grows.
+#   - #12870: sandbox downloads refuse symlinked destination parents.
+# Carried over from v0.0.133, which extended v0.0.132's routing change:
 #   - #12886: OpenAI, Anthropic, Gemini, OpenRouter and Hermes Provider
 #     selections also become sandbox-attached providers that call the vendor
 #     endpoint directly (handles in OPENAI_API_KEY / ANTHROPIC_API_KEY /
@@ -76,12 +89,12 @@ NC='\033[0m'
 #     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.133. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.134. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.133}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.134}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

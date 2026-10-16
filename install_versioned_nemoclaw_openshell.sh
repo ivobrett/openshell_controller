@@ -8,8 +8,26 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# NemoClaw v0.0.134 (2026-10-14) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
-# v0.0.134 is tag-only on versions (blueprint OpenShell min==max 0.0.116,
+# NemoClaw v0.0.135 (2026-10-16) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# v0.0.135 is tag-only on versions (blueprint OpenShell min==max 0.0.116,
+# OpenClaw 2026.9.2, Hermes 0.21.3). Its Dockerfile changes are only the
+# Debian curl pin deb13u5 -> deb13u7 (#13158), which the curl unpin below
+# already covers; its install.sh changes are DGX Station only. What can
+# affect us:
+#   - #13064 / #13050: OpenClaw stores the attached provider's scoped
+#     credential reference when switching hosted routes and refreshes it on
+#     rebuild, so a switched route survives a gateway restart. Scoped handles
+#     look like openshell:resolve:env:v<n>_NVIDIA_INFERENCE_API_KEY, which
+#     scripts/hermes-remote/launch.sh's handle pattern already accepts.
+#   - #13051: a failed pre-delete backup during recreate leaves the original
+#     sandbox registered and connectable.
+#   - #13102: Hermes managed-tool gateways get their own provider profile.
+#   - #13189: direct creates warn (not fail) on an unconfirmed provider profile.
+#   - #13199: log / failed-exec checks may switch on OpenShell OCSF audit
+#     logging; NEMOCLAW_NO_AUTO_AUDIT_LOGS=1 leaves it alone.
+#   - #13271: OpenClaw named-agent list changes apply to a live gateway.
+# Carried over from v0.0.134:
+# v0.0.134 was tag-only on versions (blueprint OpenShell min==max 0.0.116,
 # OpenClaw 2026.9.2, Hermes 0.21.3; no OpenClaw/Hermes/base Dockerfile
 # changes — the "OpenShell 0.1.2" in its notes is a CI trust record only).
 # What can affect us:
@@ -89,12 +107,12 @@ NC='\033[0m'
 #     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.134. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.135. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.134}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.135}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

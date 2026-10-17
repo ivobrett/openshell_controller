@@ -58,7 +58,13 @@ const DISPATCH_ARGS = CUSTOM_DISPATCH_COMMAND ? parseDispatchArgs() : [DEFAULT_O
 const DISPATCH_KIND = CUSTOM_DISPATCH_COMMAND ? "custom-command" : "openclaw-chat"
 const POST_REPLIES = parseBoolean(process.env.INTER_SANDBOX_CHAT_SIDECAR_POST_REPLIES, true)
 const PROCESS_BROADCAST = parseBoolean(process.env.INTER_SANDBOX_CHAT_SIDECAR_PROCESS_BROADCAST, false)
-const RELAY_SANDBOX_MESSAGES = parseBoolean(process.env.INTER_SANDBOX_CHAT_SIDECAR_RELAY_SANDBOX_MESSAGES, true)
+// FORK DEFAULT 2026-10-17: off. Sandbox-to-sandbox messages are delivered by
+// each sandbox's own isc.py listener (scripts/inter-sandbox/isc.py), which has
+// a loop guard. Relaying them here too would deliver every message twice and
+// post auto-replies with no loop guard. On the Oracle box it never delivered
+// once and its failure path restarted the OpenClaw gateway. Set to true only on
+// a host whose sandboxes do not run isc.py listeners.
+const RELAY_SANDBOX_MESSAGES = parseBoolean(process.env.INTER_SANDBOX_CHAT_SIDECAR_RELAY_SANDBOX_MESSAGES, false)
 const SANDBOX_RELAY_LATEST_ONLY = parseBoolean(process.env.INTER_SANDBOX_CHAT_SIDECAR_SANDBOX_LATEST_ONLY, true)
 
 let stopping = false

@@ -11,9 +11,8 @@ import { WebSocket } from "ws"
 const execFileAsync = promisify(execFile)
 const DASHBOARD_PORT_BASE = Number.parseInt(process.env.OPENCLAW_SANDBOX_DASHBOARD_PORT_BASE || "19000", 10)
 const DASHBOARD_PORT_RANGE = Number.parseInt(process.env.OPENCLAW_SANDBOX_DASHBOARD_PORT_RANGE || "2000", 10)
-const REMOTE_DASHBOARD_PORT = Number.parseInt(process.env.OPENCLAW_SANDBOX_DASHBOARD_REMOTE_PORT || "18789", 10)
 const OPENSHELL_GATEWAY = process.env.OPENSHELL_GATEWAY?.trim() || undefined
-const CONTROL_UI_ORIGIN = process.env.OPENCLAW_SANDBOX_CONTROL_UI_ORIGIN || "http://127.0.0.1:18789"
+const CONTROL_UI_ORIGIN_OVERRIDE = process.env.OPENCLAW_SANDBOX_CONTROL_UI_ORIGIN?.trim() || ""
 const CONNECT_TIMEOUT_MS = Number.parseInt(process.env.INTER_SANDBOX_CHAT_OPENCLAW_CONNECT_TIMEOUT_MS || "15000", 10)
 const SEND_TIMEOUT_MS = Number.parseInt(process.env.INTER_SANDBOX_CHAT_OPENCLAW_SEND_TIMEOUT_MS || "120000", 10)
 const SESSION_KEY = process.env.INTER_SANDBOX_CHAT_OPENCLAW_SESSION_KEY || "inter-sandbox-chat"
@@ -28,13 +27,6 @@ const OPENSHELL_BIN = firstExisting([
   "/usr/local/bin/openshell",
   "/opt/homebrew/bin/openshell",
 ], "openshell")
-const NEMOCLAW_BIN = firstExisting([
-  process.env.NEMOCLAW_BIN,
-  path.join(os.homedir(), ".local/bin/nemoclaw"),
-  path.join(os.homedir(), ".nemoclaw/source/bin/nemoclaw.js"),
-  "/usr/local/bin/nemoclaw",
-  "/opt/homebrew/bin/nemoclaw",
-], "nemoclaw")
 
 function cleanText(value, fallback = "") {
   return String(value ?? fallback).trim()
@@ -108,27 +100,68 @@ async function waitForPort(port, timeoutMs = 8000) {
   return false
 }
 
-async function ensureRemoteDashboard(sandboxName) {
+// FORK FIX 2026-10-17. This dispatcher used to assume the OpenClaw gateway
+// was on 18789 in every sandbox and, when that port did not answer, ran
+// `nemoclaw sandbox gateway restart <sandbox>`. NemoClaw gives each sandbox its
+// own port (ivos-openclaw on the Oracle box is on 18790), so the check always
+// failed there: every relayed message restarted the agent's gateway (aborting
+// its in-flight work) and then left a tunnel to the dead 18789 that also broke
+// the controller's Open Dashboard. Now: read the sandbox's real port, never
+// restart an agent gateway from here, and replace a tunnel that no longer
+// reaches the gateway. A sandbox without OpenClaw (Hermes) is reported, not
+// dispatched to.
+async function inspectSandbox(sandboxName) {
+  const { stdout } = await execSandboxSsh(
+    sandboxName,
+    'if [ -f /sandbox/.openclaw/openclaw.json ]; then printf "openclaw %s" "${OPENCLAW_GATEWAY_PORT:-}"; else printf "other"; fi',
+    10000,
+  )
+  const [kind, rawPort] = cleanText(stdout).split(/\s+/)
+  if (kind !== "openclaw") return { openclaw: false, remotePort: null }
+  const remotePort = Number.parseInt(rawPort || "", 10)
+  if (!Number.isFinite(remotePort) || remotePort <= 0) {
+    throw new Error(`could not read the OpenClaw gateway port (OPENCLAW_GATEWAY_PORT) in sandbox ${sandboxName}`)
+  }
+  return { openclaw: true, remotePort }
+}
+
+async function ensureRemoteDashboard(sandboxName, remotePort) {
   try {
-    await execSandboxSsh(sandboxName, `curl -fsS --max-time 2 http://127.0.0.1:${REMOTE_DASHBOARD_PORT}/ >/dev/null`, 5000)
-    return true
+    await execSandboxSsh(sandboxName, `curl -fsS --max-time 5 http://127.0.0.1:${remotePort}/ >/dev/null`, 20000)
   } catch {
-    await execFileAsync(NEMOCLAW_BIN, ["sandbox", "gateway", "restart", sandboxName], {
-      timeout: 90000,
-      maxBuffer: 8 * 1024 * 1024,
-      env: process.env,
-    })
-    return true
+    throw new Error(`the OpenClaw gateway in ${sandboxName} is not answering on port ${remotePort}; the chat sidecar does not restart agent gateways`)
   }
 }
 
-async function ensureDashboardTunnel(sandboxName, port) {
-  if (await canConnectPort(port)) return true
-  await ensureRemoteDashboard(sandboxName)
+async function tunnelAnswers(port) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/`, { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    await response.body?.cancel().catch(() => {})
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function closeTunnel(port) {
+  // Only `ssh -N -L 127.0.0.1:<port>:127.0.0.1:<remote>` forwards for this port.
+  await execFileAsync("pkill", ["-f", "--", `[-]L 127\\.0\\.0\\.1:${port}:127\\.0\\.0\\.1:`]).catch(() => {})
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline && await canConnectPort(port)) {
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+}
+
+async function ensureDashboardTunnel(sandboxName, port, remotePort) {
+  if (await canConnectPort(port)) {
+    if (await tunnelAnswers(port)) return true
+    await closeTunnel(port)
+  }
+  await ensureRemoteDashboard(sandboxName, remotePort)
 
   const child = spawn("ssh", buildSandboxSshArgs(sandboxName, [
     "-N",
-    "-L", `127.0.0.1:${port}:127.0.0.1:${REMOTE_DASHBOARD_PORT}`,
+    "-L", `127.0.0.1:${port}:127.0.0.1:${remotePort}`,
   ]), {
     detached: true,
     env: process.env,
@@ -164,8 +197,9 @@ function randomId() {
 }
 
 class GatewayClient {
-  constructor({ url, token, sessionKey }) {
+  constructor({ url, token, sessionKey, origin }) {
     this.url = url
+    this.origin = origin
     this.token = token
     this.sessionKey = sessionKey
     this.ws = null
@@ -174,7 +208,7 @@ class GatewayClient {
 
   async connect() {
     this.ws = new WebSocket(this.url, {
-      headers: { origin: CONTROL_UI_ORIGIN },
+      headers: { origin: this.origin },
     })
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error(`OpenClaw websocket connect timed out after ${CONNECT_TIMEOUT_MS}ms`)), CONNECT_TIMEOUT_MS)
@@ -293,8 +327,13 @@ async function main() {
   const message = buildOpenClawMessage(payload)
   if (!message) throw new Error("message text is required")
 
+  const sandbox = await inspectSandbox(sandboxName)
+  if (!sandbox.openclaw) {
+    throw new Error(`${sandboxName} is not an OpenClaw sandbox; the OpenClaw chat dispatcher cannot deliver to it (its own isc.py listener handles inter-sandbox messages)`)
+  }
+
   const port = getDashboardPort(sandboxName)
-  const tunnelReady = await ensureDashboardTunnel(sandboxName, port)
+  const tunnelReady = await ensureDashboardTunnel(sandboxName, port, sandbox.remotePort)
   if (!tunnelReady) throw new Error(`OpenClaw dashboard tunnel did not become ready on 127.0.0.1:${port}`)
 
   const token = await readGatewayToken(sandboxName)
@@ -302,6 +341,7 @@ async function main() {
     url: `ws://127.0.0.1:${port}/`,
     token,
     sessionKey: SESSION_KEY,
+    origin: CONTROL_UI_ORIGIN_OVERRIDE || `http://127.0.0.1:${sandbox.remotePort}`,
   })
 
   try {

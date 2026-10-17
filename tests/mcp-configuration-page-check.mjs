@@ -131,7 +131,10 @@ assert.match(interSandboxChatSidecarSource, /mcp-broker-sessions\.json/, 'Inter-
 assert.match(interSandboxChatSidecarSource, /INTER_SANDBOX_CHAT_DISPATCH_COMMAND/, 'Inter-Sandbox Chat sidecar must use an explicit dispatch command hook')
 assert.match(interSandboxChatSidecarSource, /inter-sandbox-chat-openclaw-dispatch\.mjs/, 'Inter-Sandbox Chat sidecar must default to the built-in OpenClaw chat dispatch adapter')
 assert.match(interSandboxChatSidecarSource, /claimOperatorMessages/, 'Inter-Sandbox Chat sidecar must claim targeted operator messages')
-assert.match(interSandboxChatSidecarSource, /RELAY_SANDBOX_MESSAGES/, 'Inter-Sandbox Chat sidecar must relay targeted sandbox-to-sandbox messages')
+assert.match(interSandboxChatSidecarSource, /RELAY_SANDBOX_MESSAGES/, 'Inter-Sandbox Chat sidecar must keep the opt-in relay of targeted sandbox-to-sandbox messages')
+// Fork, 2026-10-17: relay is opt-in. isc.py listeners deliver sandbox messages;
+// relaying them too double-delivers and auto-replies without a loop guard.
+assert.match(interSandboxChatSidecarSource, /INTER_SANDBOX_CHAT_SIDECAR_RELAY_SANDBOX_MESSAGES, false\)/, 'Inter-Sandbox Chat sidecar must not relay sandbox-to-sandbox messages by default (isc.py listeners deliver them)')
 assert.match(interSandboxChatSidecarSource, /SANDBOX_RELAY_LATEST_ONLY/, 'Inter-Sandbox Chat sidecar must be able to send only the latest sandbox chat message')
 assert.match(interSandboxChatSidecarSource, /ackChatMessage/, 'Inter-Sandbox Chat sidecar must write received, processed, and failed receipts')
 assert.match(interSandboxChatSidecarSource, /recordChatMessageReceipt/, 'Inter-Sandbox Chat sidecar must record delivery receipts for sandbox-originated messages without operator acks')
@@ -142,7 +145,13 @@ assert.match(interSandboxChatOpenClawDispatchSource, /WebSocket/, 'Inter-Sandbox
 assert.match(interSandboxChatOpenClawDispatchSource, /openclaw\.json/, 'Inter-Sandbox Chat OpenClaw dispatch must read the sandbox gateway token from OpenClaw config')
 assert.match(interSandboxChatOpenClawDispatchSource, /ssh-proxy/, 'Inter-Sandbox Chat OpenClaw dispatch must route through the OpenShell sandbox SSH proxy')
 assert.match(interSandboxChatOpenClawDispatchSource, /OPENCLAW_SANDBOX_DASHBOARD_PORT_BASE/, 'Inter-Sandbox Chat OpenClaw dispatch must share controller sandbox dashboard port mapping')
-assert.match(interSandboxChatOpenClawDispatchSource, /NEMOCLAW_BIN[\s\S]*\["sandbox", "gateway", "restart", sandboxName\]/, 'Inter-Sandbox Chat dashboard recovery must use NemoClaw native agent lifecycle')
+// Fork, 2026-10-17: the dispatcher must never restart an agent gateway (it did
+// so on every relayed message on a sandbox whose gateway was not on 18789), and
+// must target the sandbox's own gateway port rather than a 18789 constant.
+assert.doesNotMatch(interSandboxChatOpenClawDispatchSource, /"gateway", "restart"/, 'Inter-Sandbox Chat dispatch must never restart an agent gateway')
+assert.match(interSandboxChatOpenClawDispatchSource, /OPENCLAW_GATEWAY_PORT/, 'Inter-Sandbox Chat dispatch must read the sandbox gateway port NemoClaw allocated')
+assert.doesNotMatch(interSandboxChatOpenClawDispatchSource, /\|\| "18789"/, 'Inter-Sandbox Chat dispatch must not assume gateway port 18789')
+assert.match(interSandboxChatOpenClawDispatchSource, /if \(await tunnelAnswers\(port\)\) return true\s*await closeTunnel\(port\)/, 'Inter-Sandbox Chat dispatch must replace a tunnel that no longer reaches the gateway')
 assert.doesNotMatch(interSandboxChatOpenClawDispatchSource, /\/usr\/local\/bin\/openclaw gateway run/, 'Inter-Sandbox Chat must not manually launch OpenClaw in a managed sandbox')
 assert.match(serverSource, /inter-sandbox-chat-sidecar\.mjs/, 'OpenShell controller must start the Inter-Sandbox Chat sidecar with the server')
 assert.match(serverSource, /INTER_SANDBOX_CHAT_SIDECAR_AUTOSTART/, 'OpenShell controller must let operators disable the chat sidecar autostart')

@@ -591,10 +591,10 @@ INTER_SANDBOX_CHAT_OPENCLAW_SESSION_KEY=inter-sandbox-chat
 
 The built-in OpenClaw adapter uses the same sandbox dashboard tunnel mapping as the controller, reads the gateway token from `/sandbox/.openclaw/openclaw.json`, and sends `chat.send` to the configured session. Set `INTER_SANDBOX_CHAT_OPENCLAW_RAW_MESSAGE=1` if you do not want the adapter to wrap chat-room metadata around the operator text.
 
-Sandbox-to-sandbox messages can use the same delivery path without loading a whole room into context. `post_message` accepts optional `targetSandboxIds`, `targetSandboxNames`, and `targetAgentIds`; the sidecar relays targeted sandbox-originated messages into each target sandbox's OpenClaw chat. By default it sends only the newest matching sandbox message per target/room poll:
+Sandbox-to-sandbox messages are delivered by each sandbox's own `isc.py` listener (see `skills/inter-sandbox-mcp-comms.md`), so in this fork the sidecar does **not** relay them by default. Relaying them as well would deliver every message twice and post replies without `isc.py`'s loop guard. On a host whose sandboxes do not run `isc.py` listeners you can opt in; `post_message` accepts optional `targetSandboxIds`, `targetSandboxNames`, and `targetAgentIds`, and the sidecar then relays targeted sandbox-originated messages into each target sandbox's OpenClaw chat, sending only the newest matching message per target/room poll:
 
 ```bash
-INTER_SANDBOX_CHAT_SIDECAR_RELAY_SANDBOX_MESSAGES=true
+INTER_SANDBOX_CHAT_SIDECAR_RELAY_SANDBOX_MESSAGES=true   # default false in this fork
 INTER_SANDBOX_CHAT_SIDECAR_SANDBOX_LATEST_ONLY=true
 ```
 

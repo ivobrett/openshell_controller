@@ -516,3 +516,59 @@ unless a manifest `expected_version` moved.
   still works on the stopped container). Delete + recreate through the
   controller, restore data, and patch nothing else until sandboxes are
   green again.
+
+## Execution record — 2026-10-17 (NemoClaw hand-patched v0.0.130 → v0.0.135)
+
+Oracle box (130.61.64.124), 2 live sandboxes (`ivos-openclaw` OpenClaw
+2026.9.2, `ivos-hermes` Hermes 0.21.3), OpenShell already 0.0.116 (= the
+pin). **Outcome: success with zero container restarts** — both containers
+kept their 7-day uptimes, both agents answered before and after, Hermes
+Remote Desktop and Telegram stayed up. Same day the gateway route moved to
+`nvidia/nemotron-3.5-super-vl-120b-a12b` (`openshell inference set`, plus
+`NEMOCLAW_MODEL` in the controller `.env.local`) because NVIDIA's
+nemotron-3-ultra stopped answering.
+
+Three new traps, all hit for real:
+
+1. **A leftover `stopped: true` in `sandboxes.json` makes the installer STOP
+   a running sandbox.** `upgrade-sandboxes --check` reported
+   `ivos-openclaw  Ready with retained stopped intent` (left by the
+   2026-10-09 manual restore's `nemoclaw <name> stop`). In `--auto` mode —
+   which install.sh runs — v0.0.135 "reconciles" that by calling
+   `stopSandbox` without asking (`src/lib/actions/upgrade-sandboxes.ts`).
+   Fix before the installer: back up `~/.nemoclaw/sandboxes.json`, set the
+   row's `stopped` to `false`, re-run `--check` until it prints "All
+   sandboxes are up to date".
+2. **v0.0.135 rejects the shims v0.0.130 wrote**: "Installation stopped
+   because /root/.local/bin/nemoclaw-acp already exists and is not a
+   NemoClaw-managed shim". Move the old file aside; the installer
+   republishes it. Stops before anything else happens.
+3. **The strict pre-upgrade backup now runs with the NEW CLI**
+   ("Preparing current NemoClaw CLI for pre-upgrade backup" builds the new
+   checkout first), so the v0.0.131+ whole-home capture applies and refuses
+   any long-running agent: `credential-bearing or uninspectable content at
+   './.hermes/runtime/state.db'` / `'./.inter-sandbox/telegram_bot_token'`.
+   It cannot pass without deleting live state. By then the global CLI
+   already points at the new checkout (the wrapper's `rm -rf` + re-clone
+   happened). What was done, with the operator's explicit approval, because
+   nothing would be recreated (OpenShell unchanged, `--check` all up to
+   date) and a full `docker cp` copy existed: in the prepared
+   `/opt/nemoclaw-src/scripts/install.sh`, turn the single
+   `error "Pre-upgrade backup stopped the installer…"` (inside
+   `preinstall_backup_and_retire_legacy_gateway`) into a `warn`, run
+   `./install.sh` from the checkout directly (the wrapper would re-clone and
+   undo it) with the wrapper's env (`NEMOCLAW_INSTALL_REF/TAG`,
+   `NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1`, `NEMOCLAW_NON_INTERACTIVE=1`,
+   `NEMOCLAW_EXPERIMENTAL=1`, `NEMOCLAW_PROVIDER=build`, NVIDIA keys), restore
+   the stock file, then run the wrapper's last step by hand (`docker build -f
+   Dockerfile.base -t ghcr.io/nvidia/nemoclaw/sandbox-base:latest
+   --build-arg OPENCLAW_VERSION=…`). With the upstream `openshell-gateway`
+   user service present, install.sh only logs "gateway user service is
+   staged" and does not restart it; with pre-existing sandboxes it skips
+   onboarding. **Never do this when a sandbox is stale or OpenShell is
+   changing** — then the backup is the only restore path.
+
+Safety copy taken first (`/root/upgrade-2026-10-17`, 1.6 GB): `docker cp` of
+each `/sandbox`, `~/.nemoclaw` (minus rebuild-backups),
+`~/.local/state/nemoclaw`, `~/.config/openshell`, the old `/opt/nemoclaw-src`,
+the controller `.env.local`, the old shim, every installer log.

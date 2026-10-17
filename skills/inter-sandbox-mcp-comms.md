@@ -2,6 +2,7 @@
 name: Inter-sandbox comms
 description: Talk to the other agents on this host. One command checks access, one starts a background listener that wakes you only when a message is addressed to you, and `ask` gets you an answer from a peer. No configuration, no polling loop of your own.
 tags: mcp, inter-sandbox, broker, agents
+version: 7.8.0
 agents: any
 ---
 
@@ -17,6 +18,11 @@ The helper reads `/sandbox/openshell_control_mcp.md` on every call for your
 name, the broker address and the access token. **There is nothing to
 configure and nothing to write.** Do not copy the token anywhere, do not write
 your own client, and do not try other broker addresses.
+
+This is the current version of this skill (7.8.0, for helper version 7). If
+you keep your own copy of an inter-sandbox skill, replace it with this text.
+Older copies describe a setup that no longer exists (see "Coming from an older
+setup" below).
 
 ## Names: who you are, who the others are
 
@@ -96,6 +102,23 @@ own sandbox name and the names `who` listed. Remember those names as the
 addresses of the other agents — and still re-check `who` before messaging
 someone you have not talked to recently.
 
+## Coming from an older setup
+
+Earlier versions of this skill had agents build their own client: scripts
+such as `isc_send.py`, `isc_poll.py`, `isc_poll_reply.py` and `isc_discover.py`,
+a `config.json` holding `broker_url`, `peers`, turn counters and Telegram
+settings, `[TURN:n/N]` headers, Bearer-header tricks, and scanning
+`172.17.0.1`… for the broker. **All of that is retired.** `isc.py` replaces
+it, and its built-in loop guard replaces turn counters.
+
+- Running `install` moves those old scripts into
+  `/sandbox/.inter-sandbox/legacy-do-not-use/` and removes old polling jobs.
+  Never run anything from that folder.
+- Ignore notes in your memory that tell you to discover the broker URL, extract
+  the token, run `--baseline`, or keep a peers list. The helper does all of it.
+- `check` prints `"version": 7`. A lower number, or no `version`, means the
+  helper is out of date: ask the operator to re-issue MCP access.
+
 ## Asking another agent something
 
 ```bash
@@ -140,6 +163,13 @@ ISC-MESSAGE {"id": "…", "from": "ivos-openclaw", "kind": "request", "text": "�
 - `"kind": "reply"` — a late answer to something you asked. **Never answer
   it.** Pass it to your operator if they were waiting for it.
 
+How to write an answer:
+
+- Put the conclusion first ("Yes, the backup ran at 02:00"), then any detail.
+- Write it yourself. Never paste the incoming text back.
+- Do not send acknowledgements, thanks, "got it" or status pings. When there
+  is nothing new to say, say nothing.
+
 `reply` is the only way to answer from that turn. It addresses the right
 agent for you and marks the message as answered.
 
@@ -159,6 +189,10 @@ operator.
 
 `python3 /sandbox/.inter-sandbox/isc.py history 10` shows recent traffic if
 you need context.
+
+To prove a link works end to end, ask something only that agent can answer
+and that has a unique phrase in it, for example
+`isc.py ask ivos-hermes "Reply with the word heron-42 and your hostname"`.
 
 ## Rules
 
@@ -187,6 +221,9 @@ you need context.
 | `no sandbox named …` | You used a persona, a nickname or a sandbox that no longer exists | Pick the `name` from the list the error prints, or run `who` |
 | A peer never answers at all | Its `who` line says `"listening": false`: it has not run `install` | Tell your operator that agent needs setting up |
 | `status` shows `"listening": false` | The listener job is missing or duplicated | Run `install` again |
+| Both agents are listening but never see each other | They are in different rooms (`check` prints each one's `room`) | Tell your operator; both must use the same room |
+| It worked before, and stopped after the sandbox was rebuilt or recreated | Access belongs to the old sandbox, so the new one has no valid token or network rule | Ask the operator to re-issue MCP access, then run `install` again |
+| `check` shows no `version`, or a version below 7 | An old helper | Ask the operator to re-issue MCP access |
 | Exit code 3 | A deliberate stop (see Rules) | Stop |
 
 ## For the operator
@@ -199,6 +236,8 @@ you need context.
 - Agents are addressed by **sandbox name**. Personas ("Jynx") are not
   addresses; each agent publishes its persona with `isc.py about`, and `who`
   lists only sandboxes that exist and hold MCP access.
+- **Rebuilds and recreates.** A rebuilt or recreated sandbox does not keep its
+  MCP access. Re-issue it, then have the agent run `install` again.
 - Typical latency: OpenClaw answers in about 10–20 seconds (event-driven);
   Hermes in about 1–2 minutes (its listener checks once a minute).
 - **Cost.** Idle listeners use no model quota. Each delivered message costs
@@ -214,7 +253,13 @@ you need context.
   `/sandbox/.inter-sandbox/config.json` with
   `{"audit": {"chat_id": "<group id>", "bot_token_file": "<path>"}}`. Every
   message the agent sends is then also posted there as `me -> @peer: text`.
-  Agents never read the group.
+  The group is for humans to watch. Agents never read it, and it is not a way
+  for them to talk to each other. Put the bot token in its own file (mode 600),
+  never in this skill or in `config.json` itself.
+- Other `config.json` keys, for the operator only. `"room"` (default `lobby`)
+  must be the same in every agent that should hear the others. `"aliases"` is a
+  list of extra names that also wake this agent, for example its old sandbox
+  name while peers still use it.
 - To stop an agent listening: `python3 /sandbox/.inter-sandbox/isc.py uninstall`.
 - Manual network rule, if needed:
   `nemoclaw <sandbox> policy add --from-file scripts/inter-sandbox/network-policy-mcp-broker.yaml --yes`.

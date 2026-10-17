@@ -76,4 +76,19 @@ assert.doesNotMatch(
   'the readiness curl must not target the hardcoded constant port',
 )
 
+
+// 2026-10-17: an existing tunnel listener must be probed before it is reused.
+// A tunnel left pointing at a dead in-sandbox port kept listening on the host,
+// so the controller reused it forever and every open failed with "fetch failed".
+assert.match(
+  source,
+  /if \(initial\.listenerPresent\) \{\s*if \(await sandboxDashboardTunnelAnswers\(port\)\) return initial\s*await closeSandboxDashboardTunnel\(port\)\s*forgetSandboxGatewayPort\(sandboxName\)/,
+  'ensureSandboxOpenClawDashboardTunnel must probe an existing tunnel and replace it (and forget the cached port) when it does not answer',
+)
+assert.match(
+  source,
+  /pkill -f -- '\[-\]L 127/,
+  'closeSandboxDashboardTunnel must only kill our own ssh -L forwards, with a pattern that does not match its own bash',
+)
+
 console.log('openclaw-dashboard-sandbox-port-check: OK')

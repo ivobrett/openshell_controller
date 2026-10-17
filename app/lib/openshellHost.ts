@@ -534,12 +534,48 @@ async function ensureRemoteSandboxOpenClawDashboard(sandboxName: string, remoteP
   return false
 }
 
+// FORK FIX 2026-10-17 — a listening tunnel is not necessarily a working one.
+// The ssh -L forward keeps listening on the host even when its far end is
+// dead, and we used to reuse any listener as-is. On the Oracle box a tunnel
+// opened during a NemoClaw upgrade (port read timed out -> fallback 18789)
+// pointed at a port nothing listened on inside the sandbox (the gateway was on
+// 18790), so every /dashboard/open failed with "fetch failed" until someone
+// killed the ssh process by hand. Probe through the tunnel; any HTTP answer
+// means it reaches the gateway, a connection error means it must be replaced.
+async function sandboxDashboardTunnelAnswers(port: number) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
+    await response.body?.cancel().catch(() => {})
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function closeSandboxDashboardTunnel(port: number) {
+  // Only our own `ssh -N -L 127.0.0.1:<port>:127.0.0.1:<remote>` forwards.
+  // The [-] keeps the pattern from matching the bash that runs pkill.
+  await execBash(`pkill -f -- '[-]L 127\\.0\\.0\\.1:${port}:127\\.0\\.0\\.1:' || true`)
+  const deadline = Date.now() + 5000
+  while ((await inspectListeningPort(port)).listenerPresent && Date.now() < deadline) {
+    await sleep(250)
+  }
+}
+
 async function ensureSandboxOpenClawDashboardTunnel(sandboxName: string) {
   const port = getOpenClawDashboardPortForSandbox(sandboxName)
   if (!port) return inspectListeningPort(SANDBOX_DASHBOARD_REMOTE_PORT)
 
-  const initial = await inspectListeningPort(port)
-  if (initial.listenerPresent) return initial
+  let initial = await inspectListeningPort(port)
+  if (initial.listenerPresent) {
+    if (await sandboxDashboardTunnelAnswers(port)) return initial
+    await closeSandboxDashboardTunnel(port)
+    forgetSandboxGatewayPort(sandboxName)
+    initial = await inspectListeningPort(port)
+  }
 
   const remotePort = await resolveSandboxGatewayPort(sandboxName)
   if (!await ensureRemoteSandboxOpenClawDashboard(sandboxName, remotePort)) return initial

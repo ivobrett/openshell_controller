@@ -16,7 +16,7 @@ import { useInventory, useActivity, usePermissionFeeds } from "@/app/hooks/queri
 import { loadDismissedPermissionAlerts } from "@/app/lib/permissionAlerts"
 import { relativeTime } from "@/app/lib/format"
 import { useAuth } from "@/app/components/providers/AuthProvider"
-import { createHydrationSafeDashboardSessionState, loadDashboardSessionState } from "@/app/lib/dashboardSession"
+import { buildOperatorTerminalRoute, createHydrationSafeDashboardSessionState, loadDashboardSessionState } from "@/app/lib/dashboardSession"
 
 const TELEMETRY_BAR_ENABLED_KEY = "openshell-control.telemetry-bar-enabled"
 
@@ -99,10 +99,21 @@ export default function DashboardPage() {
         title="Sandboxes"
         description={headerDesc}
         actions={
-          can("createSandbox") ? (
-            <Button asChild>
-              <Link href="/sandboxes/new">New sandbox</Link>
-            </Button>
+          can("createSandbox") || me.role === "operator" ? (
+            <div className="flex items-center gap-2">
+              {/* A shell on the VPS itself (terminal-server host mode), so
+                  operator-only: OAuth users are refused it server-side too. */}
+              {me.role === "operator" && (
+                <Button asChild variant="outline">
+                  <Link href={buildOperatorTerminalRoute({ dashboardSessionId })}>VPS terminal</Link>
+                </Button>
+              )}
+              {can("createSandbox") && (
+                <Button asChild>
+                  <Link href="/sandboxes/new">New sandbox</Link>
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />

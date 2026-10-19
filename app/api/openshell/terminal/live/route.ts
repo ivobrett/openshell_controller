@@ -111,7 +111,9 @@ export async function POST(request: Request) {
     // client-supplied value in other paths) so trusting it here is safe.
     const idpUser = request.headers.get('x-forwarded-user')?.trim().toLowerCase()
     if (idpUser) {
-      if (!sandboxId || !isUserAuthorizedForSandbox(idpUser, sandboxId)) {
+      // 'host' is the terminal server's VPS-shell mode, never a sandbox an
+      // OAuth user can be granted (even if a sandbox were named 'host').
+      if (!sandboxId || sandboxId === 'host' || !isUserAuthorizedForSandbox(idpUser, sandboxId)) {
         return NextResponse.json(
           { ok: false, error: `Forbidden: no access to sandbox ${sandboxId || '(none)'}` },
           { status: 403 },

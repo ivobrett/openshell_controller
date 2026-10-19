@@ -434,6 +434,28 @@ async function resolveSourceDockerImage(sandboxName: string): Promise<string | n
   }
 }
 
+// A source container whose image lost its tag (e.g. NemoClaw re-tagged a newer
+// build, leaving `ghcr.io/nvidia/nemoclaw/openclaw-sandbox:<none>`) reports a
+// bare image ID from `docker ps`. OpenShell's Docker driver treats `--from
+// 6315265961ef` as a registry name, tries to pull it and the sandbox goes
+// straight to Error ("pull Docker image failed ... denied"). Give the image a
+// local tag in the same `nemoclaw-sandbox-local:` namespace NemoClaw's own
+// local builds use, which OpenShell resolves without a pull.
+const BARE_IMAGE_ID = /^(?:sha256:)?[0-9a-f]{12,64}$/i
+
+function quickDeployLocalImageTag(sourceName: string, imageId: string) {
+  const short = imageId.replace(/^sha256:/i, "").slice(0, 12).toLowerCase()
+  return `nemoclaw-sandbox-local:quickdeploy-${sourceName}-${short}`
+}
+
+async function ensureNamedSourceImage(sourceName: string, image: string): Promise<string> {
+  if (!BARE_IMAGE_ID.test(image)) return image
+  const tag = quickDeployLocalImageTag(sourceName, image)
+  await execFileAsync(DOCKER_BIN, ["tag", image, tag], { env: hostCommandEnv(), timeout: 30000 })
+  console.log(`[sandbox/create] quick-deploy:tagged-untagged-source source=${sourceName} image=${image} tag=${tag}`)
+  return tag
+}
+
 async function resolveSourcePodImageFromRef(sourceSandboxRef: string) {
   const requested = sourceSandboxRef.trim()
   const source = await resolveSandboxRef(requested)
@@ -451,7 +473,7 @@ async function resolveSourcePodImageFromRef(sourceSandboxRef: string) {
     requested,
     name: sourceName,
     id: source.id,
-    image: sourceImage,
+    image: await ensureNamedSourceImage(sourceName, sourceImage),
   }
 }
 

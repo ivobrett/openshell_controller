@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { NextResponse } from "next/server"
 import { execFile, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
@@ -563,7 +564,29 @@ async function exportSandboxPolicyToFile(sourceSandboxName: string): Promise<str
   )
 }
 
-function registerNemoClawImageRedeploy(sourceName: string, sandboxName: string) {
+// NemoClaw's lifecycle commands (`nemoclaw <name> stop|start`) refuse a sandbox
+// whose registry `lifecycleLiveIdentityFingerprint` doesn't match the live
+// OpenShell sandbox: "OpenShell sandbox identity changed". The fingerprint is
+// sha256(<OpenShell sandbox id>) -- NemoClaw's fingerprintOpenShellSandboxId.
+// Copying the SOURCE entry gave every Quick Deploy clone the source's
+// fingerprint; on Oracle (2026-10-19) `nemoclaw ivos-openclaw-next stop` then
+// stopped the in-sandbox gateway, refused the OpenShell stop, and the sandbox
+// fell into OpenShell's sticky Error phase.
+async function readLiveSandboxIdentityFingerprint(sandboxName: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(OPENSHELL_BIN, ["sandbox", "get", sandboxName, "--output", "json"], {
+      env: hostCommandEnv({ OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw" }),
+      timeout: 15000,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    const id = JSON.parse(String(stdout))?.id
+    return typeof id === "string" && id ? createHash("sha256").update(id).digest("hex") : null
+  } catch {
+    return null
+  }
+}
+
+function registerNemoClawImageRedeploy(sourceName: string, sandboxName: string, liveIdentityFingerprint: string | null) {
   try {
     const current = existsSync(NEMOCLAW_REGISTRY_FILE)
       ? JSON.parse(readFileSync(NEMOCLAW_REGISTRY_FILE, "utf8"))
@@ -575,13 +598,20 @@ function registerNemoClawImageRedeploy(sourceName: string, sandboxName: string) 
       ? sandboxes[sourceName]
       : { name: sourceName }
 
+    // Never inherit the source's lifecycle identity (see above). Without a
+    // live fingerprint the field is dropped: NemoClaw then refuses lifecycle
+    // commands up front instead of half-running them against the wrong sandbox.
+    const inheritable = { ...sourceEntry }
+    delete inheritable.lifecycleLiveIdentityFingerprint
     sandboxes[sandboxName] = {
-      ...sourceEntry,
+      ...inheritable,
       name: sandboxName,
       createdAt: new Date().toISOString(),
       nimContainer: null,
       policies: [],
       imageTag: null,
+      stopped: false,
+      ...(liveIdentityFingerprint ? { lifecycleLiveIdentityFingerprint: liveIdentityFingerprint } : {}),
     }
 
     const next = {
@@ -1764,7 +1794,7 @@ export async function POST(request: Request) {
         error: "Sandbox readiness polling produced no verification result.",
       }
       const created = readiness.verified
-      const registry = (created && !isCustomAgent) ? registerNemoClawImageRedeploy(source.name, sandboxName) : null
+      const registry = (created && !isCustomAgent) ? registerNemoClawImageRedeploy(source.name, sandboxName, await readLiveSandboxIdentityFingerprint(sandboxName)) : null
       const sourceAgent: QuickDeployAgent = (() => {
         const map = readNemoClawRegistry().sandboxes ?? {}
         const entry = (map[source.name] ?? map[source.id ?? ""]) as { agent?: string } | undefined

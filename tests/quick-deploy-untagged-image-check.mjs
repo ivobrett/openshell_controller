@@ -50,3 +50,14 @@ assert.match(panel, /sourceSandboxName, sourceImage \}\)/, 'Quick Deploy form mu
 assert.match(panel, /Source sandbox&apos;s running image \(default\)/)
 
 console.log('quick-deploy saved-image check: ok')
+
+// Quick Deploy clones must carry their OWN NemoClaw lifecycle identity
+// (sha256 of the new OpenShell sandbox id), never the source's.
+const reg = src.match(/function registerNemoClawImageRedeploy[\s\S]*?\n}\n/)
+assert.ok(reg, 'registerNemoClawImageRedeploy not found')
+assert.match(reg[0], /delete inheritable\.lifecycleLiveIdentityFingerprint/, 'source identity fingerprint must not be inherited')
+assert.match(reg[0], /\.\.\.inheritable,/)
+assert.doesNotMatch(reg[0], /\.\.\.sourceEntry,/, 'spreading the raw source entry re-introduces the identity bug')
+assert.match(src, /createHash\("sha256"\)\.update\(id\)\.digest\("hex"\)/, 'fingerprint = sha256(OpenShell sandbox id), as NemoClaw computes it')
+assert.match(src, /registerNemoClawImageRedeploy\(source\.name, sandboxName, await readLiveSandboxIdentityFingerprint\(sandboxName\)\)/)
+console.log('quick-deploy registry identity check: ok')

@@ -296,6 +296,20 @@ function bootstrapScriptResponse(proxyPrefix: string) {
     const serializedSettings = JSON.stringify(settings);
     window.localStorage.setItem(settingsKey, serializedSettings);
     for (const key of settingsKeys) window.localStorage.setItem(key, serializedSettings);
+    // ── FORK BEGIN: consume the launch hash's gatewayUrl (OpenClaw >= 2026.10) ──
+    // OpenClaw 2026.10 compares the launch hash's gatewayUrl with the stored
+    // settings.gatewayUrl as strings, and the stored one carries ?token=, so
+    // every open showed "Switch to a different Gateway?" for our own proxy.
+    // The value is now in settings (above), so drop it from the address bar
+    // and leave everything else (token carriers, cookie-wins) unchanged.
+    try {
+      if (hashParams.has('gatewayUrl')) {
+        hashParams.delete('gatewayUrl');
+        const remainingHash = hashParams.toString();
+        window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + (remainingHash ? '#' + remainingHash : ''));
+      }
+    } catch {}
+    // ── FORK END ──
     window.sessionStorage.removeItem(tokenKey);
     // ── FORK BEGIN: BYOVPS sessionStorage token-scope cleanup (#2478) ──
     // See CLAUDE.md §3 conflict table + §11 token architecture. The SPA

@@ -456,6 +456,38 @@ async function ensureNamedSourceImage(sourceName: string, image: string): Promis
   return tag
 }
 
+// Quick Deploy can also start from a saved local image instead of the source
+// sandbox's running one -- e.g. an OpenClaw upgraded in a throwaway clone and
+// `docker commit`-ed (Oracle, 2026-10-19). Only NemoClaw's local namespace is
+// accepted, so this can never make OpenShell pull from a registry.
+const LOCAL_SANDBOX_IMAGE_REF = /^nemoclaw-sandbox-local:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+async function listLocalSandboxImages(): Promise<Array<{ ref: string; created: string; size: string }>> {
+  try {
+    const { stdout } = await execFileAsync(DOCKER_BIN, [
+      "images", "--filter", "reference=nemoclaw-sandbox-local",
+      "--format", "{{.Repository}}:{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}",
+    ], { env: hostCommandEnv(), timeout: 10000, maxBuffer: 1024 * 1024 })
+    return String(stdout).trim().split(/\r?\n/).filter(Boolean)
+      .map((line) => { const [ref, created, size] = line.split("\t"); return { ref, created, size } })
+      .filter((image) => LOCAL_SANDBOX_IMAGE_REF.test(image.ref))
+  } catch {
+    return []
+  }
+}
+
+async function validateRequestedSourceImage(image: string): Promise<string> {
+  if (!LOCAL_SANDBOX_IMAGE_REF.test(image)) {
+    throw new Error(`Quick Deploy image must be a local nemoclaw-sandbox-local:<tag> image, got '${image}'.`)
+  }
+  try {
+    await execFileAsync(DOCKER_BIN, ["image", "inspect", "--format", "{{.Id}}", image], { env: hostCommandEnv(), timeout: 10000 })
+  } catch {
+    throw new Error(`Quick Deploy image '${image}' was not found on this host.`)
+  }
+  return image
+}
+
 async function resolveSourcePodImageFromRef(sourceSandboxRef: string) {
   const requested = sourceSandboxRef.trim()
   const source = await resolveSandboxRef(requested)
@@ -1178,6 +1210,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     baselineSandboxes: baselineStatus,
+    localImages: await listLocalSandboxImages(),
     blueprints: [
       {
         id: "nemoclaw-blueprint",
@@ -1659,7 +1692,20 @@ export async function POST(request: Request) {
         requestedAgentRaw === "custom" ? "custom" : null
       const imageMap = await readSandboxContainerImageMap()
       const source = await resolveSourcePodImage(sourceSandboxName, sandboxName, requestedAgent, imageMap)
-      const sourceImage = source.image
+      const requestedSourceImage = typeof body?.sourceImage === "string" ? body.sourceImage.trim() : ""
+      if (requestedSourceImage && requestedAgent !== "openclaw" && requestedAgent !== "hermes") {
+        return NextResponse.json({ ok: false, error: "A saved image can only be used for OpenClaw or Hermes Quick Deploy." }, { status: 400 })
+      }
+      let sourceImage = source.image
+      if (requestedSourceImage) {
+        try {
+          sourceImage = await validateRequestedSourceImage(requestedSourceImage)
+        } catch (error) {
+          return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 400 })
+        }
+        // The policy (and registry entry) still come from the source sandbox.
+        console.log(`[sandbox/create] quick-deploy:saved-image sandbox=${sandboxName} image=${sourceImage} policyFrom=${source.name}`)
+      }
       const isCustomAgent = requestedAgent === "custom"
       // For OpenClaw/Hermes clones, inherit the source's effective policy.
       // Hermes sandboxes need /opt/hermes in the read_only set (which the

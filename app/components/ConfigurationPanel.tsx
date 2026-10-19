@@ -103,6 +103,8 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
   const [enableTailscale, setEnableTailscale] = useState<boolean>(false)
   const [createGpuMode, setCreateGpuMode] = useState<CreateGpuMode>("none")
   const [quickDeployAgent, setQuickDeployAgent] = useState<'openclaw' | 'hermes' | 'custom'>('openclaw')
+  const [localImages, setLocalImages] = useState<Array<{ ref: string; created: string; size: string }>>([])
+  const [quickDeployImage, setQuickDeployImage] = useState<string>('')
   const [useBaseline, setUseBaseline] = useState<boolean>(true)
   const [createInferenceMode, setCreateInferenceMode] = useState<CreateInferenceMode>("auto")
   const [createInferenceModel, setCreateInferenceModel] = useState<string>("")
@@ -116,7 +118,7 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
   useEffect(() => {
     if (mode === 'create') {
       setLoading(false)
-      fetch('/api/sandbox/create', { cache: 'no-store' }).then((res) => res.json()).then((data) => { if (Array.isArray(data?.blueprints)) setBlueprints(data.blueprints) }).catch(() => {})
+      fetch('/api/sandbox/create', { cache: 'no-store' }).then((res) => res.json()).then((data) => { if (Array.isArray(data?.blueprints)) setBlueprints(data.blueprints); if (Array.isArray(data?.localImages)) setLocalImages(data.localImages) }).catch(() => {})
       return
     }
     let active = true
@@ -174,7 +176,8 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
             ? (baselineActive ? freshBlueprintAgent : quickDeployAgent)
             : undefined
         const sourceSandboxName = baselineActive ? freshBaseline?.name : undefined
-        const res = await fetch('/api/sandbox/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blueprint: effectiveBlueprint, sandboxName: sandboxName.trim(), enableTailscale, gpuMode: createGpuMode, createInference, policy: assembledPolicy, preset: selectedPreset || null, agent: effectiveAgent, sourceSandboxName }) })
+        const sourceImage = !baselineActive && effectiveBlueprint === 'redeploy-image' && quickDeployAgent !== 'custom' && quickDeployImage ? quickDeployImage : undefined
+        const res = await fetch('/api/sandbox/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blueprint: effectiveBlueprint, sandboxName: sandboxName.trim(), enableTailscale, gpuMode: createGpuMode, createInference, policy: assembledPolicy, preset: selectedPreset || null, agent: effectiveAgent, sourceSandboxName, sourceImage }) })
         const data = await res.json()
         if (!res.ok) throw new Error([data.error, data.verification?.summary, data.verification?.error, data.stdout, data.stderr].filter(Boolean).join('\n\n'))
         const createdSandboxId = data.verification?.details?.id || data.verification?.details?.name || data.sandboxName
@@ -317,6 +320,18 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
                     <span><span className="block text-xs font-mono uppercase tracking-wider">Custom</span><span className="mt-1 block text-[11px] text-muted-foreground">Clone the most recent Custom sandbox. Bare image, no NemoClaw runtime.</span></span>
                   </label>
                 </div>
+                {quickDeployAgent !== 'custom' && (
+                  <div>
+                    <h6 className="text-xs font-semibold uppercase tracking-wider">Image</h6>
+                    <p className="mt-1 text-xs text-muted-foreground">Use the source sandbox&apos;s running image, or a saved local image (e.g. an upgraded agent). The policy is still copied from the source sandbox.</p>
+                    <select value={quickDeployImage} onChange={(e) => setQuickDeployImage(e.target.value)} className={`mt-2 ${inputCls}`}>
+                      <option value="">Source sandbox&apos;s running image (default)</option>
+                      {localImages.map((image) => (
+                        <option key={image.ref} value={image.ref}>{image.ref} — {image.created}, {image.size}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </Card>
             )}
             {activeBlueprint?.supportsTailscale && (

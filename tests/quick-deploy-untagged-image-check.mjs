@@ -31,3 +31,22 @@ assert.match(src, /\["tag", image, tag\]/, 'ensureNamedSourceImage must docker-t
 assert.match(src, /nemoclaw-sandbox-local:quickdeploy-\$\{sourceName\}-\$\{short\}/)
 
 console.log('quick-deploy-untagged-image-check: ok')
+
+// Saved-image Quick Deploy: only local nemoclaw-sandbox-local:<tag> images, never a registry ref.
+const localRe = src.match(/const LOCAL_SANDBOX_IMAGE_REF = (\/.*\/[a-z]*)\n/)
+assert.ok(localRe, 'LOCAL_SANDBOX_IMAGE_REF not found')
+const LOCAL = eval(localRe[1])
+assert.ok(LOCAL.test('nemoclaw-sandbox-local:openclaw-2026.10.5-from-ivos-openclaw'))
+assert.ok(LOCAL.test('nemoclaw-sandbox-local:quickdeploy-ivos-openclaw-6315265961ef'))
+for (const bad of ['ghcr.io/nvidia/nemoclaw/openclaw-sandbox:latest', 'nemoclaw-sandbox-local', 'nemoclaw-sandbox-local:x;rm -rf /', 'evil.io/nemoclaw-sandbox-local:x', '6315265961ef']) {
+  assert.ok(!LOCAL.test(bad), `${bad} must be rejected as a Quick Deploy image`)
+}
+assert.match(src, /\["image", "inspect", "--format", "\{\{\.Id\}\}", image\]/, 'requested image must be checked to exist locally')
+assert.match(src, /let sourceImage = source\.image\n\s+if \(requestedSourceImage\)/, 'saved image overrides the running image only when requested')
+assert.match(src, /localImages: await listLocalSandboxImages\(\)/, 'GET must list saved images for the UI')
+
+const panel = readFileSync(new URL('../app/components/ConfigurationPanel.tsx', import.meta.url), 'utf8')
+assert.match(panel, /sourceSandboxName, sourceImage \}\)/, 'Quick Deploy form must send sourceImage')
+assert.match(panel, /Source sandbox&apos;s running image \(default\)/)
+
+console.log('quick-deploy saved-image check: ok')

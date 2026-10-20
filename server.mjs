@@ -217,7 +217,8 @@ function isOAuthSandboxUpgradeAuthorized(req) {
   const email = emailFromOAuthPayload(payload)
   if (!email) return false
   const sandboxId = getSandboxIdFromUpgradeUrl(req.url)
-  if (!sandboxId) return false
+  // 'host' is terminal-server's VPS-shell mode: operator-only, never grantable.
+  if (!sandboxId || sandboxId === 'host') return false
   const map = getSandboxAccessMapForServer()
   const authorized = isEmailAuthorizedForSandbox(map, email, sandboxId)
   if (authorized) {

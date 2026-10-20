@@ -18,7 +18,9 @@ C=$(docker ps -a --format '{{.Names}}' | grep -E "^openshell-([a-z0-9][a-z0-9-]*
 [ "$(docker inspect -f '{{.State.Running}}' "$C")" = false ] || { echo "$NAME is running — stop it first: nemoclaw $NAME stop" >&2; exit 1; }
 # The marker must be a 0600 single-link regular file owned by the owner of
 # /sandbox/.openclaw, or nemoclaw-start refuses it and the start fails.
-owner=$(docker export "$C" | tar -tvf - --numeric-owner sandbox/.openclaw/ 2>/dev/null | head -1 | awk '{print $2}')
+# `|| true`: head closes the pipe early; under pipefail the SIGPIPE (141) from
+# docker export/tar would otherwise abort the script here (Oracle, 2026-10-19).
+owner=$(docker export "$C" | tar -tvf - --numeric-owner sandbox/.openclaw/ 2>/dev/null | head -1 | awk '{print $2}' || true)
 uid=${owner%%/*}; gid=${owner##*/}
 [[ "$uid" =~ ^[0-9]+$ ]] || { echo "could not determine the owner of /sandbox/.openclaw" >&2; exit 1; }
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT

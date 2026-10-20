@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { NextResponse } from "next/server"
 import { execFile, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
@@ -434,6 +435,60 @@ async function resolveSourceDockerImage(sandboxName: string): Promise<string | n
   }
 }
 
+// A source container whose image lost its tag (e.g. NemoClaw re-tagged a newer
+// build, leaving `ghcr.io/nvidia/nemoclaw/openclaw-sandbox:<none>`) reports a
+// bare image ID from `docker ps`. OpenShell's Docker driver treats `--from
+// 6315265961ef` as a registry name, tries to pull it and the sandbox goes
+// straight to Error ("pull Docker image failed ... denied"). Give the image a
+// local tag in the same `nemoclaw-sandbox-local:` namespace NemoClaw's own
+// local builds use, which OpenShell resolves without a pull.
+const BARE_IMAGE_ID = /^(?:sha256:)?[0-9a-f]{12,64}$/i
+
+function quickDeployLocalImageTag(sourceName: string, imageId: string) {
+  const short = imageId.replace(/^sha256:/i, "").slice(0, 12).toLowerCase()
+  return `nemoclaw-sandbox-local:quickdeploy-${sourceName}-${short}`
+}
+
+async function ensureNamedSourceImage(sourceName: string, image: string): Promise<string> {
+  if (!BARE_IMAGE_ID.test(image)) return image
+  const tag = quickDeployLocalImageTag(sourceName, image)
+  await execFileAsync(DOCKER_BIN, ["tag", image, tag], { env: hostCommandEnv(), timeout: 30000 })
+  console.log(`[sandbox/create] quick-deploy:tagged-untagged-source source=${sourceName} image=${image} tag=${tag}`)
+  return tag
+}
+
+// Quick Deploy can also start from a saved local image instead of the source
+// sandbox's running one -- e.g. an OpenClaw upgraded in a throwaway clone and
+// `docker commit`-ed (Oracle, 2026-10-19). Only NemoClaw's local namespace is
+// accepted, so this can never make OpenShell pull from a registry.
+const LOCAL_SANDBOX_IMAGE_REF = /^nemoclaw-sandbox-local:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+async function listLocalSandboxImages(): Promise<Array<{ ref: string; created: string; size: string }>> {
+  try {
+    const { stdout } = await execFileAsync(DOCKER_BIN, [
+      "images", "--filter", "reference=nemoclaw-sandbox-local",
+      "--format", "{{.Repository}}:{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}",
+    ], { env: hostCommandEnv(), timeout: 10000, maxBuffer: 1024 * 1024 })
+    return String(stdout).trim().split(/\r?\n/).filter(Boolean)
+      .map((line) => { const [ref, created, size] = line.split("\t"); return { ref, created, size } })
+      .filter((image) => LOCAL_SANDBOX_IMAGE_REF.test(image.ref))
+  } catch {
+    return []
+  }
+}
+
+async function validateRequestedSourceImage(image: string): Promise<string> {
+  if (!LOCAL_SANDBOX_IMAGE_REF.test(image)) {
+    throw new Error(`Quick Deploy image must be a local nemoclaw-sandbox-local:<tag> image, got '${image}'.`)
+  }
+  try {
+    await execFileAsync(DOCKER_BIN, ["image", "inspect", "--format", "{{.Id}}", image], { env: hostCommandEnv(), timeout: 10000 })
+  } catch {
+    throw new Error(`Quick Deploy image '${image}' was not found on this host.`)
+  }
+  return image
+}
+
 async function resolveSourcePodImageFromRef(sourceSandboxRef: string) {
   const requested = sourceSandboxRef.trim()
   const source = await resolveSandboxRef(requested)
@@ -451,7 +506,7 @@ async function resolveSourcePodImageFromRef(sourceSandboxRef: string) {
     requested,
     name: sourceName,
     id: source.id,
-    image: sourceImage,
+    image: await ensureNamedSourceImage(sourceName, sourceImage),
   }
 }
 
@@ -509,7 +564,29 @@ async function exportSandboxPolicyToFile(sourceSandboxName: string): Promise<str
   )
 }
 
-function registerNemoClawImageRedeploy(sourceName: string, sandboxName: string) {
+// NemoClaw's lifecycle commands (`nemoclaw <name> stop|start`) refuse a sandbox
+// whose registry `lifecycleLiveIdentityFingerprint` doesn't match the live
+// OpenShell sandbox: "OpenShell sandbox identity changed". The fingerprint is
+// sha256(<OpenShell sandbox id>) -- NemoClaw's fingerprintOpenShellSandboxId.
+// Copying the SOURCE entry gave every Quick Deploy clone the source's
+// fingerprint; on Oracle (2026-10-19) `nemoclaw ivos-openclaw-next stop` then
+// stopped the in-sandbox gateway, refused the OpenShell stop, and the sandbox
+// fell into OpenShell's sticky Error phase.
+async function readLiveSandboxIdentityFingerprint(sandboxName: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(OPENSHELL_BIN, ["sandbox", "get", sandboxName, "--output", "json"], {
+      env: hostCommandEnv({ OPENSHELL_GATEWAY: process.env.OPENSHELL_GATEWAY || "nemoclaw" }),
+      timeout: 15000,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    const id = JSON.parse(String(stdout))?.id
+    return typeof id === "string" && id ? createHash("sha256").update(id).digest("hex") : null
+  } catch {
+    return null
+  }
+}
+
+function registerNemoClawImageRedeploy(sourceName: string, sandboxName: string, liveIdentityFingerprint: string | null) {
   try {
     const current = existsSync(NEMOCLAW_REGISTRY_FILE)
       ? JSON.parse(readFileSync(NEMOCLAW_REGISTRY_FILE, "utf8"))
@@ -521,13 +598,20 @@ function registerNemoClawImageRedeploy(sourceName: string, sandboxName: string) 
       ? sandboxes[sourceName]
       : { name: sourceName }
 
+    // Never inherit the source's lifecycle identity (see above). Without a
+    // live fingerprint the field is dropped: NemoClaw then refuses lifecycle
+    // commands up front instead of half-running them against the wrong sandbox.
+    const inheritable = { ...sourceEntry }
+    delete inheritable.lifecycleLiveIdentityFingerprint
     sandboxes[sandboxName] = {
-      ...sourceEntry,
+      ...inheritable,
       name: sandboxName,
       createdAt: new Date().toISOString(),
       nimContainer: null,
       policies: [],
       imageTag: null,
+      stopped: false,
+      ...(liveIdentityFingerprint ? { lifecycleLiveIdentityFingerprint: liveIdentityFingerprint } : {}),
     }
 
     const next = {
@@ -1156,6 +1240,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     baselineSandboxes: baselineStatus,
+    localImages: await listLocalSandboxImages(),
     blueprints: [
       {
         id: "nemoclaw-blueprint",
@@ -1637,7 +1722,20 @@ export async function POST(request: Request) {
         requestedAgentRaw === "custom" ? "custom" : null
       const imageMap = await readSandboxContainerImageMap()
       const source = await resolveSourcePodImage(sourceSandboxName, sandboxName, requestedAgent, imageMap)
-      const sourceImage = source.image
+      const requestedSourceImage = typeof body?.sourceImage === "string" ? body.sourceImage.trim() : ""
+      if (requestedSourceImage && requestedAgent !== "openclaw" && requestedAgent !== "hermes") {
+        return NextResponse.json({ ok: false, error: "A saved image can only be used for OpenClaw or Hermes Quick Deploy." }, { status: 400 })
+      }
+      let sourceImage = source.image
+      if (requestedSourceImage) {
+        try {
+          sourceImage = await validateRequestedSourceImage(requestedSourceImage)
+        } catch (error) {
+          return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 400 })
+        }
+        // The policy (and registry entry) still come from the source sandbox.
+        console.log(`[sandbox/create] quick-deploy:saved-image sandbox=${sandboxName} image=${sourceImage} policyFrom=${source.name}`)
+      }
       const isCustomAgent = requestedAgent === "custom"
       // For OpenClaw/Hermes clones, inherit the source's effective policy.
       // Hermes sandboxes need /opt/hermes in the read_only set (which the
@@ -1696,7 +1794,7 @@ export async function POST(request: Request) {
         error: "Sandbox readiness polling produced no verification result.",
       }
       const created = readiness.verified
-      const registry = (created && !isCustomAgent) ? registerNemoClawImageRedeploy(source.name, sandboxName) : null
+      const registry = (created && !isCustomAgent) ? registerNemoClawImageRedeploy(source.name, sandboxName, await readLiveSandboxIdentityFingerprint(sandboxName)) : null
       const sourceAgent: QuickDeployAgent = (() => {
         const map = readNemoClawRegistry().sandboxes ?? {}
         const entry = (map[source.name] ?? map[source.id ?? ""]) as { agent?: string } | undefined

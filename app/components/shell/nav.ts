@@ -1,6 +1,6 @@
 import type { Capabilities } from "@/app/api/auth/me/route"
 import {
-  LayoutDashboard, Plus, ScrollText, BookOpen, Cpu, Plug, Sparkles, KeyRound, CircleHelp,
+  LayoutDashboard, Plus, ScrollText, BookOpen, Cpu, Plug, Sparkles, KeyRound, CircleHelp, SquareTerminal,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -22,6 +22,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/wizards",      label: "Wizards",      icon: Sparkles,          cap: "viewWizards" },
   { href: "/security",     label: "Security",     icon: KeyRound },
   { href: "/help",         label: "Help",         icon: CircleHelp,        mobileTab: true },
+  // Shell on the VPS itself (terminal-server host mode); operator-only.
+  { href: "/operator-terminal", label: "VPS terminal", icon: SquareTerminal, cap: "openHostTerminal" },
 ]
 
 export function visibleNavItems(caps: Capabilities | null): NavItem[] {

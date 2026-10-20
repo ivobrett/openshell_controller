@@ -19,6 +19,7 @@ export type Capabilities = {
   viewActivity: boolean
   viewWizards: boolean
   viewSkills: boolean
+  openHostTerminal: boolean
 }
 
 const OPERATOR_CAPS: Capabilities = {
@@ -28,6 +29,7 @@ const OPERATOR_CAPS: Capabilities = {
   backupRestore: true, manageSecurity: true,
   manageNodes: true, viewActivity: true, viewWizards: true,
   viewSkills: true,
+  openHostTerminal: true,  // shell on the VPS itself (terminal-server host mode)
 }
 
 // OAuth/IdP users: read + terminal + dashboard on THEIR sandboxes only.
@@ -40,6 +42,7 @@ const OAUTH_CAPS: Capabilities = {
   backupRestore: false, manageSecurity: false,
   manageNodes: false, viewActivity: true, viewWizards: false,
   viewSkills: true,   // setup prompts are read-only and secret-free (§13.2)
+  openHostTerminal: false, // never: also refused server-side (terminal/live + WS upgrade)
 }
 
 // Minimal-profile hosts have no NemoClaw/OpenClaw stack, so the features that

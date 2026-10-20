@@ -20,8 +20,20 @@ assert.match(oauthGate[0], /if \(!sandboxId \|\| sandboxId === 'host'\) return f
 const live = read('app/api/openshell/terminal/live/route.ts')
 assert.match(live, /if \(!sandboxId \|\| sandboxId === 'host' \|\| !isUserAuthorizedForSandbox\(idpUser, sandboxId\)\)/, 'terminal/live must refuse host mode to OAuth users')
 
+// 2026-10-20: the VPS terminal moved from a Dashboard header button to the last
+// sidebar link, gated by the operator-only openHostTerminal capability.
+const nav = read('app/components/shell/nav.ts')
+const items = nav.match(/export const NAV_ITEMS: NavItem\[\] = \[([\s\S]*?)\n\]/)[1]
+const last = items.trim().split('\n').filter((l) => l.trim().startsWith('{')).pop()
+assert.match(last, /href: "\/operator-terminal", label: "VPS terminal".*cap: "openHostTerminal"/, 'VPS terminal must be the last sidebar link, capability-gated')
+assert.doesNotMatch(last, /mobileTab: true/, 'not a mobile bottom tab')
+
+const me = read('app/api/auth/me/route.ts')
+const caps = (name) => me.match(new RegExp(`const ${name}: Capabilities = (\\{[^}]*\\})`))[1]
+assert.match(caps('OPERATOR_CAPS'), /openHostTerminal: true/, 'operators get the VPS terminal')
+assert.match(caps('OAUTH_CAPS'), /openHostTerminal: false/, 'OAuth users never get the VPS terminal')
+
 const page = read('app/(shell)/page.tsx')
-assert.match(page, /\{me\.role === "operator" && \(\s*<Button asChild variant="outline">\s*<Link href=\{buildOperatorTerminalRoute\(\{ dashboardSessionId \}\)\}>VPS terminal<\/Link>/,
-  'VPS terminal button must be rendered for operators only and open host mode (no sandboxId)')
+assert.doesNotMatch(page, /VPS terminal/, 'the old Dashboard header button is gone')
 
 console.log('vps-terminal-operator-only-check: ok')

@@ -52,7 +52,7 @@ ssh <vps> 'set -e
   git fetch origin
   git checkout <branch>
   git pull --ff-only
-  PATH=/root/.nvm/versions/node/v22.22.3/bin:$PATH \
+  PATH=/root/.nvm/current/bin:$PATH \
     node_modules/.bin/next build
   systemctl restart openshell-controller
   sleep 6
@@ -69,7 +69,7 @@ For a fresh VPS (no existing install), see
 ssh <vps> 'set -e
   cd /opt/openshell-controller
   git checkout <previous SHA>
-  PATH=/root/.nvm/versions/node/v22.22.3/bin:$PATH \
+  PATH=/root/.nvm/current/bin:$PATH \
     node_modules/.bin/next build
   systemctl restart openshell-controller'
 ```
@@ -101,7 +101,7 @@ sandbox shows Exited in `docker ps`.
 **Fix — run on the VPS:**
 
 ```bash
-PATH=/root/.nvm/versions/node/v22.22.3/bin:/root/.local/bin:$PATH \
+PATH=/root/.nvm/current/bin:/root/.local/bin:$PATH \
 HOME=/root \
 OPENSHELL_GATEWAY=nemoclaw \
 nemoclaw <any-sandbox-name> recover
@@ -147,6 +147,7 @@ the right one based on what you're doing:
 | **`docs/runbooks/minimal-openshell-host.md`** | Installing the controller in **minimal profile** (`./install.sh --minimal`, `OPENSHELL_CONTROL_PROFILE=minimal`) against a plain OpenShell host (e.g. the `openshell` snap, gateway `openshell-gateway`) — custom sandboxes only, no NemoClaw/OpenClaw. Includes the full snap gateway + `gateway_jwt` bring-up recipe. Invariants: `tests/minimal-profile-check.mjs`; profile logic: `app/lib/controlProfile.ts`. |
 | **`docs/runbooks/claude-subscription-inference.md`** | Running an OpenClaw **or Hermes** sandbox on a Claude Pro/Max subscription via a `claude setup-token`: the procedure for each (network rule + helper in `scripts/claude-subscription/`, save the token, set default, host-side gateway restart), why it must bypass `inference.local`, the Hermes trap (its own paste flow writes the token to `.env`, which NemoClaw's guard rejects → sticky Error), what breaks it, the investigated-but-unbuilt option of keeping the token in the gateway, and a **ChatGPT/Codex subscription** section (device-code sign-in; investigated but NOT verified — no subscription to test with). |
 | **`skills/inter-sandbox-mcp-comms.md`** + **`scripts/inter-sandbox/`** | Agents in different sandboxes talking to each other over the MCP broker, or a sandbox reporting it "can't reach the MCP server". The skill is what you hand a fresh agent; `isc.py` is the helper the controller writes into each sandbox on MCP sync (identity, address and token come from the manifest; `install` registers an OpenClaw stream automation or Hermes monitor job so the model only runs when a message arrives). `network-policy-mcp-broker.yaml` is the manual form of the `mcp-broker` preset MCP sync applies. Sandboxes reach the broker at `http://host.openshell.internal:<port>` through the egress proxy — never direct, never https. Tests: `tests/mcp-broker-reachability-check.mjs`, `tests/inter-sandbox-isc-check.mjs`. |
+| **`voice-bridge/`** (README + SETUP-GUIDE.md) | Phone calls to agents (Dialt + Telnyx or Twilio). Installed by manidae-cloud's Phone calls (voice) card via `voice-bridge/install.sh`; runs as `agent-voice` on the host, route kept by `agent-voice-route.timer`. Agents are reached only via their CLI (`openshell sandbox exec`), never an exposed API. Plan/decisions: `manidae-cloud/docs/voice-calling-plan.md`. Test: `tests/voice-bridge-check.mjs`. |
 | **`HERMES_REMOTE_DESKTOP.md`** | Anything about the Hermes Desktop public-URL flow: architecture, expose.sh / launch.sh, session-token gate, Traefik rule, troubleshooting cheatsheet (§5). |
 | **`SANDBOX_ACCESS_CONTROL.md`** | Per-sandbox OAuth-user access controls + the file-backed `data/sandbox-access.json` store. |
 

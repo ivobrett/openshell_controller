@@ -13,6 +13,8 @@ const reqs = read('requirements.txt')
 // Only the provider paths are public, on the box's existing host.
 assert.match(route, /PathPrefix\(\\`\/telnyx\/\\`\) \|\| PathPrefix\(\\`\/twilio\/\\`\)/, 'route must expose only /telnyx/* and /twilio/*')
 assert.doesNotMatch(route, /PathPrefix\(\\`\/\\`\)/, 'route must never take the whole host')
+// ufw (INPUT DROP on AgentGateway boxes) must let Traefik's Docker networks — and only them — reach the bridge.
+assert.match(route, /ufw allow proto tcp from 172\.16\.0\.0\/12 to any port "\$PORT"/, 'route keeper must open the bridge port to Docker networks when ufw is active')
 
 // Every provider entry point verifies its signature before doing anything.
 for (const [path, check] of [

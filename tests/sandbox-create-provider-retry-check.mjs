@@ -16,10 +16,15 @@ const run = (stderr, extra = {}) => ({ completed: true, timedOut: false, exitCod
 
 assert.equal(isProviderTransientFailure(run(live)), true, 'NVIDIA 500 during validation is retried')
 assert.equal(isProviderTransientFailure(run(live.replace('currently failing upstream', 'rate limiting validation requests right now'))), true, '429 is retried')
-assert.equal(isProviderTransientFailure(run('Validation timed out before the provider replied. Onboard aborted before a sandbox was created')), true)
+assert.equal(isProviderTransientFailure(run('NVIDIA Endpoints endpoint validation failed. Validation timed out before the provider replied.')), true)
 
 assert.equal(isProviderTransientFailure(run(live + ' HTTP 401 Unauthorized')), false, 'a credential failure is never retried')
-assert.equal(isProviderTransientFailure(run('The provider endpoint is reachable but currently failing upstream.')), false, 'only when no sandbox was created')
+// The second create on the same box (Hermes after OpenClaw): NemoClaw keeps the gateway
+// because a sandbox exists, so there is no "aborted before a sandbox" line. Still retried.
+const second = 'NVIDIA Endpoints endpoint validation failed. Validation probe summary: Chat Completions API: HTTP 500. ' +
+  'Validation details were omitted to avoid exposing credentials. The provider endpoint is reachable but currently failing upstream.'
+assert.equal(isProviderTransientFailure(run(second)), true, 'a later create on the same box is retried too')
+assert.equal(isProviderTransientFailure(run('The provider endpoint is reachable but currently failing upstream.')), false, 'only failed endpoint validation (before any sandbox) is retried')
 assert.equal(isProviderTransientFailure(run('docker build failed')), false)
 assert.equal(isProviderTransientFailure(run(live, { exitCode: 0 })), false)
 assert.equal(isProviderTransientFailure(run(live, { timedOut: true })), false, 'a timed-out run is not retried')

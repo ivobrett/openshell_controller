@@ -94,15 +94,18 @@ export function isOnboardLockBusy(result) {
 // The inference provider was unreachable or erroring while NemoClaw validated it
 // (2026-10-23: NVIDIA Endpoints answered HTTP 500 for a few minutes and a fresh
 // OpenClaw create failed in 18s). Non-interactive onboarding does not retry these;
-// interactive onboarding does. Only transient transport/upstream failures that
-// aborted BEFORE a sandbox was created qualify: a bad key or model never does.
+// interactive onboarding does. Only transient transport/upstream failures of the
+// endpoint validation qualify (it runs before any sandbox is created); a bad key
+// or model never does. Not "Onboard aborted before a sandbox was created": NemoClaw
+// prints that only when no sandbox exists on the box yet (a second create, Hermes
+// after OpenClaw on 2026-10-23, failed without it and was not retried).
 const PROVIDER_TRANSIENT = /currently failing upstream|rate limiting validation requests|timed out before the provider replied|could not connect to the provider endpoint|could not resolve the provider hostname/i
 const PROVIDER_CREDENTIAL = /invalid api key|unauthorized|forbidden|\b401\b|\b403\b|model .*not found/i
 
 export function isProviderTransientFailure(result) {
   if (!result || result.timedOut || !result.completed || result.exitCode === 0) return false
   const text = `${result.stderr || ""}\n${result.stdout || ""}`
-  return PROVIDER_TRANSIENT.test(text) && /aborted before a sandbox was created/i.test(text) && !PROVIDER_CREDENTIAL.test(text)
+  return PROVIDER_TRANSIENT.test(text) && /endpoint validation failed/i.test(text) && !PROVIDER_CREDENTIAL.test(text)
 }
 
 // Waits between attempts after a transient provider failure: ~3.5 minutes in all.

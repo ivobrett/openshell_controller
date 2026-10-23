@@ -90,6 +90,10 @@ sleep 2
 #    Origin headers, so every proxy hop we own rewrites them to
 #    127.0.0.1:${PORT} (Traefik middleware in expose.sh, the HTTP proxy
 #    route, the server.mjs WS tunnel). Backward compatible with 0.16/0.17.
+# Hermes 0.21.5 serves one dashboard per host: a second `hermes dashboard`
+# refuses ("already served by PID … (127.0.0.1:19119)") while nemoclaw-start's
+# own dashboard runs. --isolated runs a dedicated server, as nemoclaw-start
+# does for its own; the flag is present on 0.17 and 0.21 (checked).
 INTERNAL_PORT=$((PORT + 1))
 
 # NemoClaw >= v0.0.132 (#12562, NVIDIA) and >= v0.0.133 (#12886, OpenAI,
@@ -111,7 +115,7 @@ for HANDLE_VAR in NVIDIA_INFERENCE_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMI
 done
 
 docker exec -d --privileged "$CONTAINER" nsenter -t "$GW_PID" -n -- \
-  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'${HANDLE_EXPORT}; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open > /tmp/hermes-dashboard.log 2>&1" \
+  su -s /bin/bash sandbox -c ". /tmp/nemoclaw-proxy-env.sh 2>/dev/null; export HOME=/sandbox HERMES_HOME=/sandbox/.hermes HERMES_DASHBOARD_SESSION_TOKEN='${TOKEN}'${HANDLE_EXPORT}; cd /sandbox; exec /opt/hermes/.venv/bin/python -m hermes_cli.main dashboard --host 127.0.0.1 --port ${INTERNAL_PORT} --skip-build --no-open --isolated > /tmp/hermes-dashboard.log 2>&1" \
   || die "docker exec failed launching dashboard"
 
 # ── Wait for readiness, then verify the auth gate ────────────────

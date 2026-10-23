@@ -838,3 +838,36 @@ use; `git describe --tags` fails on our tag-less shallow clones, use
    no upstream `hermes-agent` diff exists, so this check is a no-op this bump.
    Recorded per the "record the outcome on every Hermes move" instruction even
    when the outcome is "nothing to check."
+
+## Tag-only bumps — the fast check (v0.0.137 → v0.0.138, 2026-10-23)
+
+Most releases move only the tag. Prove it from raw files before editing anything (no clone needed):
+
+```bash
+for t in <old> <new>; do echo "== $t"
+  curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/$t/nemoclaw-blueprint/blueprint.yaml | grep openshell_version
+  curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/$t/Dockerfile.base | grep '^ARG OPENCLAW_VERSION'
+  curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/$t/agents/hermes/Dockerfile.base | grep 'HERMES_VERSION='
+done
+# and diff Dockerfile, Dockerfile.base, agents/hermes/Dockerfile(.base) between the tags for new apt pins
+```
+
+Same OpenShell min==max and same OpenClaw ⇒ only `NEMOCLAW_INSTALL_REF` moves (here, the installer default +
+README + the two `tests/*-check.mjs` regexes; in manidae-cloud the cloud template **and** `vps_validation.py`).
+v0.0.138's only Dockerfile change was the Hermes managed base-image digest. On the fresh box, confirm with
+`git -C /opt/nemoclaw log --oneline -1` (the tag's last commit) and `openshell --version`, then create one OpenClaw
+and one Hermes sandbox (`nemoclaw` lives at `/root/.local/bin/nemoclaw`, not on a non-login PATH).
+
+`tests/sandbox-lifecycle-check.mjs` currently fails on a missing `app/hooks/useSandboxInventory.ts` — pre-existing,
+unrelated to version pins.
+
+## A create that dies in ~10 s on "endpoint validation failed … HTTP 500" is NVIDIA, not the bump
+
+`nemoclaw onboard --non-interactive` validates the inference endpoint before creating anything and aborts on the
+first 5xx / 429 / timeout (interactive onboarding would prompt to retry). On 2026-10-23 NVIDIA Endpoints did this to
+two creates within 15 minutes of a successful one; a direct `curl` a minute later returned 200. Since `afa3cf0` the
+create route retries such failures after 30 s, 60 s and 120 s (`isProviderTransientFailure` in
+`app/lib/sandboxCreateState.mjs`, test `tests/sandbox-create-provider-retry-check.mjs`), never for a bad key or
+model. It keys on "endpoint validation failed": "Onboard aborted before a sandbox was created" is printed only when
+the box has no sandbox yet, so it misses every create after the first. The `Unknown gateway 'nemoclaw'` lines
+logged while a create runs are the readiness poll, not an error.

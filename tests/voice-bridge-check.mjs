@@ -41,6 +41,9 @@ assert.match(bridge, /send_tool_deferred/)
 assert.match(bridge, /VOICE_ALLOWED_CALLERS/)
 assert.match(bridge, /VOICE_MAX_CALLS/)
 assert.match(bridge, /VOICE_MAX_CALL_SECONDS/)
+// The dashboard sets/resets the greeting by writing this file; it must be read per call (no restart).
+assert.match(bridge, /\/opt\/agent-voice\/greeting\.txt/, 'bridge must read the dashboard greeting file')
+assert.match(bridge, /def greeting\(found[^)]*\)[^\n]*\n(?:\s*#.*\n)*\s*if custom := custom_greeting\(\)/, 'greeting must be read on every call')
 
 // Secrets: root-only env file on the host.
 assert.match(install, /umask 077/)

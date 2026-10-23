@@ -10,7 +10,9 @@ import { recordActivity } from "@/app/lib/activityLog"
 import {
   clearSandboxCreateInFlight,
   isOnboardLockBusy,
+  isProviderTransientFailure,
   markSandboxCreateInFlight,
+  PROVIDER_RETRY_DELAYS_MS,
   runExclusiveOnboard,
 } from "@/app/lib/sandboxCreateState.mjs"
 import { ensureAutoApproveNodes, ensureControlUiAllowedOriginsOpen } from "@/app/lib/openclawPairing"
@@ -1402,6 +1404,24 @@ export async function POST(request: Request) {
           `[sandbox/create] onboard-lock-busy sandbox=${sandboxName} agent=${agent} waitedMs=${Date.now() - lockWaitStartedAt} — another NemoClaw onboarding is running; retrying in 15s`,
         )
         await new Promise((resolve) => setTimeout(resolve, 15000))
+        result = await runOnboardOnce()
+      }
+
+      // NVIDIA (or a custom endpoint) failing upstream while onboarding validates it:
+      // retry a few times with backoff instead of failing the create on a blip.
+      for (const delayMs of PROVIDER_RETRY_DELAYS_MS) {
+        if (!isProviderTransientFailure(result)) break
+        console.log(
+          `[sandbox/create] provider-transient-failure sandbox=${sandboxName} agent=${agent} — inference provider failed validation upstream; retrying onboard in ${delayMs / 1000}s`,
+        )
+        await recordCreateActivity({
+          type: "sandbox.create.retry",
+          status: "info",
+          sandboxName,
+          message: `The inference provider was not answering while ${sandboxName} was being set up; retrying in ${delayMs / 1000}s.`,
+          metadata: { blueprint, agent, gpuMode, inferenceMode: createInference.mode },
+        })
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
         result = await runOnboardOnce()
       }
 

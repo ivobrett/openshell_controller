@@ -854,7 +854,8 @@ done
 
 Same OpenShell min==max and same OpenClaw ⇒ only `NEMOCLAW_INSTALL_REF` moves (here, the installer default +
 README + the two `tests/*-check.mjs` regexes; in manidae-cloud the cloud template **and** `vps_validation.py`).
-v0.0.138's only Dockerfile change was the Hermes managed base-image digest. On the fresh box, confirm with
+v0.0.138's only Dockerfile change was the Hermes managed base-image digest. v0.0.140 (2026-10-31, skipping v0.0.139) moved
+only the `node:24.x-trixie-slim` base digest (24.18.1 → 24.22.1) and npm tarball checksums — no apt pins. On the fresh box, confirm with
 `git -C /opt/nemoclaw log --oneline -1` (the tag's last commit) and `openshell --version`, then create one OpenClaw
 and one Hermes sandbox (`nemoclaw` lives at `/root/.local/bin/nemoclaw`, not on a non-login PATH).
 

@@ -7,6 +7,9 @@
 > Both agents answered a test turn at the end. Anything not run for real is
 > marked as untested.
 
+> **Read `docs/local-inference-feasibility.md` first.** On CPU-only boxes,
+> local models were too slow for our agents (3–15 min per turn).
+
 ## Summary
 
 | Agent | Live switch result on v0.0.140 | What to do |

@@ -232,3 +232,64 @@ nemoclaw inference set --provider nvidia-prod --model nvidia/nemotron-3.5-super-
 Restore `.env.local` from the backup and restart the controller. OpenClaw
 probably has the same in-process-restart problem in this direction, which
 is untested. If turns fail, recreate it as in §4.
+
+## 7. Older sandboxes on the shared route (Oracle BYOVPS, 2026-10-31)
+
+Sandboxes created before NemoClaw v0.0.132 (Oracle's `ivos-openclaw` and
+`ivos-hermes` were created on v0.0.130) have no attached native provider.
+They call `https://inference.local/v1`, and the gateway injects the
+credential. One switch of the shared route moves **all** of them at once,
+OpenClaw included, with no restart or config edit. `nemoclaw inference
+set` warns about exactly this ("will re-point the one shared inference
+route").
+
+Procedure that worked on NemoClaw v0.0.135:
+
+1. §1 (Ollama on loopback) and §2 (auth proxy).
+2. Register the gateway provider the way onboarding does. Without it,
+   `inference set` fails with `provider 'ollama-local' not found`:
+   ```bash
+   cd /opt/nemoclaw-src && node -e '
+   const prov=require("./dist/lib/onboard/providers.js"), local=require("./dist/lib/inference/local.js"),
+         proxy=require("./dist/lib/inference/ollama/proxy.js");
+   (async()=>console.log(await prov.upsertProvider("ollama-local","openai","NEMOCLAW_OLLAMA_PROXY_TOKEN",
+     local.getLocalProviderBaseUrl("ollama-local"),{NEMOCLAW_OLLAMA_PROXY_TOKEN:proxy.getOllamaProxyToken()})))()'
+   ```
+3. `nemoclaw inference set --provider ollama-local --model <m> --sandbox <any-sb>`.
+   On Hermes the in-sandbox config write may be refused ("integrity metadata is
+   not ready"). That does not matter on the shared route, because the gateway
+   forces the model.
+4. **Raise the route timeout.** `inference set` resets it to the 60 s default:
+   `openshell inference set --provider ollama-local --model <m> --timeout 1800 --no-verify`.
+
+### Why it was rolled back: CPU-only speed with real agents
+
+Live agents carry far bigger prompts than fresh sandboxes: 27k tokens
+(OpenClaw) and 37.5k tokens (Hermes), against about 11k on a fresh
+sandbox. On 4 ARM Neoverse-N1 cores:
+
+| Model | Prompt read rate | Result |
+|---|---|---|
+| lfm3:latest (1.7B hybrid) | 45–75 tok/s, falling as the prompt grows | OpenClaw 9 min 50 s per turn, Hermes ~15 min. **Every** turn re-reads the whole prompt: llama.cpp can't reuse the prefix of hybrid/recurrent models (`forcing full prompt re-processing`). |
+| llama3.2:1b (standard attention) | 29 tok/s on a 7.6k synthetic prompt | Prefix cache works (follow-up 9 s in the synthetic test). With the real agent, turn 1 exceeded OpenClaw's **600 s `agents.defaults.timeoutSeconds`** and timed out. Turn 2 landed on the *other* `OLLAMA_NUM_PARALLEL` slot and started from scratch. |
+
+Conclusion: local CPU inference is not usable for these agents. It needs
+a GPU, or agents with much smaller prompts. Trap: loading several models
+with large contexts at once OOM-killed `llama-server` on a 24 GB box. Set
+`OLLAMA_MAX_LOADED_MODELS=1`.
+
+### Rolling back (the trap is requests already in flight)
+
+1. `openshell inference set --provider nvidia-prod --model <model> --timeout 180`
+   (this validates the endpoint). `nemoclaw inference set --provider nvidia-prod`
+   **failed** on the old sandboxes ("host credential required to create
+   provider nemoclaw-nvidia-prod-v1"), so NemoClaw's registry kept
+   `ollama-local`. Restore `~/.nemoclaw/sandboxes.json` from the pre-switch
+   backup, otherwise a later `recover` can re-apply Ollama.
+2. Restore `.env.local` and restart the controller.
+3. **`systemctl restart ollama`**. A request that reached the old route
+   just before the switch keeps running in Ollama at 400% CPU and starves
+   the box. OpenClaw then *looks* as if it's still on Ollama even though
+   new requests go to NVIDIA.
+4. `nemoclaw <openclaw-sb> gateway restart` to clear runs stuck in
+   `processing`.

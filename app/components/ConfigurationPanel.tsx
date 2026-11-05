@@ -5,6 +5,7 @@ import { Input } from "@/app/components/ui/input"
 import { Alert, AlertDescription } from "@/app/components/ui/alert"
 import { Badge as ShadBadge } from "@/app/components/ui/badge"
 import { Card } from "@/app/components/ui/card"
+import { HERMES_SWITCHYARD_PROVIDERS as SWITCHYARD_PROVIDER_OPTIONS } from "../lib/hermesSwitchyardProviders"
 import { SECURITY_PRESETS, getSecurityPreset, type OpenShellPolicyShape, type SecurityPresetId } from "../lib/securityPresets"
 
 type LandlockCompatibility = "best_effort" | "hard_requirement"
@@ -110,6 +111,11 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
   const [createInferenceModel, setCreateInferenceModel] = useState<string>("")
   const [createInferenceEndpointUrl, setCreateInferenceEndpointUrl] = useState<string>("")
   const [createNvidiaApiKey, setCreateNvidiaApiKey] = useState<string>("")
+  const [switchyardEnabled, setSwitchyardEnabled] = useState<boolean>(false)
+  const [switchyardEfficientProvider, setSwitchyardEfficientProvider] = useState<string>("openrouter-api")
+  const [switchyardEfficientModel, setSwitchyardEfficientModel] = useState<string>("")
+  const [switchyardCapableProvider, setSwitchyardCapableProvider] = useState<string>("openrouter-api")
+  const [switchyardCapableModel, setSwitchyardCapableModel] = useState<string>("")
   const [restoreFromBackup, setRestoreFromBackup] = useState<boolean>(false)
   const [restoreArchive, setRestoreArchive] = useState<File | null>(null)
   const [restorePath, setRestorePath] = useState<string>('/sandbox')
@@ -169,7 +175,17 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
           endpointUrl: createInferenceEndpointUrl.trim(),
           apiKey: (createInferenceMode === 'nvidia' || createInferenceMode === 'compatible') ? createNvidiaApiKey.trim() : '',
         }
-        const baselineActive = isNemoClawOnboardBlueprint && canUseBaseline && useBaseline
+        const switchyardRequested = selectedBlueprint === 'nemoclaw-hermes' && switchyardEnabled
+        // Switchyard routing is applied by `nemoclaw onboard`; a baseline clone never runs onboard.
+        const baselineActive = isNemoClawOnboardBlueprint && canUseBaseline && useBaseline && !switchyardRequested
+        const switchyard = switchyardRequested
+          ? {
+              enabled: true,
+              efficient: { provider: switchyardEfficientProvider, model: switchyardEfficientModel.trim() },
+              capable: { provider: switchyardCapableProvider, model: switchyardCapableModel.trim() },
+            }
+          : undefined
+        if (switchyard && (!switchyard.efficient.model || !switchyard.capable.model)) throw new Error('Switchyard routing needs both an efficient and a capable model')
         const effectiveBlueprint = baselineActive ? 'redeploy-image' : selectedBlueprint
         const effectiveAgent =
           effectiveBlueprint === 'redeploy-image'
@@ -177,7 +193,7 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
             : undefined
         const sourceSandboxName = baselineActive ? freshBaseline?.name : undefined
         const sourceImage = !baselineActive && effectiveBlueprint === 'redeploy-image' && quickDeployAgent !== 'custom' && quickDeployImage ? quickDeployImage : undefined
-        const res = await fetch('/api/sandbox/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blueprint: effectiveBlueprint, sandboxName: sandboxName.trim(), enableTailscale, gpuMode: createGpuMode, createInference, policy: assembledPolicy, preset: selectedPreset || null, agent: effectiveAgent, sourceSandboxName, sourceImage }) })
+        const res = await fetch('/api/sandbox/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blueprint: effectiveBlueprint, sandboxName: sandboxName.trim(), enableTailscale, gpuMode: createGpuMode, createInference, switchyard, policy: assembledPolicy, preset: selectedPreset || null, agent: effectiveAgent, sourceSandboxName, sourceImage }) })
         const data = await res.json()
         if (!res.ok) throw new Error([data.error, data.verification?.summary, data.verification?.error, data.stdout, data.stderr].filter(Boolean).join('\n\n'))
         const createdSandboxId = data.verification?.details?.id || data.verification?.details?.name || data.sandboxName
@@ -380,6 +396,31 @@ export default function ConfigurationPanel({ sandboxId, mode = 'existing', onCre
                   )}
                 </div>
               )}
+            </Card>}
+            {selectedBlueprint === 'nemoclaw-hermes' && <Card className="p-4 space-y-4">
+              <label className="flex items-start gap-3">
+                <input type="checkbox" checked={switchyardEnabled} onChange={(e) => setSwitchyardEnabled(e.target.checked)} className="mt-0.5 h-4 w-4" />
+                <span><span className="block text-xs font-semibold uppercase tracking-wider">Adaptive Routing (Switchyard)</span><span className="mt-1 block text-xs text-muted-foreground">Passes --switchyard-config to NemoClaw onboard (NemoClaw v0.0.141+). The capable model classifies each new session and routes it to the efficient or capable model. Managed Hermes image only; skips the prebuilt baseline.</span></span>
+              </label>
+              {switchyardEnabled && <>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {([
+                    ['Efficient', switchyardEfficientProvider, setSwitchyardEfficientProvider, switchyardEfficientModel, setSwitchyardEfficientModel],
+                    ['Capable', switchyardCapableProvider, setSwitchyardCapableProvider, switchyardCapableModel, setSwitchyardCapableModel],
+                  ] as const).map(([role, provider, setProvider, model, setModel]) => (
+                    <div key={role} className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{role} Target</label>
+                      <select value={provider} onChange={(e) => setProvider(e.target.value)} className={selectCls}>
+                        {SWITCHYARD_PROVIDER_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                      </select>
+                      <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="provider model ID" className={inputCls} />
+                    </div>
+                  ))}
+                </div>
+                <Alert>
+                  <AlertDescription className="text-xs">The config file holds only provider and model IDs, never keys or URLs. In NemoClaw v0.0.141, provider credentials for routed requests are not bound yet (NemoClaw #13863), and inference changes are blocked while routing is active. Changing routing later requires recreating the sandbox.</AlertDescription>
+                </Alert>
+              </>}
             </Card>}
             <Card className="p-4 space-y-4">
               <label className="flex items-start gap-3">

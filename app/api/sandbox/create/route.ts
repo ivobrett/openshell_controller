@@ -6,6 +6,13 @@ import path from "node:path"
 import { promisify } from "node:util"
 import { inspectSandbox, prebuildHermesDashboardWebUi, resolveSandboxRef } from "@/app/lib/openshellHost"
 import { exposeHermesRemote, hermesRemoteMode } from "@/app/lib/hermesRemote"
+import {
+  HermesSwitchyardConfigError,
+  hermesSwitchyardOnboardArgs,
+  parseHermesSwitchyardRequest,
+  writeHermesSwitchyardConfigFile,
+  type HermesSwitchyardConfig,
+} from "@/app/lib/hermesSwitchyard"
 import { recordActivity } from "@/app/lib/activityLog"
 import {
   clearSandboxCreateInFlight,
@@ -321,6 +328,19 @@ function buildNemoClawCreateCommand(gpuMode: CreateGpuMode, agent: NemoClawAgent
   throw new Error(
     `NemoClaw CLI was not found. Install the current NemoClaw CLI under your Linux home directory, or set NEMOCLAW_BIN in .env.local. Searched CLI: ${NEMOCLAW_BIN_CANDIDATES.join(", ") || "no candidates"}. Legacy setup candidates: ${NEMOCLAW_SETUP_CANDIDATES.join(", ") || "none"}.`,
   )
+}
+
+/** Add Hermes adaptive routing (NemoClaw >= v0.0.141) to an onboard command. */
+function withHermesSwitchyardConfig(
+  command: NemoClawCreateCommand,
+  agent: NemoClawAgent,
+  switchyardConfigPath: string | null,
+): NemoClawCreateCommand {
+  if (!switchyardConfigPath) return command
+  if (agent !== "hermes" || command.mode !== "cli-onboard") {
+    throw new Error("Hermes Switchyard routing requires the current NemoClaw CLI (v0.0.141 or later) with --switchyard-config support. Set NEMOCLAW_BIN in .env.local.")
+  }
+  return { ...command, args: [...command.args, ...hermesSwitchyardOnboardArgs(switchyardConfigPath)] }
 }
 
 function resolveNemoClawBasePolicyPath() {
@@ -1296,6 +1316,9 @@ export async function POST(request: Request) {
   // Cleared in the finally below. Lets the live inventory present this sandbox
   // as "Provisioning" (not "Error"/"Custom") while onboard is still running.
   let inFlightSandboxName: string | null = null
+  // Temp --switchyard-config file. Kept until the request ends because onboard
+  // may be re-run (lock wait, provider retries, base-image probe retry).
+  let switchyardFile: ReturnType<typeof writeHermesSwitchyardConfigFile> | null = null
   try {
     const body = await request.json()
     const blueprint = typeof body?.blueprint === "string" ? body.blueprint : ""
@@ -1304,6 +1327,18 @@ export async function POST(request: Request) {
     const enableTailscale = Boolean(body?.enableTailscale)
     const gpuMode = parseCreateGpuMode(body)
     const createInference = parseCreateInferenceSettings(body)
+    let switchyard: HermesSwitchyardConfig | null = null
+    try {
+      switchyard = parseHermesSwitchyardRequest(body?.switchyard)
+    } catch (error) {
+      if (error instanceof HermesSwitchyardConfigError) {
+        return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
+      }
+      throw error
+    }
+    if (switchyard && blueprint !== "nemoclaw-hermes") {
+      return NextResponse.json({ ok: false, error: "Switchyard adaptive routing is supported only for Hermes sandboxes." }, { status: 400 })
+    }
     console.log(`[sandbox/create] request:parsed sandbox=${sandboxName} blueprint=${blueprint} enableTailscale=${enableTailscale} gpuMode=${gpuMode} inferenceMode=${createInference.mode} elapsedMs=${elapsedMs(requestStartedAt)}`)
 
     if (!blueprint) {
@@ -1330,7 +1365,12 @@ export async function POST(request: Request) {
     if (isNemoClawOnboardBlueprint(blueprint)) {
       const agent = nemoClawAgentForBlueprint(blueprint)
       const isOpenClawAgent = agent === "openclaw"
-      const createCommand = buildNemoClawCreateCommand(gpuMode, agent, sandboxName)
+      switchyardFile = switchyard ? writeHermesSwitchyardConfigFile(switchyard) : null
+      const createCommand = withHermesSwitchyardConfig(
+        buildNemoClawCreateCommand(gpuMode, agent, sandboxName),
+        agent,
+        switchyardFile?.filePath ?? null,
+      )
       const env: NodeJS.ProcessEnv = hostCommandEnv({
         NEMOCLAW_SANDBOX_NAME: sandboxName,
         NEMOCLAW_AGENT: agent,
@@ -1515,6 +1555,10 @@ export async function POST(request: Request) {
           enableTailscale,
           gpuMode,
           createInference,
+          switchyard,
+          ...(switchyard && /switchyard-config/i.test(`${result.stderr || ""}\n${result.error || ""}`)
+            ? { hint: "NemoClaw rejected --switchyard-config. It needs NemoClaw v0.0.141 or later on the managed Hermes image." }
+            : {}),
         }, { status: 500 })
       }
 
@@ -1601,6 +1645,7 @@ export async function POST(request: Request) {
         enableTailscale,
         gpuMode,
         createInference,
+        switchyard,
         createCommand: {
           ...createCommand,
           forcedReady,
@@ -1636,6 +1681,9 @@ export async function POST(request: Request) {
                   ? "GPU passthrough was required for this create run."
                   : "NemoClaw chose GPU passthrough automatically for this create run.",
               deviceApproval?.note,
+              switchyard
+                ? `Switchyard adaptive routing configured (efficient ${switchyard.efficient.provider}/${switchyard.efficient.model}, capable ${switchyard.capable.provider}/${switchyard.capable.model}). Provider credential binding for routed requests depends on NemoClaw #13863; 'inference set' is blocked while routing is active.`
+                : false,
             )
           : "Blueprint command reported success, but the sandbox never reached a ready verification state afterward.",
       }, { status: created ? 200 : 502 })
@@ -1920,5 +1968,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: message }, { status })
   } finally {
     if (inFlightSandboxName) clearSandboxCreateInFlight(inFlightSandboxName)
+    // NemoClaw records the routing intent during onboard; the input file is no longer needed.
+    switchyardFile?.cleanup()
   }
 }

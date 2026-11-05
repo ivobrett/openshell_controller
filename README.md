@@ -260,6 +260,8 @@ Behind a reverse proxy, route WebSocket upgrades for the dashboard proxy paths t
 
 The create flow includes managed NemoClaw agent options beyond the default OpenClaw sandbox. Fresh Hermes Sandbox uses NemoClaw onboard with `--agent hermes`; Fresh Deep Agents Code Sandbox uses `--agent langchain-deepagents-code` for the upstream LangChain Deep Agents Code terminal harness. The existing Fresh NemoClaw Image and Quick Deploy paths remain OpenClaw-oriented.
 
+Fresh Hermes Sandbox also has an optional **Adaptive Routing (Switchyard)** section. It needs NemoClaw `v0.0.141` or later; this repo's installer still pins `v0.0.140`. You pick an efficient and a capable provider/model, chosen from `nvidia-prod`, `openai-api`, `anthropic-prod`, `gemini-api` and `openrouter-api`. The controller writes a private, secret-free JSON file and appends `--switchyard-config <file>` to `nemoclaw onboard --agent hermes`. The file is deleted when the request ends. Routing skips the prebuilt-baseline clone, because only onboard can apply it. While routing is active, NemoClaw blocks `inference set`, and changing routing requires recreating the sandbox. In `v0.0.141`, provider credentials for routed requests are not yet bound (NemoClaw #13863).
+
 ## Mobile App (Android / iOS)
 
 A [Capacitor](https://capacitorjs.com) companion app lives in [`mobile/`](mobile/).

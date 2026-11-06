@@ -8,6 +8,14 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# NemoClaw v0.0.141 (2026-11-03, discussion #14165) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
+# v0.0.141 is tag-only on versions (blueprint OpenShell min==max 0.0.116, OpenClaw 2026.9.2,
+# Hermes v2026.9.14, node base 24.22.1 unchanged; blueprint min_openclaw_version 2026.3.11 ->
+# 2026.9.2). Stale-rebuild restore refused while the original sandbox survives, auxiliary
+# agent forwards bound to loopback, npm dependency remediation (undici patch), Hermes
+# switchyard routing (opt-in). Telemetry now defaults to the PRODUCTION receiver; manidae
+# templates already export NEMOCLAW_DISABLE_TELEMETRY=1.
+# Earlier notes (v0.0.140):
 # NemoClaw v0.0.140 (2026-10-30, discussion #14005) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
 # v0.0.140 (covers v0.0.139) is tag-only on versions (blueprint OpenShell min==max 0.0.116,
 # OpenClaw 2026.9.2, Hermes v2026.9.14): node base 24.18.1 -> 24.22.1, clearer installer
@@ -135,12 +143,12 @@ NC='\033[0m'
 #     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.140. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.141. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.140}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.141}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"

@@ -326,9 +326,9 @@ npm test
 
 Runs every `tests/*.mjs` and reports `PASS:` / `FAIL:` per file,
 exiting non-zero on any failure. The expected baseline is **all tests
-PASS except `control-auth-cookie-check.mjs`** (pre-existing TypeScript
-module resolution issue, unrelated tech debt). Any *other* failure is
-a real regression — fix the root cause rather than weakening the
+PASS** (since 2026-11-06; before that `control-auth-cookie-check`,
+`pii-router-check` and `sandbox-lifecycle-check` had gone stale). Any
+failure is a real regression — fix the root cause rather than weakening the
 assertion. Each assertion has a documented historical failure mode
 behind it.
 
@@ -394,8 +394,7 @@ kept in sync — if you change either, update both.
   `gatewaydashboard` is forbidden.
 - **Don't** push without running `npm test` first. The suite is fast
   (~2s) and locks in dashboard token (§10), auth, middleware, sandbox
-  lifecycle, and MCP config invariants. Baseline is "all PASS except
-  the one known tech-debt failure".
+  lifecycle, and MCP config invariants. Baseline is "all PASS".
 - **Don't** restart an agent gateway on state or config it may reject
   (OpenClaw on pre-2026.9 state; Hermes with a raw secret in `.env` /
   `config.yaml`). A failed start puts the sandbox in OpenShell's sticky

@@ -14,9 +14,12 @@ const hook = read("pii_router/hook.py")
 const policy = read("pii_router/policy.py")
 const install = read("install.sh")
 
-// The public model must resolve to the LOCAL backend, so an unloaded hook never reaches the cloud.
-assert.match(render, /\{"model_name": PUBLIC, "litellm_params": dict\(local_params\)\}/,
+// The public model(s) must resolve to the LOCAL backend, so an unloaded hook never reaches the cloud.
+// Since 299d622 every public name (pii-router plus PII_ROUTER_PUBLIC_MODELS) goes through _public_entries.
+assert.match(render, /\*_public_entries\(env, local_params\)/,
   "the public 'pii-router' model must point at the local backend")
+assert.match(render, /names = \[PUBLIC\] \+[\s\S]*?\{"model_name": n, "litellm_params": dict\(params\)\} for n in names/,
+  "every public name, including pii-router, must use the params it is given")
 assert.match(render, /"num_retries": 0/, "retries could move a request to the other backend")
 
 // The hook decides for every chat call regardless of the requested model (no bypass) and fails closed.
@@ -29,6 +32,7 @@ assert.match(policy, /oversize_route: str = LOCAL/)
 assert.match(policy, /media_route: str = LOCAL/)
 
 // The installer must preserve the master key across re-runs (the OpenShell provider holds it).
-assert.match(install, /MASTER_KEY="\$\(existing LITELLM_MASTER_KEY\)"/)
+// A caller-supplied LITELLM_MASTER_KEY may win (PrivateInference), but the existing key is the fallback.
+assert.match(install, /MASTER_KEY="\$\{LITELLM_MASTER_KEY:-\$\(existing LITELLM_MASTER_KEY\)\}"/)
 
 console.log("PASS: pii-router fail-closed guards")

@@ -593,6 +593,17 @@ kind of thing NemoClaw might absorb upstream.
 - **NemoClaw registry agent patch** — atomically writes the `agent` field
   into the NemoClaw registry after a verified create (commit `774e32c`).
   Without this, Quick Deploy can't tell which agent type a sandbox uses.
+- **Quick Deploy clones are registered in the NemoClaw registry** —
+  `registerNemoClawImageRedeploy` copies the source entry, minus its
+  `lifecycleLiveIdentityFingerprint`, and records the clone's own identity
+  (`2e62694`). Upstream went the other way in mmckeen-nv #43 ("stop forging
+  NemoClaw registry receipts") and #48 (source image from registry
+  `imageTag`): it skips registration so only NemoClaw issues lifecycle
+  identity. We kept registration so `nemoclaw <clone> ...` commands work.
+  The upstream assertions for this were removed from
+  `tests/sandbox-lifecycle-check.mjs` on 2026-11-06; the fork behaviour is
+  guarded by `tests/quick-deploy-untagged-image-check.mjs`. Re-evaluate if a
+  NemoClaw release refuses or rewrites registry entries it did not create.
 
 **Why we need it:** Each item targets a specific user-visible failure mode
 we hit during fork operation.

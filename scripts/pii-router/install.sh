@@ -14,7 +14,17 @@
 #           LITELLM_MASTER_KEY (the router's client key; generated once if not given),
 #           LAYA_PORT (4101), PII_ROUTER_LAYA_THRESHOLD (0.4),
 #           PII_ROUTER_PUBLIC_MODELS (pii-router; the names /v1/models lists),
-#           PII_ROUTER_CLOUD_REASONING_EFFORT (none; GPU thinking, only with CLOUD_BASE_URL).
+#           PII_ROUTER_CLOUD_REASONING_EFFORT (only with CLOUD_BASE_URL; default none for a self-hosted
+#           GPU, unset for hosted APIs such as NVIDIA or OpenRouter).
+# PII_ROUTER_MODE=masked: PII is replaced with placeholders, the request goes to the cloud backend,
+#           and the reply gets the real values back. PII_ROUTER_RESIDUAL_ACTION=block (default) answers
+#           with an explanation when personal content cannot be masked (no OLLAMA_MODEL needed);
+#           =local sends it unmasked to the local model (needs OLLAMA_MODEL).
+#           PII_ROUTER_RESIDUAL_CHECK=laya (default) re-checks the masked text with Laya; =none skips
+#           Laya (faster, not installed). PII_ROUTER_MASK_SECRET is generated once and preserved.
+#           PII_ROUTER_AUDIT=on keeps the last PII_ROUTER_AUDIT_KEEP (50) requests as sent to the cloud
+#           (placeholders only) and their replies before restore; view with `sudo pii-router-audit`.
+# PII_ROUTER_MODE=on|strict (default): PII routes to the local model (the original behaviour).
 # PII_ROUTER_MODE=off (PrivateInference without PII routing): no PII check, no local model.
 #           OLLAMA_MODEL is not needed, Laya/torch are not installed and its unit is removed;
 #           everything goes to the cloud backend (or the NVIDIA fallback while it is down).
@@ -35,8 +45,19 @@ die() { printf '[pii-router] ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
 PII_MODE="$(printf '%s' "${PII_ROUTER_MODE:-on}" | tr '[:upper:]' '[:lower:]')"
-[ "$PII_MODE" = "on" ] || [ "$PII_MODE" = "off" ] || die "PII_ROUTER_MODE must be on or off"
-[ "$PII_MODE" = "off" ] || [ -n "${OLLAMA_MODEL:-}" ] || die "OLLAMA_MODEL is required (or PII_ROUTER_MODE=off)"
+[ "$PII_MODE" = "strict" ] && PII_MODE=on
+case "$PII_MODE" in on|off|masked) ;; *) die "PII_ROUTER_MODE must be on (strict), masked or off" ;; esac
+RESIDUAL_ACTION="$(printf '%s' "${PII_ROUTER_RESIDUAL_ACTION:-block}" | tr '[:upper:]' '[:lower:]')"
+RESIDUAL_CHECK="$(printf '%s' "${PII_ROUTER_RESIDUAL_CHECK:-laya}" | tr '[:upper:]' '[:lower:]')"
+case "$RESIDUAL_ACTION" in block|local) ;; *) die "PII_ROUTER_RESIDUAL_ACTION must be block or local" ;; esac
+case "$RESIDUAL_CHECK" in laya|none) ;; *) die "PII_ROUTER_RESIDUAL_CHECK must be laya or none" ;; esac
+NEEDS_OLLAMA=no; NEEDS_LAYA=no
+if [ "$PII_MODE" = "on" ]; then NEEDS_OLLAMA=yes; NEEDS_LAYA=yes; fi
+if [ "$PII_MODE" = "masked" ]; then
+  if [ "$RESIDUAL_ACTION" = "local" ]; then NEEDS_OLLAMA=yes; fi
+  if [ "$RESIDUAL_CHECK" = "laya" ]; then NEEDS_LAYA=yes; fi
+fi
+[ "$NEEDS_OLLAMA" = "no" ] || [ -n "${OLLAMA_MODEL:-}" ] || die "OLLAMA_MODEL is required for this PII_ROUTER_MODE"
 if [ -n "${CLOUD_BASE_URL:-}" ]; then
   [ -n "${CLOUD_MODEL:-}" ] || die "CLOUD_MODEL is required with CLOUD_BASE_URL"
 else
@@ -76,15 +97,15 @@ if [ ! -x "$PREFIX/venv/bin/python" ]; then
   "$PYTHON" -m venv "$PREFIX/venv"
 fi
 "$PREFIX/venv/bin/python" -m pip install --quiet --upgrade pip
-if [ "$PII_MODE" = "on" ] && [ "$(uname -m)" = "x86_64" ]; then
+if [ "$NEEDS_LAYA" = "yes" ] && [ "$(uname -m)" = "x86_64" ]; then
   log "installing CPU-only torch (avoids multi-GB CUDA wheels)"
   "$PREFIX/venv/bin/python" -m pip install --quiet torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
 fi
-if [ "$PII_MODE" = "on" ]; then
+if [ "$NEEDS_LAYA" = "yes" ]; then
   log "installing laya + litellm"
   "$PREFIX/venv/bin/python" -m pip install --quiet -r "$SRC_DIR/requirements.txt"
 else
-  log "installing litellm (PII routing off: no Laya)"
+  log "installing litellm (no Laya for this mode)"
   grep -v '^laya' "$SRC_DIR/requirements.txt" > "$STATE/requirements-off.txt"
   "$PREFIX/venv/bin/python" -m pip install --quiet -r "$STATE/requirements-off.txt"
 fi
@@ -101,6 +122,8 @@ existing() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -1 || t
 # so it can show it to the customer); otherwise keep the existing one, else generate.
 MASTER_KEY="${LITELLM_MASTER_KEY:-$(existing LITELLM_MASTER_KEY)}"; [ -n "$MASTER_KEY" ] || MASTER_KEY="sk-pii-$(openssl rand -hex 24)"
 LAYA_KEY="$(existing LAYA_API_KEY)"; [ -n "$LAYA_KEY" ] || LAYA_KEY="$(openssl rand -hex 24)"
+# Placeholder secret: keep it across re-runs so placeholders stay stable.
+MASK_SECRET="$(existing PII_ROUTER_MASK_SECRET)"; [ -n "$MASK_SECRET" ] || MASK_SECRET="$(openssl rand -hex 32)"
 LAYA_PORT="${LAYA_PORT:-4101}"
 umask 027
 cat > "$ENV_FILE.new" <<ENVEOF
@@ -120,24 +143,39 @@ PII_ROUTER_HOST=${PII_ROUTER_HOST:-127.0.0.1}
 PII_ROUTER_PORT=${PII_ROUTER_PORT:-4100}
 OLLAMA_MODEL=${OLLAMA_MODEL:-}
 PII_ROUTER_MODE=$PII_MODE
+PII_ROUTER_RESIDUAL_ACTION=$RESIDUAL_ACTION
+PII_ROUTER_RESIDUAL_CHECK=$RESIDUAL_CHECK
+PII_ROUTER_MASK_SECRET=$MASK_SECRET
+PII_ROUTER_AUDIT=${PII_ROUTER_AUDIT:-off}
+PII_ROUTER_AUDIT_KEEP=${PII_ROUTER_AUDIT_KEEP:-50}
 PII_ROUTER_PUBLIC_MODELS=${PII_ROUTER_PUBLIC_MODELS:-pii-router}
 ENVEOF
 chown root:pii-router "$ENV_FILE.new" && chmod 0640 "$ENV_FILE.new" && mv "$ENV_FILE.new" "$ENV_FILE"
 
 log "rendering LiteLLM config"
+# Passed only when set: render_config picks the default ("none" for a self-hosted GPU,
+# nothing for hosted APIs like NVIDIA or OpenRouter that may reject it).
+if [ -n "${PII_ROUTER_CLOUD_REASONING_EFFORT+set}" ]; then export PII_ROUTER_CLOUD_REASONING_EFFORT; fi
 OLLAMA_MODEL="${OLLAMA_MODEL:-}" NVIDIA_MODEL="$NVIDIA_MODEL" PII_ROUTER_MODE="$PII_MODE" \
+  PII_ROUTER_RESIDUAL_ACTION="$RESIDUAL_ACTION" \
   OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434}" \
   CLOUD_BASE_URL="${CLOUD_BASE_URL:-}" CLOUD_MODEL="${CLOUD_MODEL:-}" \
   FALLBACK_BASE_URL="$FALLBACK_BASE_URL" FALLBACK_MODEL="$FALLBACK_MODEL" FALLBACK2_MODEL="$FALLBACK2_MODEL" \
   PII_ROUTER_LOCAL_REASONING_EFFORT="${PII_ROUTER_LOCAL_REASONING_EFFORT-none}" \
-  PII_ROUTER_CLOUD_REASONING_EFFORT="${PII_ROUTER_CLOUD_REASONING_EFFORT-none}" \
   PII_ROUTER_PUBLIC_MODELS="${PII_ROUTER_PUBLIC_MODELS:-pii-router}" \
   PYTHONPATH="$PREFIX" "$PREFIX/venv/bin/python" -m pii_router.render_config "$ETC/config.yaml"
 chown root:pii-router "$ETC/config.yaml" && chmod 0640 "$ETC/config.yaml"
 
+# Terminal viewer for the masked-mode audit log (PII_ROUTER_AUDIT=on): sudo pii-router-audit
+cat > /usr/local/bin/pii-router-audit <<'AUDITEOF'
+#!/bin/sh
+exec env PYTHONPATH=/opt/pii-router /opt/pii-router/venv/bin/python -m pii_router.audit "$@"
+AUDITEOF
+chmod 0755 /usr/local/bin/pii-router-audit
+
 log "installing systemd units"
 install -m 0644 "$SRC_DIR/systemd/pii-router.service" /etc/systemd/system/pii-router.service
-if [ "$PII_MODE" = "on" ]; then
+if [ "$NEEDS_LAYA" = "yes" ]; then
   install -m 0644 "$SRC_DIR/systemd/pii-router-laya.service" /etc/systemd/system/pii-router-laya.service
   systemctl daemon-reload
   systemctl enable pii-router-laya.service pii-router.service >/dev/null

@@ -3,8 +3,9 @@
     python -m pii_router.render_config /etc/pii-router/config.yaml
 
 Reads OLLAMA_MODEL and OLLAMA_BASE_URL for the local backend. The cloud backend is
-CLOUD_BASE_URL + CLOUD_MODEL (key CLOUD_API_KEY) when set, e.g. the customer's
-Vast GPU; otherwise NVIDIA_BASE_URL + NVIDIA_MODEL (key NVIDIA_API_KEY), which is
+CLOUD_BASE_URL + CLOUD_MODEL (key CLOUD_API_KEY) when set: any OpenAI-compatible
+endpoint, e.g. https://openrouter.ai/api/v1, https://integrate.api.nvidia.com/v1 or
+the customer's Vast GPU; otherwise NVIDIA_BASE_URL + NVIDIA_MODEL (key NVIDIA_API_KEY), which is
 what AgentGateway uses. FALLBACK_BASE_URL + FALLBACK_MODEL (key FALLBACK_API_KEY)
 add the backend non-PII traffic uses while the cloud backend is down.
 PII_ROUTER_PUBLIC_MODELS (comma-separated, default pii-router) are the names
@@ -32,8 +33,19 @@ CLOUD = "cloud"
 FALLBACK = "cloud-fallback"
 FALLBACK2 = "cloud-fallback-2"
 LOCAL = "ollama-local"
+BLOCKED = "pii-blocked"
+BLOCKED_TEXT = "[PII router] This request was blocked: the PII router is not active."
 NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
 NVIDIA_DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+
+
+HOSTED_API_HOSTS = ("integrate.api.nvidia.com", "openrouter.ai", "api.openai.com")
+
+
+def _hosted_api(base_url: str) -> bool:
+    from urllib.parse import urlparse
+    host = (urlparse(base_url).hostname or "").lower()
+    return any(host == h or host.endswith("." + h) for h in HOSTED_API_HOSTS)
 
 
 def _cloud_params(env) -> dict:
@@ -46,7 +58,11 @@ def _cloud_params(env) -> dict:
         model = env.get("NVIDIA_MODEL", NVIDIA_DEFAULT_MODEL).strip()
         base, key = env.get("NVIDIA_BASE_URL", NVIDIA_BASE), "NVIDIA_API_KEY"
     params = {"model": f"openai/{model}", "api_base": base.rstrip("/"), "api_key": f"os.environ/{key}"}
-    effort = env.get("PII_ROUTER_CLOUD_REASONING_EFFORT", "none").strip() if custom else ""
+    # A self-hosted GPU (vLLM on Vast) defaults to no thinking. Hosted APIs reached
+    # through CLOUD_BASE_URL (NVIDIA, OpenRouter) do not get the parameter unless it
+    # is set explicitly: not every hosted model accepts reasoning_effort="none".
+    default_effort = "" if _hosted_api(custom) else "none"
+    effort = env.get("PII_ROUTER_CLOUD_REASONING_EFFORT", default_effort).strip() if custom else ""
     if effort:
         params["extra_body"] = {"reasoning_effort": effort}
     return params
@@ -63,11 +79,20 @@ def _public_entries(env, params) -> list:
     return [{"model_name": n, "litellm_params": dict(params)} for n in names]
 
 
+def _blocked_params() -> dict:
+    """A deployment that never calls a model: LiteLLM answers with mock_response.
+    The hook sends blocked requests here with a reason-specific message."""
+    return {"model": "openai/pii-blocked", "api_base": "http://127.0.0.1:9/v1", "api_key": "none",
+            "mock_response": BLOCKED_TEXT}
+
+
 def build(env=os.environ) -> dict:
-    pii_off = (env.get("PII_ROUTER_MODE") or "on").strip().lower() == "off"
+    mode = (env.get("PII_ROUTER_MODE") or "on").strip().lower()
     ollama_model = env.get("OLLAMA_MODEL", "").strip()
-    if pii_off:
+    if mode == "off":
         return _build_unchecked(env)
+    if mode == "masked" and (env.get("PII_ROUTER_RESIDUAL_ACTION") or "block").strip().lower() != "local":
+        return _build_masked_block(env)
     if not ollama_model:
         raise SystemExit("OLLAMA_MODEL is required (the local model PII requests are routed to)")
     ollama_base = env.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -85,6 +110,7 @@ def build(env=os.environ) -> dict:
         *_public_entries(env, local_params),
         {"model_name": LOCAL, "litellm_params": dict(local_params)},
         {"model_name": CLOUD, "litellm_params": _cloud_params(env)},
+        {"model_name": BLOCKED, "litellm_params": _blocked_params()},
     ]
     model_list += _fallback_models(env)
     return {"model_list": model_list, **_settings(model_list)}
@@ -129,6 +155,18 @@ def _settings(model_list) -> dict:
         "general_settings": {"master_key": "os.environ/LITELLM_MASTER_KEY",
                              "custom_auth": "pii_router.auth.user_api_key_auth"},
     }
+
+
+def _build_masked_block(env) -> dict:
+    """Masked mode without a local model: the public name points at the BLOCKED
+    deployment, so if the hook is not loaded nothing reaches the cloud unmasked."""
+    blocked = _blocked_params()
+    model_list = [
+        *_public_entries(env, blocked),
+        {"model_name": BLOCKED, "litellm_params": dict(blocked)},
+        {"model_name": CLOUD, "litellm_params": _cloud_params(env)},
+    ] + _fallback_models(env)
+    return {"model_list": model_list, **_settings(model_list)}
 
 
 def _build_unchecked(env) -> dict:

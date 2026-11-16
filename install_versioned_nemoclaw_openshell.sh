@@ -8,6 +8,14 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# NemoClaw v0.0.144 (2026-11-13, discussion #14460) + OpenShell 0.0.116 + OpenClaw 2026.10.5.
+# v0.0.144 is the first tag since v0.0.131 to move OpenClaw: 2026.9.2 -> 2026.10.5 (the 2026.10.x
+# pin we waited for after the 2026-10-19 in-sandbox cutover failed). OpenShell min==max 0.0.116,
+# Hermes v2026.9.14 (0.21.3) and the node 24.22.1 base are unchanged. libevent/jq/Vim .debs now come
+# from the official Debian pool instead of snapshot.debian.org (Expat stays on a snapshot). Existing
+# OpenClaw sandboxes keep their 2026.9.2 image until rebuilt. Rebuild now rejects an invalid
+# NEMOCLAW_MCP_TOOLS_LIST_TIMEOUT_MS (integer 1500-10000, or unset) before backup.
+# Earlier notes (v0.0.141):
 # NemoClaw v0.0.141 (2026-11-03, discussion #14165) + OpenShell 0.0.116 + OpenClaw 2026.9.2.
 # v0.0.141 is tag-only on versions (blueprint OpenShell min==max 0.0.116, OpenClaw 2026.9.2,
 # Hermes v2026.9.14, node base 24.22.1 unchanged; blueprint min_openclaw_version 2026.3.11 ->
@@ -143,14 +151,14 @@ NC='\033[0m'
 #     and is exposed to that audit gate and to Debian index drift alike.
 OPENSHELL_VERSION="${OPENSHELL_VERSION:-v0.0.116}"
 OPENSHELL_INSTALL_URL="${OPENSHELL_INSTALL_URL:-https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh}"
-# NemoClaw is pinned to TAG v0.0.141. The NemoClaw ref and OPENCLAW_VERSION
+# NemoClaw is pinned to TAG v0.0.144. The NemoClaw ref and OPENCLAW_VERSION
 # must agree: Dockerfile.base carries a per-version OpenClaw integrity hash
 # (plain npm tarball sha512s), so a version with no ARG entry fails the build.
 # Pin a SHA only as a last resort, never the bare `main` upstream tracks (see
 # the v0.0.88 float outage in docs/runbooks/nemoclaw-version-bumps.md).
-NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.141}}"
+NEMOCLAW_INSTALL_REF="${NEMOCLAW_INSTALL_REF:-${NEMOCLAW_INSTALL_TAG:-v0.0.144}}"
 NEMOCLAW_SOURCE_URL="${NEMOCLAW_SOURCE_URL:-https://github.com/NVIDIA/NemoClaw.git}"
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.9.2}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.10.5}"
 NEMOCLAW_BASE_IMAGE="${NEMOCLAW_BASE_IMAGE:-ghcr.io/nvidia/nemoclaw/sandbox-base:latest}"
 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE="${NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE:-1}"
 NEMOCLAW_NON_INTERACTIVE="${NEMOCLAW_NON_INTERACTIVE:-1}"
@@ -337,7 +345,7 @@ install_nemoclaw() {
   [[ -n "$source_dir" && -f "$source_dir/install.sh" ]] || fail "Could not find NemoClaw install.sh in source checkout."
 
   # NemoClaw upstream Dockerfile/Dockerfile.base pin exact Debian package
-  # versions (procps=2:4.0.4-9, e2fsprogs=1.47.2-3+b11, tmux=3.5a-3). Since
+  # versions (procps=2:4.0.4-9, e2fsprogs=1.47.2-3+b12, tmux=3.5a-3). Since
   # NemoClaw v0.0.74+ the base is node:22-trixie-slim (Debian 13), so the
   # pins are distro-correct — but Debian's live index drops superseded
   # point-release versions, so any security update upstream of us makes the
@@ -371,10 +379,13 @@ install_nemoclaw() {
   # into an unrecoverable one. If trixie ever supersedes it, the fix is a
   # NemoClaw tag bump, not a sed. (`libssl-dev` in the same apt block is NOT
   # inventory-verified, so its wildcard unpin above stays correct.)
+  # e2fsprogs became a wildcard on the v0.0.144 bump (2026-11-16): the literal
+  # `+b11` pattern had silently stopped matching when upstream moved to +b12
+  # (#11634), so e2fsprogs was pinned again. It is not inventory-verified.
   while IFS= read -r _dockerfile; do
     sed -i.bak \
       -e 's/procps=2:4\.0\.4-9/procps/g' \
-      -e 's/e2fsprogs=1\.47\.2-3+b11/e2fsprogs/g' \
+      -e 's/e2fsprogs=[^[:space:]\\]*/e2fsprogs/g' \
       -e 's/tmux=3\.5a-3/tmux/g' \
       -e 's/curl=[^[:space:]\\]*/curl/g' \
       -e 's/ripgrep=[^[:space:]\\]*/ripgrep/g' \

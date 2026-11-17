@@ -861,8 +861,17 @@ only the `node:24.x-trixie-slim` base digest (24.18.1 → 24.22.1) and npm tarba
 `git -C /opt/nemoclaw log --oneline -1` (the tag's last commit) and `openshell --version`, then create one OpenClaw
 and one Hermes sandbox (`nemoclaw` lives at `/root/.local/bin/nemoclaw`, not on a non-login PATH).
 
-`tests/sandbox-lifecycle-check.mjs` currently fails on a missing `app/hooks/useSandboxInventory.ts` — pre-existing,
-unrelated to version pins.
+v0.0.144 (2026-11-13, #14460, skipping v0.0.142/143) is the first tag since v0.0.131 to **move OpenClaw**: 2026.9.2 →
+2026.10.5. So `OPENCLAW_VERSION` moves with `NEMOCLAW_INSTALL_REF` (installer default, README, the
+`sandbox-lifecycle-check.mjs` regex). OpenShell 0.0.116, Hermes v2026.9.14 and node 24.22.1 are unchanged. The apt
+pins match v0.0.141's, and libevent/jq/Vim .debs moved from snapshot.debian.org to the official Debian pool. That pool
+drops superseded versions, so those fetches are now drift-exposed like the index pins. Our `e2fsprogs` unpin was a
+literal `+b11` that had silently stopped matching upstream's `+b12`, and is now a wildcard. The `maxBuffer: 256 MiB`
+sed in the installer has also been a no-op since upstream #12340 (no such literal remains in `src/lib/state/sandbox.ts`).
+Existing OpenClaw sandboxes stay on 2026.9.2 until rebuilt. The dashboard gateway-switch fix for 2026.10 is already in
+`shared.ts` (32f0dff).
+
+`npm test` baseline is ALL PASS since 2026-11-06 (the old `useSandboxInventory.ts` failure is fixed).
 
 ## A create that dies in ~10 s on "endpoint validation failed … HTTP 500" is NVIDIA, not the bump
 
